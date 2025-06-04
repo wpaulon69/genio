@@ -4,7 +4,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
-import type { Service, StaffingNeeds } from '@/lib/types';
+import type { Service, StaffingNeeds, ConsecutivenessRules } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -25,11 +25,25 @@ const staffingNeedsSchema = z.object({
   nightWeekendHoliday: z.coerce.number().int().nonnegative({ message: "Debe ser 0 o más" }),
 });
 
+const consecutivenessRulesSchema = z.object({
+  maxConsecutiveWorkDays: z.coerce.number().int().min(0, "Debe ser 0 o más").max(14, "Máximo 14 días"),
+  preferredConsecutiveWorkDays: z.coerce.number().int().min(0, "Debe ser 0 o más").max(14, "Máximo 14 días"),
+  maxConsecutiveDaysOff: z.coerce.number().int().min(0, "Debe ser 0 o más").max(14, "Máximo 14 días"),
+  preferredConsecutiveDaysOff: z.coerce.number().int().min(0, "Debe ser 0 o más").max(14, "Máximo 14 días"),
+}).refine(data => data.preferredConsecutiveWorkDays <= data.maxConsecutiveWorkDays, {
+  message: "Preferidos no pueden exceder el máximo de días de trabajo consecutivos",
+  path: ["preferredConsecutiveWorkDays"],
+}).refine(data => data.preferredConsecutiveDaysOff <= data.maxConsecutiveDaysOff, {
+  message: "Preferidos no pueden exceder el máximo de días de descanso consecutivos",
+  path: ["preferredConsecutiveDaysOff"],
+});
+
 const serviceSchema = z.object({
   name: z.string().min(1, "El nombre del servicio es obligatorio"),
   description: z.string().min(1, "La descripción es obligatoria"),
   enableNightShift: z.boolean(),
   staffingNeeds: staffingNeedsSchema,
+  consecutivenessRules: consecutivenessRulesSchema.optional(),
   additionalNotes: z.string().optional(),
 });
 
@@ -43,6 +57,23 @@ interface ServiceFormProps {
   isLoading?: boolean;
 }
 
+const defaultConsecutivenessRules: ConsecutivenessRules = {
+  maxConsecutiveWorkDays: 6,
+  preferredConsecutiveWorkDays: 5,
+  maxConsecutiveDaysOff: 3,
+  preferredConsecutiveDaysOff: 2,
+};
+
+const defaultStaffingNeeds: StaffingNeeds = {
+  morningWeekday: 0,
+  afternoonWeekday: 0,
+  nightWeekday: 0,
+  morningWeekendHoliday: 0,
+  afternoonWeekendHoliday: 0,
+  nightWeekendHoliday: 0,
+};
+
+
 export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoading }: ServiceFormProps) {
   const form = useForm<ServiceFormData>({
     resolver: zodResolver(serviceSchema),
@@ -50,14 +81,8 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
       name: '',
       description: '',
       enableNightShift: false,
-      staffingNeeds: {
-        morningWeekday: 0,
-        afternoonWeekday: 0,
-        nightWeekday: 0,
-        morningWeekendHoliday: 0,
-        afternoonWeekendHoliday: 0,
-        nightWeekendHoliday: 0,
-      },
+      staffingNeeds: { ...defaultStaffingNeeds },
+      consecutivenessRules: { ...defaultConsecutivenessRules },
       additionalNotes: '',
     },
   });
@@ -71,10 +96,8 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
           name: service.name,
           description: service.description,
           enableNightShift: service.enableNightShift || false,
-          staffingNeeds: service.staffingNeeds || {
-            morningWeekday: 0, afternoonWeekday: 0, nightWeekday: 0,
-            morningWeekendHoliday: 0, afternoonWeekendHoliday: 0, nightWeekendHoliday: 0,
-          },
+          staffingNeeds: service.staffingNeeds || { ...defaultStaffingNeeds },
+          consecutivenessRules: service.consecutivenessRules || { ...defaultConsecutivenessRules },
           additionalNotes: service.additionalNotes || '',
         });
       } else {
@@ -82,10 +105,8 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
           name: '',
           description: '',
           enableNightShift: false,
-          staffingNeeds: {
-            morningWeekday: 0, afternoonWeekday: 0, nightWeekday: 0,
-            morningWeekendHoliday: 0, afternoonWeekendHoliday: 0, nightWeekendHoliday: 0,
-          },
+          staffingNeeds: { ...defaultStaffingNeeds },
+          consecutivenessRules: { ...defaultConsecutivenessRules },
           additionalNotes: '',
         });
       }
@@ -105,6 +126,9 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
       finalData.staffingNeeds.nightWeekday = 0;
       finalData.staffingNeeds.nightWeekendHoliday = 0;
     }
+    // Ensure consecutivenessRules is always an object
+    finalData.consecutivenessRules = data.consecutivenessRules || { ...defaultConsecutivenessRules };
+    
     onSubmit({
       id: service?.id || '',
       ...finalData,
@@ -117,7 +141,7 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
         <DialogHeader>
           <DialogTitle>{service ? 'Editar Servicio' : 'Añadir Nuevo Servicio'}</DialogTitle>
           <DialogDescription>
-            {service ? 'Actualice los detalles y la dotación del servicio.' : 'Complete los detalles y la dotación para el nuevo servicio.'}
+            {service ? 'Actualice los detalles, dotación y reglas del servicio.' : 'Complete los detalles, dotación y reglas para el nuevo servicio.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -173,6 +197,28 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
                   </div>
                 </div>
                 
+                <Separator className="my-6" />
+
+                <h3 className="text-lg font-medium">Reglas de Consecutividad</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                    <div className="space-y-3 p-4 border rounded-md">
+                        <FormField control={form.control} name="consecutivenessRules.maxConsecutiveWorkDays" render={({ field }) => (
+                            <FormItem><FormLabel>Máx. Días Trabajo Consecutivos</FormLabel><FormControl><Input type="number" placeholder="6" {...field} disabled={isLoading} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="consecutivenessRules.preferredConsecutiveWorkDays" render={({ field }) => (
+                            <FormItem><FormLabel>Días Trabajo Consecutivos Preferidos</FormLabel><FormControl><Input type="number" placeholder="5" {...field} disabled={isLoading} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    </div>
+                    <div className="space-y-3 p-4 border rounded-md">
+                        <FormField control={form.control} name="consecutivenessRules.maxConsecutiveDaysOff" render={({ field }) => (
+                            <FormItem><FormLabel>Máx. Descansos Consecutivos</FormLabel><FormControl><Input type="number" placeholder="3" {...field} disabled={isLoading} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="consecutivenessRules.preferredConsecutiveDaysOff" render={({ field }) => (
+                            <FormItem><FormLabel>Días Descanso Consecutivos Preferidos</FormLabel><FormControl><Input type="number" placeholder="2" {...field} disabled={isLoading} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    </div>
+                </div>
+
                 <Separator className="my-6" />
                 
                 <FormField control={form.control} name="additionalNotes" render={({ field }) => (

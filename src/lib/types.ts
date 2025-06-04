@@ -8,12 +8,20 @@ export interface StaffingNeeds {
   nightWeekendHoliday: number;
 }
 
+export interface ConsecutivenessRules {
+  maxConsecutiveWorkDays: number;
+  preferredConsecutiveWorkDays: number;
+  maxConsecutiveDaysOff: number;
+  preferredConsecutiveDaysOff: number;
+}
+
 export interface Service {
   id: string;
   name: string;
   description: string;
   enableNightShift: boolean;
   staffingNeeds: StaffingNeeds;
+  consecutivenessRules?: ConsecutivenessRules; // Añadido
   additionalNotes?: string;
 }
 
