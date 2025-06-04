@@ -17,14 +17,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
-const NO_FIXED_TIMING_VALUE = "none_selected"; 
-const REST_DAY_VALUE = "rest_day"; 
+const NO_FIXED_TIMING_VALUE = "none_selected";
+const REST_DAY_VALUE = "rest_day";
 
 const preferencesSchema = z.object({
   eligibleForDayOffAfterDuty: z.boolean().optional(),
   prefersWeekendWork: z.boolean().optional(),
   fixedWeeklyShiftDays: z.array(z.string()).optional(),
-  fixedWeeklyShiftTiming: z.string().optional().or(z.literal("")).nullable(),
+  fixedWeeklyShiftTiming: z.string().nullable().optional(), // Can be null
 });
 
 const employeeSchemaStep1 = z.object({
@@ -40,13 +40,11 @@ const employeeSchemaStep2 = z.object({
   constraints: z.string().optional(),
 });
 
-const fullEmployeeSchema = employeeSchemaStep1.merge(employeeSchemaStep2).transform(data => ({
-    ...data,
-    roles: data.roles.split(',').map(s => s.trim()).filter(Boolean),
-}));
+// Schema for validating the raw form input
+const employeeFormValidationSchema = employeeSchemaStep1.merge(employeeSchemaStep2);
 
-
-type EmployeeFormInput = Omit<z.infer<typeof fullEmployeeSchema>, 'roles'> & { roles: string };
+// Type for the raw form input
+type EmployeeFormInput = z.infer<typeof employeeFormValidationSchema>;
 
 interface EmployeeFormProps {
   isOpen: boolean;
@@ -79,19 +77,19 @@ const formDefaultPreferences: EmployeePreferences = {
   eligibleForDayOffAfterDuty: false,
   prefersWeekendWork: false,
   fixedWeeklyShiftDays: [],
-  fixedWeeklyShiftTiming: NO_FIXED_TIMING_VALUE,
+  fixedWeeklyShiftTiming: null,
 };
 
 export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, availableServices, isLoading }: EmployeeFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
 
   const form = useForm<EmployeeFormInput>({
-    resolver: zodResolver(fullEmployeeSchema.extend({ roles: z.string()})), // Validate full schema on submit
+    resolver: zodResolver(employeeFormValidationSchema),
     defaultValues: {
       name: '',
       contact: '',
       serviceIds: [],
-      roles: '',
+      roles: '', // Roles as string for form input
       preferences: { ...formDefaultPreferences },
       availability: '',
       constraints: '',
@@ -100,19 +98,19 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
 
   useEffect(() => {
     if (isOpen) {
-      setCurrentStep(1); // Reset to step 1 when dialog opens
+      setCurrentStep(1);
       if (employee) {
         const currentFixedTiming = employee.preferences?.fixedWeeklyShiftTiming;
         form.reset({
           name: employee.name,
           contact: employee.contact,
           serviceIds: employee.serviceIds || [],
-          roles: employee.roles ? employee.roles.join(', ') : '',
+          roles: employee.roles ? employee.roles.join(', ') : '', // Convert roles array to string for form
           preferences: {
             eligibleForDayOffAfterDuty: employee.preferences?.eligibleForDayOffAfterDuty ?? formDefaultPreferences.eligibleForDayOffAfterDuty,
             prefersWeekendWork: employee.preferences?.prefersWeekendWork ?? formDefaultPreferences.prefersWeekendWork,
             fixedWeeklyShiftDays: employee.preferences?.fixedWeeklyShiftDays || formDefaultPreferences.fixedWeeklyShiftDays,
-            fixedWeeklyShiftTiming: (currentFixedTiming && currentFixedTiming !== "" && shiftTimings.some(st => st.value === currentFixedTiming)) ? currentFixedTiming : NO_FIXED_TIMING_VALUE,
+            fixedWeeklyShiftTiming: (currentFixedTiming && shiftTimings.some(st => st.value === currentFixedTiming)) ? currentFixedTiming : NO_FIXED_TIMING_VALUE,
           },
           availability: employee.availability || '',
           constraints: employee.constraints || '',
@@ -134,22 +132,19 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
   const handleSubmit = (data: EmployeeFormInput) => {
     const processedData = {
       ...data,
-      roles: data.roles.split(',').map(s => s.trim()).filter(Boolean),
+      roles: data.roles.split(',').map(s => s.trim()).filter(Boolean), // Transform roles string to array
       preferences: data.preferences ? {
         ...data.preferences,
         fixedWeeklyShiftTiming: data.preferences.fixedWeeklyShiftTiming === NO_FIXED_TIMING_VALUE ? null : data.preferences.fixedWeeklyShiftTiming,
         fixedWeeklyShiftDays: data.preferences.fixedWeeklyShiftDays || []
-      } : { 
-        eligibleForDayOffAfterDuty: formDefaultPreferences.eligibleForDayOffAfterDuty,
-        prefersWeekendWork: formDefaultPreferences.prefersWeekendWork,
-        fixedWeeklyShiftDays: [],
-        fixedWeeklyShiftTiming: null,
+      } : {
+        ...formDefaultPreferences
       },
     };
     onSubmit({
-      id: employee?.id || '',
+      id: employee?.id || '', // id will be an empty string for new employees
       ...processedData,
-    } as Employee); 
+    } as Employee);
   };
 
   const handleClearFixedShift = () => {
@@ -297,9 +292,9 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Horario del Turno Fijo</FormLabel>
-                          <Select 
-                            onValueChange={field.onChange} 
-                            value={field.value || NO_FIXED_TIMING_VALUE} 
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value || NO_FIXED_TIMING_VALUE}
                             disabled={isLoading}
                           >
                             <FormControl>
