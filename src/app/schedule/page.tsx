@@ -6,18 +6,19 @@ import ScheduleView from '@/components/schedule/schedule-view';
 import ShiftGeneratorForm from '@/components/schedule/shift-generator-form';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Shift, Employee, Service } from '@/lib/types';
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getShifts } from '@/lib/firebase/shifts';
+import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
+import React from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getShifts, addShift } from '@/lib/firebase/shifts';
 import { getEmployees } from '@/lib/firebase/employees';
 import { getServices } from '@/lib/firebase/services';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 
-
 export default function SchedulePage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: shifts = [], isLoading: isLoadingShifts, error: errorShifts } = useQuery<Shift[]>({
     queryKey: ['shifts'],
@@ -32,20 +33,86 @@ export default function SchedulePage() {
     queryFn: getServices,
   });
 
+  const addShiftMutation = useMutation({
+    mutationFn: (newShift: Omit<Shift, 'id'>) => addShift(newShift),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shifts'] });
+      // Toast individual por turno guardado puede ser mucho, un resumen al final es mejor
+    },
+    onError: (err: Error, variables) => {
+      console.error(`Error guardando turno para ${variables.employeeId} en ${variables.date}: ${err.message}`);
+      // El toast de error individual también podría ser verboso.
+    },
+  });
 
-  const handleScheduleGenerated = (generatedScheduleText: string) => {
-    // This is a simplified handler. In a real app, you would parse
-    // the generatedScheduleText and potentially save new shifts to Firestore.
-    // This would involve a mutation and then invalidating the 'shifts' query.
-    console.log("Horario Generado:", generatedScheduleText);
+  const handleSaveGeneratedShifts = async (aiShifts: AIShift[]): Promise<{ successCount: number; errorCount: number }> => {
+    let successCount = 0;
+    let errorCount = 0;
+
     toast({
-      title: "Horario Sugerido Generado",
-      description: "El horario ha sido generado. Revise la consola y el área de texto. La funcionalidad para guardar este horario aún no está implementada.",
-      duration: 5000,
+      title: "Procesando Turnos...",
+      description: `Intentando guardar ${aiShifts.length} turnos generados.`,
     });
-    // For now, we just alert.
-    // alert("¡Horario generado! Revise la consola. (El análisis y la visualización aún no están implementados)");
+
+    for (const aiShift of aiShifts) {
+      const employee = employees.find(e => e.name.toLowerCase() === aiShift.employeeName.toLowerCase());
+      const service = services.find(s => s.name.toLowerCase() === aiShift.serviceName.toLowerCase());
+
+      if (!employee) {
+        console.warn(`Empleado "${aiShift.employeeName}" no encontrado. Omitiendo turno.`);
+        errorCount++;
+        continue;
+      }
+      if (!service) {
+        console.warn(`Servicio "${aiShift.serviceName}" no encontrado. Omitiendo turno.`);
+        errorCount++;
+        continue;
+      }
+
+      const newShift: Omit<Shift, 'id'> = {
+        employeeId: employee.id,
+        serviceId: service.id,
+        date: aiShift.date, // Asegúrate que la IA devuelva YYYY-MM-DD
+        startTime: aiShift.startTime, // Asegúrate que la IA devuelva HH:MM
+        endTime: aiShift.endTime,   // Asegúrate que la IA devuelva HH:MM
+        notes: aiShift.notes || `Generado por IA el ${new Date().toLocaleDateString()}`,
+      };
+
+      try {
+        await addShiftMutation.mutateAsync(newShift);
+        successCount++;
+      } catch (e) {
+        errorCount++;
+        // El error ya se loguea en onError de la mutación
+      }
+    }
+
+    if (successCount > 0) {
+      toast({
+        title: "Turnos Guardados",
+        description: `${successCount} de ${aiShifts.length} turnos generados fueron guardados exitosamente.`,
+      });
+    }
+    if (errorCount > 0) {
+      toast({
+        variant: "destructive",
+        title: "Error al Guardar Turnos",
+        description: `${errorCount} turnos no pudieron ser guardados. Revise la consola para más detalles (empleados/servicios no encontrados o errores de guardado).`,
+        duration: 7000,
+      });
+    }
+    if (successCount === 0 && errorCount === 0 && aiShifts.length > 0) {
+        toast({
+            variant: "default",
+            title: "Sin cambios",
+            description: "No se procesaron nuevos turnos para guardar.",
+        });
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['shifts'] }); // Invalida una vez después del lote
+    return { successCount, errorCount };
   };
+
 
   const isLoading = isLoadingShifts || isLoadingEmployees || isLoadingServices;
   const error = errorShifts || errorEmployees || errorServices;
@@ -68,12 +135,17 @@ export default function SchedulePage() {
       </div>
     );
   }
+  
+  // Prepara datos simplificados para el prompt del formulario
+  const employeeNamesForPrompt = employees.map(e => ({id: e.id, name: e.name}));
+  const serviceNamesForPrompt = services.map(s => ({id: s.id, name: s.name}));
+
 
   return (
     <div className="container mx-auto">
       <PageHeader
         title="Horario de Turnos"
-        description="Vea los horarios actuales y genere nuevos usando IA."
+        description="Vea los horarios actuales y genere nuevos usando IA. Los turnos generados se pueden guardar."
       />
       <Tabs defaultValue="view-schedule" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:w-1/2">
@@ -88,7 +160,11 @@ export default function SchedulePage() {
           />
         </TabsContent>
         <TabsContent value="generate-shifts" className="mt-6">
-          <ShiftGeneratorForm onScheduleGenerated={handleScheduleGenerated} />
+          <ShiftGeneratorForm 
+            onSaveShifts={handleSaveGeneratedShifts} 
+            employeesAvailable={employeeNamesForPrompt}
+            servicesAvailable={serviceNamesForPrompt}
+          />
         </TabsContent>
       </Tabs>
     </div>
