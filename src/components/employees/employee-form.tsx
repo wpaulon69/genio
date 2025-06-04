@@ -18,6 +18,7 @@ import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 const NO_FIXED_TIMING_VALUE = "none_selected"; // Constant for "Ninguno" option
+const REST_DAY_VALUE = "rest_day"; // Constant for "D (Descanso)" option
 
 const preferencesSchema = z.object({
   eligibleForDayOffAfterDuty: z.boolean().optional(),
@@ -59,6 +60,7 @@ const daysOfWeek = [
 
 const shiftTimings = [
   { value: NO_FIXED_TIMING_VALUE, label: "Ninguno" },
+  { value: REST_DAY_VALUE, label: "D (Descanso)"},
   { value: "mañana", label: "Mañana (ej. 07:00-15:00)" },
   { value: "tarde", label: "Tarde (ej. 15:00-23:00)" },
   { value: "noche", label: "Noche (ej. 23:00-07:00)" },
@@ -98,7 +100,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
             eligibleForDayOffAfterDuty: employee.preferences?.eligibleForDayOffAfterDuty ?? defaultPreferences.eligibleForDayOffAfterDuty,
             prefersWeekendWork: employee.preferences?.prefersWeekendWork ?? defaultPreferences.prefersWeekendWork,
             fixedWeeklyShiftDays: employee.preferences?.fixedWeeklyShiftDays || defaultPreferences.fixedWeeklyShiftDays,
-            fixedWeeklyShiftTiming: (currentFixedTiming && currentFixedTiming !== "") ? currentFixedTiming : NO_FIXED_TIMING_VALUE,
+            fixedWeeklyShiftTiming: (currentFixedTiming && currentFixedTiming !== "" && shiftTimings.some(st => st.value === currentFixedTiming)) ? currentFixedTiming : NO_FIXED_TIMING_VALUE,
           },
           availability: employee.availability || '',
           constraints: employee.constraints || '',
@@ -312,5 +314,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
     </Dialog>
   );
 }
+
+    
 
     
