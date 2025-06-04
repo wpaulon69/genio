@@ -1,27 +1,31 @@
+
 "use client";
 
 import type { Employee, Service } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, FilePenLine, Trash2, BadgeCheck } from 'lucide-react';
+import { MoreHorizontal, FilePenLine, Trash2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 interface EmployeeListProps {
   employees: Employee[];
-  services: Service[]; // To map serviceIds to names
+  services: Service[]; 
   onEdit: (employee: Employee) => void;
   onDelete: (employeeId: string) => void;
+  isLoading?: boolean;
 }
 
-export default function EmployeeList({ employees, services, onEdit, onDelete }: EmployeeListProps) {
+export default function EmployeeList({ employees, services, onEdit, onDelete, isLoading }: EmployeeListProps) {
   const getServiceNames = (serviceIds: string[]) => {
+    if (!serviceIds || serviceIds.length === 0) return 'N/A';
     return serviceIds.map(id => services.find(s => s.id === id)?.name || 'Desconocido').join(', ');
   };
 
   const getInitials = (name: string) => {
+    if (!name) return '';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   }
 
@@ -67,21 +71,22 @@ export default function EmployeeList({ employees, services, onEdit, onDelete }: 
                 </TableCell>
                 <TableCell className="hidden md:table-cell">{employee.contact}</TableCell>
                 <TableCell>
-                  {employee.roles.map(role => <Badge key={role} variant="secondary" className="mr-1 mb-1">{role}</Badge>)}
+                  {employee.roles && employee.roles.map(role => <Badge key={role} variant="secondary" className="mr-1 mb-1">{role}</Badge>)}
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">{getServiceNames(employee.serviceIds)}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" disabled={isLoading}>
+                        {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                        {!isLoading && <MoreHorizontal className="h-4 w-4" />}
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onEdit(employee)}>
+                      <DropdownMenuItem onClick={() => onEdit(employee)} disabled={isLoading}>
                         <FilePenLine className="mr-2 h-4 w-4" /> Editar
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onDelete(employee.id)} className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive">
+                      <DropdownMenuItem onClick={() => onDelete(employee.id)} className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive" disabled={isLoading}>
                         <Trash2 className="mr-2 h-4 w-4" /> Eliminar
                       </DropdownMenuItem>
                     </DropdownMenuContent>

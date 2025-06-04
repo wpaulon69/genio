@@ -1,10 +1,11 @@
+
 "use client";
 
 import type { Service } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, FilePenLine, Trash2 } from 'lucide-react';
+import { MoreHorizontal, FilePenLine, Trash2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
@@ -12,9 +13,10 @@ interface ServiceListProps {
   services: Service[];
   onEdit: (service: Service) => void;
   onDelete: (serviceId: string) => void;
+  isLoading?: boolean; // To disable actions while deleting
 }
 
-export default function ServiceList({ services, onEdit, onDelete }: ServiceListProps) {
+export default function ServiceList({ services, onEdit, onDelete, isLoading }: ServiceListProps) {
   if (services.length === 0) {
     return (
       <Card className="text-center">
@@ -54,15 +56,16 @@ export default function ServiceList({ services, onEdit, onDelete }: ServiceListP
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" disabled={isLoading}>
+                        {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                        {!isLoading && <MoreHorizontal className="h-4 w-4" />}
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onEdit(service)}>
+                      <DropdownMenuItem onClick={() => onEdit(service)} disabled={isLoading}>
                         <FilePenLine className="mr-2 h-4 w-4" /> Editar
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onDelete(service.id)} className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive">
+                      <DropdownMenuItem onClick={() => onDelete(service.id)} className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive" disabled={isLoading}>
                         <Trash2 className="mr-2 h-4 w-4" /> Eliminar
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -76,3 +79,4 @@ export default function ServiceList({ services, onEdit, onDelete }: ServiceListP
     </Card>
   );
 }
+

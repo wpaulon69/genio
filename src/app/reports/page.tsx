@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from 'react';
@@ -7,20 +8,32 @@ import ReportDisplay from '@/components/reports/report-display';
 import { summarizeShiftReport, type SummarizeShiftReportInput } from '@/ai/flows/summarize-shift-report';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertTriangle } from 'lucide-react';
-import { mockServices, mockEmployees } from '@/lib/types';
+import type { Service, Employee } from '@/lib/types';
+import { useQuery } from '@tanstack/react-query';
+import { getServices } from '@/lib/firebase/services';
+import { getEmployees } from '@/lib/firebase/employees';
 
 
 export default function ReportsPage() {
   const [reportSummary, setReportSummary] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isAISummarizing, setIsAISummarizing] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const { data: services = [], isLoading: isLoadingServices, error: errorServices } = useQuery<Service[]>({
+    queryKey: ['services'],
+    queryFn: getServices,
+  });
+
+  const { data: employees = [], isLoading: isLoadingEmployees, error: errorEmployees } = useQuery<Employee[]>({
+    queryKey: ['employees'],
+    queryFn: getEmployees,
+  });
+
 
   const handleGenerateReport = async (filters: { reportText: string; reportType: string }) => {
-    // For now, we only handle 'shiftSummary' type using AI.
-    // Other report types (employeeUtilization, serviceUtilization) would need actual shift data.
     if (filters.reportType === 'shiftSummary') {
-      setIsLoading(true);
-      setError(null);
+      setIsAISummarizing(true);
+      setAiError(null);
       setReportSummary(null);
       try {
         const input: SummarizeShiftReportInput = { report: filters.reportText };
@@ -28,15 +41,18 @@ export default function ReportsPage() {
         setReportSummary(result.summary);
       } catch (e) {
         console.error("Error generando el resumen del informe:", e);
-        setError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante la generación del informe.");
+        setAiError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante la generación del informe.");
       } finally {
-        setIsLoading(false);
+        setIsAISummarizing(false);
       }
     } else {
-      setError(`El tipo de informe "${filters.reportType}" aún no está implementado para el resumen con IA. Proporcione texto sin formato para 'Resumen de Turno'.`);
+      setAiError(`El tipo de informe "${filters.reportType}" aún no está implementado para el resumen con IA. Proporcione texto sin formato para 'Resumen de Turno'.`);
       setReportSummary(null);
     }
   };
+  
+  const isLoadingData = isLoadingServices || isLoadingEmployees;
+  const dataError = errorServices || errorEmployees;
 
   return (
     <div className="container mx-auto">
@@ -46,32 +62,41 @@ export default function ReportsPage() {
       />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <div className="md:col-span-1">
-          <ReportFilters 
-            onGenerateReport={handleGenerateReport} 
-            isLoading={isLoading}
-            services={mockServices}
-            employees={mockEmployees}
-          />
+          {isLoadingData && <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto my-4" />}
+          {dataError && (
+            <Alert variant="destructive">
+              <AlertTitle>Error al Cargar Filtros</AlertTitle>
+              <AlertDescription>{dataError.message}</AlertDescription>
+            </Alert>
+          )}
+          {!isLoadingData && !dataError && (
+            <ReportFilters 
+              onGenerateReport={handleGenerateReport} 
+              isLoading={isAISummarizing}
+              services={services}
+              employees={employees}
+            />
+          )}
         </div>
         <div className="md:col-span-2">
-          {isLoading && (
+          {isAISummarizing && (
             <Alert>
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
               <AlertTitle>Generando Informe...</AlertTitle>
               <AlertDescription>Por favor espere mientras la IA procesa su solicitud.</AlertDescription>
             </Alert>
           )}
-          {error && (
+          {aiError && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{aiError}</AlertDescription>
             </Alert>
           )}
-          {reportSummary && !isLoading && !error && (
+          {reportSummary && !isAISummarizing && !aiError && (
             <ReportDisplay summary={reportSummary} />
           )}
-          {!reportSummary && !isLoading && !error && (
+          {!reportSummary && !isAISummarizing && !aiError && (
              <Alert>
               <AlertTitle>Ningún Informe Generado</AlertTitle>
               <AlertDescription>Seleccione el tipo de informe y los parámetros, luego haga clic en "Generar Informe". Para 'Resumen de Turno', proporcione el texto a resumir.</AlertDescription>
@@ -82,3 +107,4 @@ export default function ReportsPage() {
     </div>
   );
 }
+
