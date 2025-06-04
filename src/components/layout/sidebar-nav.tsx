@@ -15,7 +15,7 @@ import {
   UsersRound,
   CalendarDays,
   LineChart,
-  UsersCog, // Nueva Icono
+  UserCog, // Corregido: UsersCog -> UserCog
   type LucideIcon,
 } from 'lucide-react';
 
@@ -32,7 +32,7 @@ const navItems: NavItem[] = [
   { href: '/employees', label: 'Empleados', icon: UsersRound, tooltip: 'Administrar Empleados' },
   { href: '/schedule', label: 'Horario', icon: CalendarDays, tooltip: 'Ver y Generar Horario' },
   { href: '/reports', label: 'Informes', icon: LineChart, tooltip: 'Ver Informes' },
-  { href: '/service-overview', label: 'Personal por Servicio', icon: UsersCog, tooltip: 'Ver Personal por Servicio' }, // Nuevo Enlace
+  { href: '/service-overview', label: 'Personal por Servicio', icon: UserCog, tooltip: 'Ver Personal por Servicio' }, // Corregido: UsersCog -> UserCog
 ];
 
 export default function SidebarNav() {
