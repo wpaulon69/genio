@@ -12,9 +12,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { useEffect } from 'react';
 
 const serviceSchema = z.object({
-  name: z.string().min(1, "Service name is required"),
-  description: z.string().min(1, "Description is required"),
-  rules: z.string().min(1, "Service rules are required"),
+  name: z.string().min(1, "El nombre del servicio es obligatorio"),
+  description: z.string().min(1, "La descripción es obligatoria"),
+  rules: z.string().min(1, "Las reglas del servicio son obligatorias"),
 });
 
 type ServiceFormData = z.infer<typeof serviceSchema>;
@@ -64,9 +64,9 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service }: Serv
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{service ? 'Edit Service' : 'Add New Service'}</DialogTitle>
+          <DialogTitle>{service ? 'Editar Servicio' : 'Añadir Nuevo Servicio'}</DialogTitle>
           <DialogDescription>
-            {service ? 'Update the details of the service.' : 'Fill in the details for the new service.'}
+            {service ? 'Actualice los detalles del servicio.' : 'Complete los detalles para el nuevo servicio.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -76,9 +76,9 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service }: Serv
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Service Name</FormLabel>
+                  <FormLabel>Nombre del Servicio</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Emergency Room" {...field} />
+                    <Input placeholder="ej., Sala de Emergencias" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -89,9 +89,9 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service }: Serv
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>Descripción</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Briefly describe the service" {...field} />
+                    <Textarea placeholder="Describa brevemente el servicio" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -102,17 +102,17 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service }: Serv
               name="rules"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Rules & Requirements</FormLabel>
+                  <FormLabel>Reglas y Requisitos</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Enter service-specific rules, staffing needs, etc." {...field} rows={4} />
+                    <Textarea placeholder="Ingrese reglas específicas del servicio, necesidades de personal, etc." {...field} rows={4} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-              <Button type="submit">{service ? 'Save Changes' : 'Create Service'}</Button>
+              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+              <Button type="submit">{service ? 'Guardar Cambios' : 'Crear Servicio'}</Button>
             </DialogFooter>
           </form>
         </Form>

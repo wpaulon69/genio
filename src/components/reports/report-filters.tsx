@@ -13,11 +13,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { CalendarIcon, BarChartBig, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale'; // Import Spanish locale
 import type { DateRange } from 'react-day-picker';
 import type { Service, Employee } from '@/lib/types';
 
 const reportFilterSchema = z.object({
-  reportType: z.string().min(1, "Report type is required"),
+  reportType: z.string().min(1, "El tipo de informe es obligatorio"),
   serviceId: z.string().optional(),
   employeeId: z.string().optional(),
   dateRange: z.custom<DateRange | undefined>().optional(),
@@ -28,7 +29,7 @@ const reportFilterSchema = z.object({
   }
   return true;
 }, {
-  message: "Text for summarization must be at least 20 characters long.",
+  message: "El texto para resumir debe tener al menos 20 caracteres.",
   path: ["reportText"], // specify the path to show the error message
 });
 
@@ -53,15 +54,15 @@ export default function ReportFilters({ onGenerateReport, isLoading, services, e
     resolver: zodResolver(reportFilterSchema),
     defaultValues: {
       reportType: 'shiftSummary', // Default to AI summary
-      reportText: `Example Shift Report for Week of July 15th:
-Emergency Service:
-- Dr. Smith worked 40 hours, covered 3 night shifts. Patient load was high on Monday.
-- Nurse Johnson worked 36 hours, mostly day shifts. Reported equipment malfunction on Tuesday.
-- Nurse Lee worked 24 hours, took Wednesday off as requested.
-Cardiology Service:
-- Dr. Alice covered all cardiology consults, 45 hours total.
-- Tech Brown assisted in 15 procedures, worked 32 hours.
-Overall: Staffing levels were adequate but some overtime was incurred in Emergency. Nurse Johnson's equipment report needs follow-up. Consider cross-training Tech Brown for basic ER tasks.`,
+      reportText: `Ejemplo de Informe de Turno para la Semana del 15 de Julio:
+Servicio de Emergencias:
+- Dr. Smith trabajó 40 horas, cubrió 3 turnos de noche. La carga de pacientes fue alta el lunes.
+- Enfermera Johnson trabajó 36 horas, mayormente turnos de día. Reportó mal funcionamiento de equipo el martes.
+- Enfermera Lee trabajó 24 horas, tomó el miércoles libre como solicitó.
+Servicio de Cardiología:
+- Dra. Alice cubrió todas las consultas de cardiología, 45 horas en total.
+- Técnico Brown asistió en 15 procedimientos, trabajó 32 horas.
+General: Los niveles de personal fueron adecuados pero se incurrió en algunas horas extras en Emergencias. El informe de equipo de la Enfermera Johnson necesita seguimiento. Considere la capacitación cruzada del Técnico Brown para tareas básicas de ER.`,
     },
   });
 
@@ -74,8 +75,8 @@ Overall: Staffing levels were adequate but some overtime was incurred in Emergen
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-headline">Report Options</CardTitle>
-        <CardDescription>Select parameters to generate your report.</CardDescription>
+        <CardTitle className="font-headline">Opciones de Informe</CardTitle>
+        <CardDescription>Seleccione los parámetros para generar su informe.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSubmit)}>
@@ -85,17 +86,17 @@ Overall: Staffing levels were adequate but some overtime was incurred in Emergen
               name="reportType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Report Type</FormLabel>
+                  <FormLabel>Tipo de Informe</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a report type" />
+                        <SelectValue placeholder="Seleccione un tipo de informe" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="shiftSummary">AI Shift Report Summary</SelectItem>
-                      <SelectItem value="employeeUtilization" disabled>Employee Utilization (coming soon)</SelectItem>
-                      <SelectItem value="serviceUtilization" disabled>Service Utilization (coming soon)</SelectItem>
+                      <SelectItem value="shiftSummary">Resumen de Informe de Turno con IA</SelectItem>
+                      <SelectItem value="employeeUtilization" disabled>Utilización de Empleados (próximamente)</SelectItem>
+                      <SelectItem value="serviceUtilization" disabled>Utilización de Servicios (próximamente)</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -109,10 +110,10 @@ Overall: Staffing levels were adequate but some overtime was incurred in Emergen
                 name="reportText"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Text to Summarize</FormLabel>
+                    <FormLabel>Texto a Resumir</FormLabel>
                     <FormControl>
                       <Textarea 
-                        placeholder="Paste or type the shift report text here for AI summarization..." 
+                        placeholder="Pegue o escriba el texto del informe de turno aquí para el resumen con IA..." 
                         rows={10}
                         {...field} 
                       />
@@ -130,11 +131,11 @@ Overall: Staffing levels were adequate but some overtime was incurred in Emergen
                   name="serviceId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Service (Optional)</FormLabel>
+                      <FormLabel>Servicio (Opcional)</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="All Services" /></SelectTrigger></FormControl>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Todos los Servicios" /></SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="">All Services</SelectItem>
+                          <SelectItem value="">Todos los Servicios</SelectItem>
                           {services.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -146,11 +147,11 @@ Overall: Staffing levels were adequate but some overtime was incurred in Emergen
                   name="employeeId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Employee (Optional)</FormLabel>
+                      <FormLabel>Empleado (Opcional)</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="All Employees" /></SelectTrigger></FormControl>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Todos los Empleados" /></SelectTrigger></FormControl>
                         <SelectContent>
-                           <SelectItem value="">All Employees</SelectItem>
+                           <SelectItem value="">Todos los Empleados</SelectItem>
                            {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -162,7 +163,7 @@ Overall: Staffing levels were adequate but some overtime was incurred in Emergen
                     name="dateRange"
                     render={({ field }) => (
                     <FormItem className="flex flex-col">
-                        <FormLabel>Date Range (Optional)</FormLabel>
+                        <FormLabel>Rango de Fechas (Opcional)</FormLabel>
                         <Popover>
                         <PopoverTrigger asChild>
                             <FormControl>
@@ -170,12 +171,12 @@ Overall: Staffing levels were adequate but some overtime was incurred in Emergen
                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                 {field.value?.from ? (
                                 field.value.to ? (
-                                    <>{format(field.value.from, "LLL dd, y")} - {format(field.value.to, "LLL dd, y")}</>
+                                    <>{format(field.value.from, "LLL dd, y", { locale: es })} - {format(field.value.to, "LLL dd, y", { locale: es })}</>
                                 ) : (
-                                    format(field.value.from, "LLL dd, y")
+                                    format(field.value.from, "LLL dd, y", { locale: es })
                                 )
                                 ) : (
-                                <span>Pick a date range</span>
+                                <span>Elija un rango de fechas</span>
                                 )}
                             </Button>
                             </FormControl>
@@ -188,6 +189,7 @@ Overall: Staffing levels were adequate but some overtime was incurred in Emergen
                             selected={field.value}
                             onSelect={field.onChange}
                             numberOfMonths={2}
+                            locale={es}
                             />
                         </PopoverContent>
                         </Popover>
@@ -201,7 +203,7 @@ Overall: Staffing levels were adequate but some overtime was incurred in Emergen
           <CardFooter>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChartBig className="mr-2 h-4 w-4" />}
-              Generate Report
+              Generar Informe
             </Button>
           </CardFooter>
         </form>

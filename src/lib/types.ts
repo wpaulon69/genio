@@ -28,20 +28,20 @@ export interface Shift {
 
 // Mock data for demonstration
 export const mockServices: Service[] = [
-  { id: 's1', name: 'Emergency', description: 'Handles emergency cases', rules: 'Minimum 2 nurses, 1 doctor per shift. Max 12-hour shifts.' },
-  { id: 's2', name: 'Cardiology', description: 'Heart-related treatments', rules: 'Specialized cardiologists required. On-call system active.' },
-  { id: 's3', name: 'Pediatrics', description: 'Child healthcare services', rules: 'Pediatric specialists only. Friendly environment crucial.' },
+  { id: 's1', name: 'Emergencias', description: 'Maneja casos de emergencia', rules: 'Mínimo 2 enfermeras, 1 médico por turno. Turnos máximos de 12 horas.' },
+  { id: 's2', name: 'Cardiología', description: 'Tratamientos relacionados con el corazón', rules: 'Se requieren cardiólogos especializados. Sistema de guardia activo.' },
+  { id: 's3', name: 'Pediatría', description: 'Servicios de atención médica infantil', rules: 'Solo especialistas pediátricos. Ambiente amigable crucial.' },
 ];
 
 export const mockEmployees: Employee[] = [
-  { id: 'e1', name: 'Dr. Alice Smith', contact: 'alice@hospital.com', serviceIds: ['s1', 's2'], roles: ['Doctor', 'Cardiologist'], preferences: 'Prefers morning shifts, no more than 2 night shifts a month.', availability: 'Mon-Fri, available for on-call on weekends.', constraints: 'Max 10-hour shifts.' },
-  { id: 'e2', name: 'Nurse Bob Johnson', contact: 'bob@hospital.com', serviceIds: ['s1', 's3'], roles: ['Nurse', 'Pediatric Nurse'], preferences: 'Avoids back-to-back shifts.', availability: 'Flexible, prefers 3-4 shifts per week.', constraints: '' },
-  { id: 'e3', name: 'Tech Carol White', contact: 'carol@hospital.com', serviceIds: ['s2'], roles: ['Technician'], preferences: 'Likes weekend shifts for premium.', availability: 'Wed-Sun.', constraints: 'Requires 2 days off consecutively.' },
+  { id: 'e1', name: 'Dra. Alicia Pérez', contact: 'alicia@hospital.com', serviceIds: ['s1', 's2'], roles: ['Doctora', 'Cardióloga'], preferences: 'Prefiere turnos de mañana, no más de 2 turnos de noche al mes.', availability: 'Lun-Vie, disponible para guardia los fines de semana.', constraints: 'Turnos máximos de 10 horas.' },
+  { id: 'e2', name: 'Enf. Roberto Gómez', contact: 'roberto@hospital.com', serviceIds: ['s1', 's3'], roles: ['Enfermero', 'Enfermero Pediátrico'], preferences: 'Evita turnos consecutivos.', availability: 'Flexible, prefiere 3-4 turnos por semana.', constraints: '' },
+  { id: 'e3', name: 'Téc. Carla Blanco', contact: 'carla@hospital.com', serviceIds: ['s2'], roles: ['Técnica'], preferences: 'Le gustan los turnos de fin de semana por el plus.', availability: 'Mié-Dom.', constraints: 'Requiere 2 días libres consecutivos.' },
 ];
 
 export const mockShifts: Shift[] = [
-  { id: 'sh1', employeeId: 'e1', serviceId: 's1', date: '2024-07-15', startTime: '08:00', endTime: '16:00', notes: 'Morning shift' },
-  { id: 'sh2', employeeId: 'e2', serviceId: 's1', date: '2024-07-15', startTime: '08:00', endTime: '20:00', notes: 'Long day shift' },
-  { id: 'sh3', employeeId: 'e1', serviceId: 's2', date: '2024-07-16', startTime: '14:00', endTime: '22:00', notes: 'Cardiology afternoon' },
+  { id: 'sh1', employeeId: 'e1', serviceId: 's1', date: '2024-07-15', startTime: '08:00', endTime: '16:00', notes: 'Turno de mañana' },
+  { id: 'sh2', employeeId: 'e2', serviceId: 's1', date: '2024-07-15', startTime: '08:00', endTime: '20:00', notes: 'Turno largo de día' },
+  { id: 'sh3', employeeId: 'e1', serviceId: 's2', date: '2024-07-16', startTime: '14:00', endTime: '22:00', notes: 'Tarde de cardiología' },
   { id: 'sh4', employeeId: 'e3', serviceId: 's2', date: '2024-07-16', startTime: '09:00', endTime: '17:00' },
 ];

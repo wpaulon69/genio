@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
 import { suggestShiftSchedule, type SuggestShiftScheduleInput } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const shiftPromptSchema = z.object({
-  prompt: z.string().min(50, "Prompt must be at least 50 characters long to provide enough detail for schedule generation."),
+  prompt: z.string().min(50, "El prompt debe tener al menos 50 caracteres para proporcionar suficientes detalles para la generación del horario."),
 });
 
 type ShiftPromptFormData = z.infer<typeof shiftPromptSchema>;
@@ -30,20 +30,20 @@ export default function ShiftGeneratorForm({ onScheduleGenerated }: ShiftGenerat
   const form = useForm<ShiftPromptFormData>({
     resolver: zodResolver(shiftPromptSchema),
     defaultValues: {
-      prompt: `Generate a 7-day shift schedule for the Emergency service starting next Monday. 
-Staff available: 
-- Dr. Smith (Doctor, prefers mornings, max 40h/week)
-- Nurse Johnson (Nurse, flexible, prefers 12h shifts)
-- Nurse Lee (Nurse, cannot work Wednesdays)
-- Tech Brown (Technician, available Mon, Tue, Fri, Sat)
-Rules:
-- Minimum 1 doctor and 2 nurses on duty at all times.
-- 1 technician required from 8 AM to 8 PM.
-- Shifts are typically 8 or 12 hours.
-- Ensure adequate rest periods between shifts (min 10 hours).
-- Balance workload fairly among staff.
-- Consider stated preferences where possible.
-Output the schedule in a clear, day-by-day, employee-by-employee format.`,
+      prompt: `Genere un horario de turnos de 7 días para el servicio de Emergencias comenzando el próximo lunes. 
+Personal disponible: 
+- Dr. Smith (Médico, prefiere mañanas, máx 40h/semana)
+- Enfermera Johnson (Enfermera, flexible, prefiere turnos de 12h)
+- Enfermera Lee (Enfermera, no puede trabajar los miércoles)
+- Técnico Brown (Técnico, disponible Lun, Mar, Vie, Sáb)
+Reglas:
+- Mínimo 1 médico y 2 enfermeras de guardia en todo momento.
+- Se requiere 1 técnico de 8 AM a 8 PM.
+- Los turnos son típicamente de 8 o 12 horas.
+- Asegure períodos de descanso adecuados entre turnos (mín 10 horas).
+- Distribuya la carga de trabajo de manera equitativa entre el personal.
+- Considere las preferencias indicadas cuando sea posible.
+Presente el horario en un formato claro, día por día, empleado por empleado.`,
     },
   });
 
@@ -57,8 +57,8 @@ Output the schedule in a clear, day-by-day, employee-by-employee format.`,
       setGeneratedSchedule(result.schedule);
       onScheduleGenerated(result.schedule); // Callback for parent
     } catch (e) {
-      console.error("Error generating schedule:", e);
-      setError(e instanceof Error ? e.message : "An unknown error occurred during schedule generation.");
+      console.error("Error generando el horario:", e);
+      setError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante la generación del horario.");
     } finally {
       setIsLoading(false);
     }
@@ -69,10 +69,10 @@ Output the schedule in a clear, day-by-day, employee-by-employee format.`,
       <CardHeader>
         <CardTitle className="font-headline flex items-center">
           <Sparkles className="mr-2 h-6 w-6 text-primary" />
-          AI Shift Generator
+          Generador de Turnos con IA
         </CardTitle>
         <CardDescription>
-          Provide detailed requirements for the shift schedule. The AI will attempt to generate an optimal schedule based on your input.
+          Proporcione los requisitos detallados para el horario de turnos. La IA intentará generar un horario óptimo basado en su entrada.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -83,10 +83,10 @@ Output the schedule in a clear, day-by-day, employee-by-employee format.`,
               name="prompt"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Scheduling Prompt</FormLabel>
+                  <FormLabel>Prompt de Programación</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Describe the service rules, employee preferences, availability, date range, etc."
+                      placeholder="Describa las reglas del servicio, preferencias de los empleados, disponibilidad, rango de fechas, etc."
                       rows={15}
                       className="min-h-[200px] font-code text-sm"
                       {...field}
@@ -94,7 +94,7 @@ Output the schedule in a clear, day-by-day, employee-by-employee format.`,
                   </FormControl>
                   <FormMessage />
                   <p className="text-xs text-muted-foreground pt-1">
-                    Be as specific as possible for best results. Include dates, staff names, roles, specific constraints, and desired output format.
+                    Sea lo más específico posible para obtener los mejores resultados. Incluya fechas, nombres del personal, roles, restricciones específicas y el formato de salida deseado.
                   </p>
                 </FormItem>
               )}
@@ -105,26 +105,26 @@ Output the schedule in a clear, day-by-day, employee-by-employee format.`,
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  Generando...
                 </>
               ) : (
                 <>
                   <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Schedule
+                  Generar Horario
                 </>
               )}
             </Button>
             {error && (
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Generation Failed</AlertTitle>
+                <AlertTitle>Falló la Generación</AlertTitle>
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
             {generatedSchedule && (
               <Card className="mt-4">
                 <CardHeader>
-                  <CardTitle>Generated Schedule Suggestion</CardTitle>
+                  <CardTitle>Sugerencia de Horario Generado</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Textarea
@@ -134,7 +134,7 @@ Output the schedule in a clear, day-by-day, employee-by-employee format.`,
                     className="min-h-[200px] font-code text-sm bg-muted/50"
                   />
                    <p className="text-xs text-muted-foreground pt-2">
-                    Review the generated schedule. You may need to refine your prompt or make manual adjustments.
+                    Revise el horario generado. Es posible que deba refinar su prompt o realizar ajustes manuales.
                   </p>
                 </CardContent>
               </Card>

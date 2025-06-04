@@ -25,11 +25,11 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard, tooltip: 'Dashboard' },
-  { href: '/services', label: 'Services', icon: BriefcaseMedical, tooltip: 'Manage Services' },
-  { href: '/employees', label: 'Employees', icon: UsersRound, tooltip: 'Manage Employees' },
-  { href: '/schedule', label: 'Schedule', icon: CalendarDays, tooltip: 'View & Generate Schedule' },
-  { href: '/reports', label: 'Reports', icon: LineChart, tooltip: 'View Reports' },
+  { href: '/', label: 'Panel', icon: LayoutDashboard, tooltip: 'Panel' },
+  { href: '/services', label: 'Servicios', icon: BriefcaseMedical, tooltip: 'Administrar Servicios' },
+  { href: '/employees', label: 'Empleados', icon: UsersRound, tooltip: 'Administrar Empleados' },
+  { href: '/schedule', label: 'Horario', icon: CalendarDays, tooltip: 'Ver y Generar Horario' },
+  { href: '/reports', label: 'Informes', icon: LineChart, tooltip: 'Ver Informes' },
 ];
 
 export default function SidebarNav() {

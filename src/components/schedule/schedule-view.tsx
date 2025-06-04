@@ -10,6 +10,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CalendarIcon, FilterIcon, AlertTriangle, Info } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
+import { es } from 'date-fns/locale'; // Import Spanish locale
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
@@ -26,15 +27,15 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
   const [searchTerm, setSearchTerm] = useState<string>('');
 
 
-  const getEmployeeName = (employeeId: string) => employees.find(e => e.id === employeeId)?.name || 'Unknown Employee';
-  const getServiceName = (serviceId: string) => services.find(s => s.id === serviceId)?.name || 'Unknown Service';
+  const getEmployeeName = (employeeId: string) => employees.find(e => e.id === employeeId)?.name || 'Empleado Desconocido';
+  const getServiceName = (serviceId: string) => services.find(s => s.id === serviceId)?.name || 'Servicio Desconocido';
 
   const filteredShifts = useMemo(() => {
     return shifts.filter(shift => {
       const matchesService = selectedService ? shift.serviceId === selectedService : true;
       const matchesEmployee = selectedEmployee ? shift.employeeId === selectedEmployee : true;
       const shiftDate = parseISO(shift.date);
-      const matchesDate = selectedDate && isValid(shiftDate) ? format(shiftDate, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd') : true;
+      const matchesDate = selectedDate && isValid(shiftDate) ? format(shiftDate, 'yyyy-MM-dd', { locale: es }) === format(selectedDate, 'yyyy-MM-dd', { locale: es }) : true;
       
       const lowerSearchTerm = searchTerm.toLowerCase();
       const matchesSearch = searchTerm ? 
@@ -58,7 +59,7 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
       !(shift.endTime <= s.startTime || shift.startTime >= s.endTime)
     );
     if (overlapping.length > 0) {
-      return { hasConflict: true, message: `Overlaps with ${overlapping.length} other shift(s) for ${getEmployeeName(shift.employeeId)}.` };
+      return { hasConflict: true, message: `Se superpone con ${overlapping.length} otro(s) turno(s) para ${getEmployeeName(shift.employeeId)}.` };
     }
     return { hasConflict: false, message: '' };
   };
@@ -67,14 +68,14 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Current Schedule</CardTitle>
+        <CardTitle>Horario Actual</CardTitle>
         <div className="mt-4 flex flex-wrap gap-2 items-center">
           <Select value={selectedService} onValueChange={setSelectedService}>
             <SelectTrigger className="w-full md:w-[180px]">
-              <SelectValue placeholder="Filter by Service" />
+              <SelectValue placeholder="Filtrar por Servicio" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Services</SelectItem>
+              <SelectItem value="">Todos los Servicios</SelectItem>
               {services.map(service => (
                 <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
               ))}
@@ -83,10 +84,10 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
 
           <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
             <SelectTrigger className="w-full md:w-[180px]">
-              <SelectValue placeholder="Filter by Employee" />
+              <SelectValue placeholder="Filtrar por Empleado" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Employees</SelectItem>
+              <SelectItem value="">Todos los Empleados</SelectItem>
               {employees.map(emp => (
                 <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
               ))}
@@ -97,23 +98,23 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
             <PopoverTrigger asChild>
               <Button variant="outline" className="w-full md:w-auto justify-start text-left font-normal">
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {selectedDate ? format(selectedDate, 'PPP') : <span>Filter by Date</span>}
+                {selectedDate ? format(selectedDate, 'PPP', { locale: es }) : <span>Filtrar por Fecha</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
-              <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} initialFocus />
+              <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} initialFocus locale={es} />
             </PopoverContent>
           </Popover>
           
           <Input 
-            placeholder="Search shifts..." 
+            placeholder="Buscar turnos..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full md:w-[200px]"
           />
 
           <Button variant="ghost" onClick={() => { setSelectedService(''); setSelectedEmployee(''); setSelectedDate(undefined); setSearchTerm(''); }}>
-            <FilterIcon className="mr-2 h-4 w-4" /> Clear Filters
+            <FilterIcon className="mr-2 h-4 w-4" /> Limpiar Filtros
           </Button>
         </div>
       </CardHeader>
@@ -121,9 +122,9 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
         {filteredShifts.length === 0 ? (
           <Alert>
             <Info className="h-4 w-4" />
-            <AlertTitle>No Shifts Found</AlertTitle>
+            <AlertTitle>No Se Encontraron Turnos</AlertTitle>
             <AlertDescription>
-              There are no shifts matching your current filter criteria, or no shifts have been scheduled yet.
+              No hay turnos que coincidan con sus criterios de filtro actuales, o aún no se han programado turnos.
             </AlertDescription>
           </Alert>
         ) : (
@@ -131,12 +132,12 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead className="hidden md:table-cell">Notes</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Servicio</TableHead>
+                  <TableHead>Empleado</TableHead>
+                  <TableHead>Hora</TableHead>
+                  <TableHead className="hidden md:table-cell">Notas</TableHead>
+                  <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -145,11 +146,11 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
                   const shiftDate = parseISO(shift.date);
                   return (
                     <TableRow key={shift.id} className={conflict.hasConflict ? 'bg-destructive/10' : ''}>
-                      <TableCell>{isValid(shiftDate) ? format(shiftDate, 'MMM d, yyyy') : 'Invalid Date'}</TableCell>
+                      <TableCell>{isValid(shiftDate) ? format(shiftDate, 'MMM d, yyyy', { locale: es }) : 'Fecha Inválida'}</TableCell>
                       <TableCell>{getServiceName(shift.serviceId)}</TableCell>
                       <TableCell>{getEmployeeName(shift.employeeId)}</TableCell>
                       <TableCell>{shift.startTime} - {shift.endTime}</TableCell>
-                      <TableCell className="hidden md:table-cell max-w-xs truncate">{shift.notes || 'N/A'}</TableCell>
+                      <TableCell className="hidden md:table-cell max-w-xs truncate">{shift.notes || 'N/D'}</TableCell>
                       <TableCell>
                         {conflict.hasConflict && (
                           <Popover>
@@ -161,7 +162,7 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
                             <PopoverContent className="w-80">
                               <Alert variant="destructive">
                                 <AlertTriangle className="h-4 w-4" />
-                                <AlertTitle>Conflict Detected</AlertTitle>
+                                <AlertTitle>Conflicto Detectado</AlertTitle>
                                 <AlertDescription>{conflict.message}</AlertDescription>
                               </Alert>
                             </PopoverContent>

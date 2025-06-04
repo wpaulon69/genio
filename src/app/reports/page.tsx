@@ -27,13 +27,13 @@ export default function ReportsPage() {
         const result = await summarizeShiftReport(input);
         setReportSummary(result.summary);
       } catch (e) {
-        console.error("Error generating report summary:", e);
-        setError(e instanceof Error ? e.message : "An unknown error occurred during report generation.");
+        console.error("Error generando el resumen del informe:", e);
+        setError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante la generación del informe.");
       } finally {
         setIsLoading(false);
       }
     } else {
-      setError(`Report type "${filters.reportType}" is not yet implemented for AI summary. Please provide raw text for 'Shift Summary'.`);
+      setError(`El tipo de informe "${filters.reportType}" aún no está implementado para el resumen con IA. Proporcione texto sin formato para 'Resumen de Turno'.`);
       setReportSummary(null);
     }
   };
@@ -41,8 +41,8 @@ export default function ReportsPage() {
   return (
     <div className="container mx-auto">
       <PageHeader
-        title="Reports & Analytics"
-        description="Generate utilization reports and get AI-powered summaries."
+        title="Informes y Analíticas"
+        description="Genere informes de utilización y obtenga resúmenes impulsados por IA."
       />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <div className="md:col-span-1">
@@ -57,8 +57,8 @@ export default function ReportsPage() {
           {isLoading && (
             <Alert>
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              <AlertTitle>Generating Report...</AlertTitle>
-              <AlertDescription>Please wait while the AI processes your request.</AlertDescription>
+              <AlertTitle>Generando Informe...</AlertTitle>
+              <AlertDescription>Por favor espere mientras la IA procesa su solicitud.</AlertDescription>
             </Alert>
           )}
           {error && (
@@ -73,8 +73,8 @@ export default function ReportsPage() {
           )}
           {!reportSummary && !isLoading && !error && (
              <Alert>
-              <AlertTitle>No Report Generated</AlertTitle>
-              <AlertDescription>Select report type and parameters, then click "Generate Report". For 'Shift Summary', provide text to summarize.</AlertDescription>
+              <AlertTitle>Ningún Informe Generado</AlertTitle>
+              <AlertDescription>Seleccione el tipo de informe y los parámetros, luego haga clic en "Generar Informe". Para 'Resumen de Turno', proporcione el texto a resumir.</AlertDescription>
             </Alert>
           )}
         </div>

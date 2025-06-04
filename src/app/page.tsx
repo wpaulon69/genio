@@ -8,44 +8,48 @@ import Image from 'next/image';
 export default function DashboardPage() {
   const features = [
     {
-      title: 'Manage Services',
-      description: 'Define and organize hospital services.',
+      title: 'Administrar Servicios',
+      description: 'Define y organiza los servicios del hospital.',
       icon: BriefcaseMedical,
       href: '/services',
       img: 'https://placehold.co/600x400.png',
-      aiHint: 'medical services'
+      aiHint: 'servicios medicos',
+      label: 'Servicios'
     },
     {
-      title: 'Manage Employees',
-      description: 'Keep track of all staff members and their roles.',
+      title: 'Administrar Empleados',
+      description: 'Mantén un registro de todo el personal y sus roles.',
       icon: UsersRound,
       href: '/employees',
       img: 'https://placehold.co/600x400.png',
-      aiHint: 'hospital staff'
+      aiHint: 'personal hospital',
+      label: 'Empleados'
     },
     {
-      title: 'Shift Schedule',
-      description: 'View and generate shift schedules intelligently.',
+      title: 'Horario de Turnos',
+      description: 'Visualiza y genera horarios de turnos de forma inteligente.',
       icon: CalendarDays,
       href: '/schedule',
       img: 'https://placehold.co/600x400.png',
-      aiHint: 'calendar schedule'
+      aiHint: 'calendario horario',
+      label: 'Horario'
     },
     {
-      title: 'Reports & Analytics',
-      description: 'Gain insights into staff utilization and operations.',
+      title: 'Informes y Analíticas',
+      description: 'Obtén información sobre la utilización del personal y las operaciones.',
       icon: LineChart,
       href: '/reports',
       img: 'https://placehold.co/600x400.png',
-      aiHint: 'data charts'
+      aiHint: 'graficos datos',
+      label: 'Informes'
     },
   ];
 
   return (
     <div className="container mx-auto">
       <PageHeader
-        title="Welcome to ShiftFlow"
-        description="Your intelligent solution for hospital shift scheduling."
+        title="Bienvenido a ShiftFlow"
+        description="Su solución inteligente para la planificación de turnos en hospitales."
       />
       
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
@@ -69,7 +73,7 @@ export default function DashboardPage() {
               <CardDescription className="mb-4 min-h-[40px]">{feature.description}</CardDescription>
               <Button asChild variant="outline" className="w-full">
                 <Link href={feature.href}>
-                  Go to {feature.label || feature.title.split(' ')[1]}
+                  Ir a {feature.label || feature.title.split(' ')[1]}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>

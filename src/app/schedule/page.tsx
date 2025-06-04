@@ -18,24 +18,24 @@ export default function SchedulePage() {
     // This is a simplified handler. In a real app, you would parse
     // the generatedScheduleText and update the `shifts` state.
     // For now, we can just log it or display an alert.
-    console.log("Generated Schedule:", generatedScheduleText);
+    console.log("Horario Generado:", generatedScheduleText);
     // Potentially, you could try to parse this text into Shift objects
     // and add them to the `shifts` state, then switch to the "View Schedule" tab.
     // For now, this function acts as a placeholder for further integration.
-    alert("Schedule generated! Check console. (Parsing and display not yet implemented)");
+    alert("¡Horario generado! Revise la consola. (El análisis y la visualización aún no están implementados)");
   };
 
 
   return (
     <div className="container mx-auto">
       <PageHeader
-        title="Shift Schedule"
-        description="View current schedules and generate new ones using AI."
+        title="Horario de Turnos"
+        description="Vea los horarios actuales y genere nuevos usando IA."
       />
       <Tabs defaultValue="view-schedule" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:w-1/2">
-          <TabsTrigger value="view-schedule">View Schedule</TabsTrigger>
-          <TabsTrigger value="generate-shifts">Generate Shifts</TabsTrigger>
+          <TabsTrigger value="view-schedule">Ver Horario</TabsTrigger>
+          <TabsTrigger value="generate-shifts">Generar Turnos</TabsTrigger>
         </TabsList>
         <TabsContent value="view-schedule" className="mt-6">
           <ScheduleView 

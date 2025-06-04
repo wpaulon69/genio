@@ -40,11 +40,11 @@ export default function ServicesPage() {
   return (
     <div className="container mx-auto">
       <PageHeader
-        title="Manage Services"
-        description="Define and organize hospital services, rules, and requirements."
+        title="Administrar Servicios"
+        description="Defina y organice los servicios, reglas y requisitos del hospital."
         actions={
           <Button onClick={openFormForNew}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add New Service
+            <PlusCircle className="mr-2 h-4 w-4" /> Añadir Nuevo Servicio
           </Button>
         }
       />

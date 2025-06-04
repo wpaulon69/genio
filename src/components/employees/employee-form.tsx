@@ -13,10 +13,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useEffect } from 'react';
 
 const employeeSchema = z.object({
-  name: z.string().min(1, "Employee name is required"),
-  contact: z.string().email("Invalid email address").or(z.string().min(10, "Phone number seems too short")),
-  serviceIds: z.array(z.string()).min(1, "At least one service must be selected"),
-  roles: z.string().min(1, "Roles are required (comma-separated)").transform(val => val.split(',').map(s => s.trim()).filter(Boolean)),
+  name: z.string().min(1, "El nombre del empleado es obligatorio"),
+  contact: z.string().email("Dirección de correo electrónico inválida").or(z.string().min(10, "El número de teléfono parece demasiado corto")),
+  serviceIds: z.array(z.string()).min(1, "Se debe seleccionar al menos un servicio"),
+  roles: z.string().min(1, "Los roles son obligatorios (separados por coma)").transform(val => val.split(',').map(s => s.trim()).filter(Boolean)),
   preferences: z.string().optional(),
   availability: z.string().optional(),
   constraints: z.string().optional(),
@@ -86,28 +86,28 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{employee ? 'Edit Employee' : 'Add New Employee'}</DialogTitle>
+          <DialogTitle>{employee ? 'Editar Empleado' : 'Añadir Nuevo Empleado'}</DialogTitle>
           <DialogDescription>
-            {employee ? 'Update the details of the employee.' : 'Fill in the details for the new employee.'}
+            {employee ? 'Actualice los detalles del empleado.' : 'Complete los detalles para el nuevo empleado.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-3 py-2 max-h-[70vh] overflow-y-auto pr-2">
             <FormField control={form.control} name="name" render={({ field }) => (
-              <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="e.g., Dr. John Doe" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>Nombre Completo</FormLabel><FormControl><Input placeholder="ej., Dr. Juan Pérez" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name="contact" render={({ field }) => (
-              <FormItem><FormLabel>Contact (Email/Phone)</FormLabel><FormControl><Input placeholder="john.doe@hospital.com or 555-1234" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>Contacto (Email/Teléfono)</FormLabel><FormControl><Input placeholder="juan.perez@hospital.com o 555-1234" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
              <FormField control={form.control} name="roles" render={({ field }) => (
-              <FormItem><FormLabel>Roles (comma-separated)</FormLabel><FormControl><Input placeholder="e.g., Nurse, Surgeon" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>Roles (separados por coma)</FormLabel><FormControl><Input placeholder="ej., Enfermero, Cirujano" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField
               control={form.control}
               name="serviceIds"
               render={() => (
                 <FormItem>
-                  <FormLabel>Assignable Services</FormLabel>
+                  <FormLabel>Servicios Asignables</FormLabel>
                   {availableServices.map((service) => (
                     <FormField
                       key={service.id}
@@ -143,17 +143,17 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
               )}
             />
             <FormField control={form.control} name="preferences" render={({ field }) => (
-              <FormItem><FormLabel>Preferences</FormLabel><FormControl><Textarea placeholder="e.g., Prefers morning shifts" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>Preferencias</FormLabel><FormControl><Textarea placeholder="ej., Prefiere turnos de mañana" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name="availability" render={({ field }) => (
-              <FormItem><FormLabel>Availability</FormLabel><FormControl><Textarea placeholder="e.g., Mon-Fri, not available on holidays" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>Disponibilidad</FormLabel><FormControl><Textarea placeholder="ej., Lun-Vie, no disponible en festivos" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name="constraints" render={({ field }) => (
-              <FormItem><FormLabel>Constraints</FormLabel><FormControl><Textarea placeholder="e.g., Max 40 hours/week" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>Restricciones</FormLabel><FormControl><Textarea placeholder="ej., Máx 40 horas/semana" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-              <Button type="submit">{employee ? 'Save Changes' : 'Create Employee'}</Button>
+              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+              <Button type="submit">{employee ? 'Guardar Cambios' : 'Crear Empleado'}</Button>
             </DialogFooter>
           </form>
         </Form>

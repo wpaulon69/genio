@@ -2,33 +2,33 @@
 'use server';
 
 /**
- * @fileOverview This file defines a Genkit flow for suggesting a shift schedule based on a prompt.
+ * @fileOverview Este archivo define un flujo de Genkit para sugerir un horario de turnos basado en un prompt.
  *
- * The flow takes a prompt describing the requirements for the shift schedule and returns a suggested schedule.
- * It uses the ai.generate function to generate the shift schedule based on the prompt.
+ * El flujo toma un prompt que describe los requisitos para el horario de turnos y devuelve un horario sugerido.
+ * Utiliza la función ai.generate para generar el horario de turnos basado en el prompt.
  *
- * @interface SuggestShiftScheduleInput - Defines the input schema for the suggestShiftSchedule function.
- * @interface SuggestShiftScheduleOutput - Defines the output schema for the suggestShiftSchedule function.
- * @function suggestShiftSchedule - The main function that triggers the shift schedule generation flow.
+ * @interface SuggestShiftScheduleInput - Define el esquema de entrada para la función suggestShiftSchedule.
+ * @interface SuggestShiftScheduleOutput - Define el esquema de salida para la función suggestShiftSchedule.
+ * @function suggestShiftSchedule - La función principal que desencadena el flujo de generación de horarios de turnos.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SuggestShiftScheduleInputSchema = z.object({
-  prompt: z.string().describe('A detailed prompt describing the shift schedule requirements, including service rules, employee preferences, and availability.'),
+  prompt: z.string().describe('Un prompt detallado que describe los requisitos del horario de turnos, incluyendo reglas del servicio, preferencias de los empleados y disponibilidad.'),
 });
 export type SuggestShiftScheduleInput = z.infer<typeof SuggestShiftScheduleInputSchema>;
 
 const SuggestShiftScheduleOutputSchema = z.object({
-  schedule: z.string().describe('The generated shift schedule in a human-readable format.'),
+  schedule: z.string().describe('El horario de turnos generado en un formato legible por humanos.'),
 });
 export type SuggestShiftScheduleOutput = z.infer<typeof SuggestShiftScheduleOutputSchema>;
 
 /**
- * The main function to suggest a shift schedule based on the provided input.
- * @param input - The input containing the prompt for shift schedule generation.
- * @returns A promise resolving to the generated shift schedule.
+ * La función principal para sugerir un horario de turnos basado en la entrada proporcionada.
+ * @param input - La entrada que contiene el prompt para la generación del horario de turnos.
+ * @returns Una promesa que se resuelve con el horario de turnos generado.
  */
 export async function suggestShiftSchedule(input: SuggestShiftScheduleInput): Promise<SuggestShiftScheduleOutput> {
   return suggestShiftScheduleFlow(input);
@@ -38,13 +38,13 @@ const suggestShiftSchedulePrompt = ai.definePrompt({
   name: 'suggestShiftSchedulePrompt',
   input: {schema: SuggestShiftScheduleInputSchema},
   output: {schema: SuggestShiftScheduleOutputSchema},
-  prompt: `You are an AI assistant specialized in generating shift schedules for hospitals.
+  prompt: `Eres un asistente de IA especializado en generar horarios de turnos para hospitales.
 
-  Based on the following requirements, generate a detailed shift schedule:
+  Basado en los siguientes requisitos, genera un horario de turnos detallado:
 
   {{{prompt}}}
 
-  Ensure the schedule respects service rules, employee preferences, and availability.`,
+  Asegúrate de que el horario respete las reglas del servicio, las preferencias de los empleados y la disponibilidad.`,
 });
 
 const suggestShiftScheduleFlow = ai.defineFlow(

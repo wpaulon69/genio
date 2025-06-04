@@ -1,4 +1,4 @@
-// Summarizes a utilization report to identify key trends and staffing issues for administrators.
+// Resume un informe de utilización para identificar tendencias clave y problemas de personal para los administradores.
 
 'use server';
 
@@ -6,13 +6,13 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SummarizeShiftReportInputSchema = z.object({
-  report: z.string().describe('The utilization report to summarize.'),
+  report: z.string().describe('El informe de utilización a resumir.'),
 });
 
 export type SummarizeShiftReportInput = z.infer<typeof SummarizeShiftReportInputSchema>;
 
 const SummarizeShiftReportOutputSchema = z.object({
-  summary: z.string().describe('A summary of the utilization report.'),
+  summary: z.string().describe('Un resumen del informe de utilización.'),
 });
 
 export type SummarizeShiftReportOutput = z.infer<typeof SummarizeShiftReportOutputSchema>;
@@ -25,11 +25,11 @@ const summarizeShiftReportPrompt = ai.definePrompt({
   name: 'summarizeShiftReportPrompt',
   input: {schema: SummarizeShiftReportInputSchema},
   output: {schema: SummarizeShiftReportOutputSchema},
-  prompt: `You are an AI assistant helping a hospital administrator understand staff utilization.
-  Please summarize the following shift report, highlighting key trends, potential staffing issues, and areas for improvement:
+  prompt: `Eres un asistente de IA que ayuda a un administrador de hospital a comprender la utilización del personal.
+  Por favor, resume el siguiente informe de turno, destacando tendencias clave, posibles problemas de personal y áreas de mejora:
 
-  Report:
-  {{report}}
+  Informe:
+  {{{report}}}
   `,
 });
 

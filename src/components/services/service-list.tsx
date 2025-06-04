@@ -19,11 +19,11 @@ export default function ServiceList({ services, onEdit, onDelete }: ServiceListP
     return (
       <Card className="text-center">
         <CardHeader>
-          <CardTitle>No Services Found</CardTitle>
+          <CardTitle>No Se Encontraron Servicios</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">
-            There are no services defined yet. Click "Add New Service" to get started.
+            Aún no se han definido servicios. Haga clic en "Añadir Nuevo Servicio" para comenzar.
           </p>
         </CardContent>
       </Card>
@@ -35,10 +35,10 @@ export default function ServiceList({ services, onEdit, onDelete }: ServiceListP
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead className="hidden md:table-cell">Rules Snippet</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>Nombre</TableHead>
+              <TableHead>Descripción</TableHead>
+              <TableHead className="hidden md:table-cell">Fragmento de Reglas</TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -60,10 +60,10 @@ export default function ServiceList({ services, onEdit, onDelete }: ServiceListP
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => onEdit(service)}>
-                        <FilePenLine className="mr-2 h-4 w-4" /> Edit
+                        <FilePenLine className="mr-2 h-4 w-4" /> Editar
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onDelete(service.id)} className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive">
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        <Trash2 className="mr-2 h-4 w-4" /> Eliminar
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

@@ -40,11 +40,11 @@ export default function EmployeesPage() {
   return (
     <div className="container mx-auto">
       <PageHeader
-        title="Manage Employees"
-        description="Maintain a directory of hospital staff, their roles, and preferences."
+        title="Administrar Empleados"
+        description="Mantenga un directorio del personal del hospital, sus roles y preferencias."
         actions={
           <Button onClick={openFormForNew}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add New Employee
+            <PlusCircle className="mr-2 h-4 w-4" /> Añadir Nuevo Empleado
           </Button>
         }
       />

@@ -18,7 +18,7 @@ interface EmployeeListProps {
 
 export default function EmployeeList({ employees, services, onEdit, onDelete }: EmployeeListProps) {
   const getServiceNames = (serviceIds: string[]) => {
-    return serviceIds.map(id => services.find(s => s.id === id)?.name || 'Unknown').join(', ');
+    return serviceIds.map(id => services.find(s => s.id === id)?.name || 'Desconocido').join(', ');
   };
 
   const getInitials = (name: string) => {
@@ -29,11 +29,11 @@ export default function EmployeeList({ employees, services, onEdit, onDelete }: 
     return (
       <Card className="text-center">
         <CardHeader>
-          <CardTitle>No Employees Found</CardTitle>
+          <CardTitle>No Se Encontraron Empleados</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">
-            There are no employees defined yet. Click "Add New Employee" to get started.
+            Aún no se han definido empleados. Haga clic en "Añadir Nuevo Empleado" para comenzar.
           </p>
         </CardContent>
       </Card>
@@ -46,11 +46,11 @@ export default function EmployeeList({ employees, services, onEdit, onDelete }: 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="hidden md:table-cell">Contact</TableHead>
+              <TableHead>Nombre</TableHead>
+              <TableHead className="hidden md:table-cell">Contacto</TableHead>
               <TableHead>Roles</TableHead>
-              <TableHead className="hidden lg:table-cell">Services</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="hidden lg:table-cell">Servicios</TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -59,7 +59,7 @@ export default function EmployeeList({ employees, services, onEdit, onDelete }: 
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9">
-                      <AvatarImage src={`https://placehold.co/40x40.png?text=${getInitials(employee.name)}`} alt={employee.name} data-ai-hint="person portrait" />
+                      <AvatarImage src={`https://placehold.co/40x40.png?text=${getInitials(employee.name)}`} alt={employee.name} data-ai-hint="retrato persona" />
                       <AvatarFallback>{getInitials(employee.name)}</AvatarFallback>
                     </Avatar>
                     <div className="font-medium">{employee.name}</div>
@@ -79,10 +79,10 @@ export default function EmployeeList({ employees, services, onEdit, onDelete }: 
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => onEdit(employee)}>
-                        <FilePenLine className="mr-2 h-4 w-4" /> Edit
+                        <FilePenLine className="mr-2 h-4 w-4" /> Editar
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onDelete(employee.id)} className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive">
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        <Trash2 className="mr-2 h-4 w-4" /> Eliminar
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
