@@ -17,11 +17,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
+const NO_FIXED_TIMING_VALUE = "none_selected"; // Constant for "Ninguno" option
+
 const preferencesSchema = z.object({
   eligibleForDayOffAfterDuty: z.boolean().optional(),
   prefersWeekendWork: z.boolean().optional(),
   fixedWeeklyShiftDays: z.array(z.string()).optional(),
-  fixedWeeklyShiftTiming: z.string().optional().or(z.literal("")), // Allow empty string for "Ninguno"
+  fixedWeeklyShiftTiming: z.string().optional().or(z.literal("")).nullable(), // Allow empty string or null for "Ninguno"
 });
 
 const employeeSchema = z.object({
@@ -56,7 +58,7 @@ const daysOfWeek = [
 ];
 
 const shiftTimings = [
-  { value: "", label: "Ninguno" },
+  { value: NO_FIXED_TIMING_VALUE, label: "Ninguno" },
   { value: "mañana", label: "Mañana (ej. 07:00-15:00)" },
   { value: "tarde", label: "Tarde (ej. 15:00-23:00)" },
   { value: "noche", label: "Noche (ej. 23:00-07:00)" },
@@ -66,7 +68,7 @@ const defaultPreferences: EmployeePreferences = {
   eligibleForDayOffAfterDuty: false,
   prefersWeekendWork: false,
   fixedWeeklyShiftDays: [],
-  fixedWeeklyShiftTiming: "",
+  fixedWeeklyShiftTiming: NO_FIXED_TIMING_VALUE,
 };
 
 export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, availableServices, isLoading }: EmployeeFormProps) {
@@ -86,14 +88,17 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
   useEffect(() => {
     if (isOpen) {
       if (employee) {
+        const currentFixedTiming = employee.preferences?.fixedWeeklyShiftTiming;
         form.reset({
           name: employee.name,
           contact: employee.contact,
           serviceIds: employee.serviceIds || [],
           roles: employee.roles ? employee.roles.join(', ') : '',
           preferences: {
-            ...defaultPreferences, // Start with defaults
-            ...(employee.preferences || {}), // Override with employee specific preferences
+            eligibleForDayOffAfterDuty: employee.preferences?.eligibleForDayOffAfterDuty ?? defaultPreferences.eligibleForDayOffAfterDuty,
+            prefersWeekendWork: employee.preferences?.prefersWeekendWork ?? defaultPreferences.prefersWeekendWork,
+            fixedWeeklyShiftDays: employee.preferences?.fixedWeeklyShiftDays || defaultPreferences.fixedWeeklyShiftDays,
+            fixedWeeklyShiftTiming: (currentFixedTiming && currentFixedTiming !== "") ? currentFixedTiming : NO_FIXED_TIMING_VALUE,
           },
           availability: employee.availability || '',
           constraints: employee.constraints || '',
@@ -118,8 +123,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
       roles: data.roles.split(',').map(s => s.trim()).filter(Boolean),
       preferences: data.preferences ? {
         ...data.preferences,
-        fixedWeeklyShiftTiming: data.preferences.fixedWeeklyShiftTiming === "" ? undefined : data.preferences.fixedWeeklyShiftTiming,
-        // Ensure fixedWeeklyShiftDays is an empty array if no days are selected, not undefined
+        fixedWeeklyShiftTiming: data.preferences.fixedWeeklyShiftTiming === NO_FIXED_TIMING_VALUE ? undefined : data.preferences.fixedWeeklyShiftTiming,
         fixedWeeklyShiftDays: data.preferences.fixedWeeklyShiftDays || []
       } : undefined,
     };
@@ -131,7 +135,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
 
   const handleClearFixedShift = () => {
     form.setValue('preferences.fixedWeeklyShiftDays', [], { shouldValidate: true });
-    form.setValue('preferences.fixedWeeklyShiftTiming', "", { shouldValidate: true });
+    form.setValue('preferences.fixedWeeklyShiftTiming', NO_FIXED_TIMING_VALUE, { shouldValidate: true });
   };
 
   return (
@@ -258,7 +262,11 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Horario del Turno Fijo</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoading}>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value || NO_FIXED_TIMING_VALUE} 
+                        disabled={isLoading}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Seleccionar horario" />
@@ -304,3 +312,5 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
     </Dialog>
   );
 }
+
+    
