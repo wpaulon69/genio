@@ -29,8 +29,7 @@ export interface EmployeePreferences {
   eligibleForDayOffAfterDuty?: boolean;
   prefersWeekendWork?: boolean;
   fixedWeeklyShiftDays?: string[]; // e.g., ["lunes", "martes", ..., "domingo"]
-  fixedWeeklyShiftTiming?: string; // e.g., "mañana", "tarde", "noche", or custom like "08:00-16:00"
-  // generalPreferenceNotes?: string; // Optional: if we still want a free text field for other non-structured preferences
+  fixedWeeklyShiftTiming: string | null; // e.g., "mañana", "tarde", "noche", "rest_day", or custom like "08:00-16:00", or null
 }
 
 export interface Employee {
@@ -39,7 +38,7 @@ export interface Employee {
   contact: string; // e.g., email or phone
   serviceIds: string[]; // IDs of services they can work in
   roles: string[]; // e.g., "Nurse", "Doctor", "Technician"
-  preferences?: EmployeePreferences; // Replaces the old preferences string
+  preferences?: EmployeePreferences;
   availability: string; // Textual description of availability (e.g., "Mon-Fri 9-5", "Not available on weekends")
   constraints: string; // Any other constraints (e.g., "Max 40 hours/week")
 }

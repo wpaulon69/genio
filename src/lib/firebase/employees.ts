@@ -10,20 +10,19 @@ const defaultPreferences: EmployeePreferences = {
   eligibleForDayOffAfterDuty: false,
   prefersWeekendWork: false,
   fixedWeeklyShiftDays: [],
-  fixedWeeklyShiftTiming: undefined,
+  fixedWeeklyShiftTiming: null, // Changed from undefined to null
 };
 
 // Helper to convert Firestore doc to Employee type
 const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee => {
   const data = snapshot.data();
   
-  // Ensure preferences exists and has defaults
   const preferencesData = data.preferences || {};
   const finalPreferences: EmployeePreferences = {
     eligibleForDayOffAfterDuty: preferencesData.eligibleForDayOffAfterDuty === undefined ? defaultPreferences.eligibleForDayOffAfterDuty : preferencesData.eligibleForDayOffAfterDuty,
     prefersWeekendWork: preferencesData.prefersWeekendWork === undefined ? defaultPreferences.prefersWeekendWork : preferencesData.prefersWeekendWork,
     fixedWeeklyShiftDays: preferencesData.fixedWeeklyShiftDays || defaultPreferences.fixedWeeklyShiftDays,
-    fixedWeeklyShiftTiming: preferencesData.fixedWeeklyShiftTiming || defaultPreferences.fixedWeeklyShiftTiming,
+    fixedWeeklyShiftTiming: preferencesData.fixedWeeklyShiftTiming === undefined ? defaultPreferences.fixedWeeklyShiftTiming : preferencesData.fixedWeeklyShiftTiming,
   };
   
   return {
@@ -47,29 +46,54 @@ export const getEmployees = async (): Promise<Employee[]> => {
 
 export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<Employee> => {
   const employeesCol = collection(db, EMPLOYEES_COLLECTION);
-  // Ensure preferences object is structured correctly before cleaning
+  
+  let preferencesToSave: EmployeePreferences | undefined = undefined;
+  if (employeeData.preferences) {
+    preferencesToSave = {
+      eligibleForDayOffAfterDuty: employeeData.preferences.eligibleForDayOffAfterDuty ?? defaultPreferences.eligibleForDayOffAfterDuty,
+      prefersWeekendWork: employeeData.preferences.prefersWeekendWork ?? defaultPreferences.prefersWeekendWork,
+      fixedWeeklyShiftDays: employeeData.preferences.fixedWeeklyShiftDays || defaultPreferences.fixedWeeklyShiftDays,
+      fixedWeeklyShiftTiming: employeeData.preferences.fixedWeeklyShiftTiming === undefined ? defaultPreferences.fixedWeeklyShiftTiming : employeeData.preferences.fixedWeeklyShiftTiming,
+    };
+  } else {
+    preferencesToSave = { ...defaultPreferences };
+  }
+
   const dataToSave = {
     ...employeeData,
-    preferences: {
-      ...defaultPreferences, // Start with defaults
-      ...(employeeData.preferences || {}), // Override with provided preferences
-    },
+    preferences: preferencesToSave,
   };
+
   const cleanedData = cleanDataForFirestore(dataToSave);
   const docRef = await addDoc(employeesCol, cleanedData);
-  return { id: docRef.id, ...(cleanedData as Omit<Employee, 'id'>) };
+  // Construct the returned employee object ensuring preferences are correctly typed
+  const savedEmployeeData = cleanedData as Omit<Employee, 'id'>;
+  if (savedEmployeeData.preferences === undefined) {
+    savedEmployeeData.preferences = { ...defaultPreferences };
+  }
+
+  return { id: docRef.id, ...savedEmployeeData };
 };
 
 export const updateEmployee = async (employeeId: string, employeeData: Partial<Omit<Employee, 'id'>>): Promise<void> => {
   const employeeDoc = doc(db, EMPLOYEES_COLLECTION, employeeId);
-  // Ensure preferences object is structured correctly if present in update
+  
   let dataToUpdate = { ...employeeData };
-  if (employeeData.preferences) {
-    dataToUpdate.preferences = {
-      ...defaultPreferences, // Start with defaults (though ideally existing doc would have them)
-      ...(employeeData.preferences),
-    };
+
+  if (employeeData.hasOwnProperty('preferences')) {
+    if (employeeData.preferences) {
+      dataToUpdate.preferences = {
+        eligibleForDayOffAfterDuty: employeeData.preferences.eligibleForDayOffAfterDuty ?? defaultPreferences.eligibleForDayOffAfterDuty,
+        prefersWeekendWork: employeeData.preferences.prefersWeekendWork ?? defaultPreferences.prefersWeekendWork,
+        fixedWeeklyShiftDays: employeeData.preferences.fixedWeeklyShiftDays || defaultPreferences.fixedWeeklyShiftDays,
+        fixedWeeklyShiftTiming: employeeData.preferences.fixedWeeklyShiftTiming === undefined ? defaultPreferences.fixedWeeklyShiftTiming : employeeData.preferences.fixedWeeklyShiftTiming,
+      };
+    } else {
+      // If preferences is explicitly set to null or undefined in the update, use defaults
+      dataToUpdate.preferences = { ...defaultPreferences };
+    }
   }
+  
   await updateDoc(employeeDoc, cleanDataForFirestore(dataToUpdate));
 };
 
