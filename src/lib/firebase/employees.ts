@@ -2,6 +2,7 @@
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from './config';
 import type { Employee } from '@/lib/types';
+import { cleanDataForFirestore } from '@/lib/utils';
 
 const EMPLOYEES_COLLECTION = 'employees';
 
@@ -29,13 +30,14 @@ export const getEmployees = async (): Promise<Employee[]> => {
 
 export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<Employee> => {
   const employeesCol = collection(db, EMPLOYEES_COLLECTION);
-  const docRef = await addDoc(employeesCol, employeeData);
-  return { id: docRef.id, ...employeeData };
+  const cleanedData = cleanDataForFirestore(employeeData);
+  const docRef = await addDoc(employeesCol, cleanedData);
+  return { id: docRef.id, ...(cleanedData as Omit<Employee, 'id'>) };
 };
 
 export const updateEmployee = async (employeeId: string, employeeData: Partial<Omit<Employee, 'id'>>): Promise<void> => {
   const employeeDoc = doc(db, EMPLOYEES_COLLECTION, employeeId);
-  await updateDoc(employeeDoc, employeeData);
+  await updateDoc(employeeDoc, cleanDataForFirestore(employeeData));
 };
 
 export const deleteEmployee = async (employeeId: string): Promise<void> => {

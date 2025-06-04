@@ -2,6 +2,7 @@
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from './config';
 import type { Shift } from '@/lib/types';
+import { cleanDataForFirestore } from '@/lib/utils';
 
 const SHIFTS_COLLECTION = 'shifts';
 
@@ -29,13 +30,14 @@ export const getShifts = async (): Promise<Shift[]> => {
 
 export const addShift = async (shiftData: Omit<Shift, 'id'>): Promise<Shift> => {
   const shiftsCol = collection(db, SHIFTS_COLLECTION);
-  const docRef = await addDoc(shiftsCol, shiftData);
-  return { id: docRef.id, ...shiftData };
+  const cleanedData = cleanDataForFirestore(shiftData);
+  const docRef = await addDoc(shiftsCol, cleanedData);
+  return { id: docRef.id, ...(cleanedData as Omit<Shift, 'id'>) };
 };
 
 export const updateShift = async (shiftId: string, shiftData: Partial<Omit<Shift, 'id'>>): Promise<void> => {
   const shiftDoc = doc(db, SHIFTS_COLLECTION, shiftId);
-  await updateDoc(shiftDoc, shiftData);
+  await updateDoc(shiftDoc, cleanDataForFirestore(shiftData));
 };
 
 export const deleteShift = async (shiftId: string): Promise<void> => {

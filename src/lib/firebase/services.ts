@@ -2,6 +2,7 @@
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from './config';
 import type { Service } from '@/lib/types';
+import { cleanDataForFirestore } from '@/lib/utils';
 
 const SERVICES_COLLECTION = 'services';
 
@@ -25,13 +26,14 @@ export const getServices = async (): Promise<Service[]> => {
 
 export const addService = async (serviceData: Omit<Service, 'id'>): Promise<Service> => {
   const servicesCol = collection(db, SERVICES_COLLECTION);
-  const docRef = await addDoc(servicesCol, serviceData);
-  return { id: docRef.id, ...serviceData };
+  const cleanedData = cleanDataForFirestore(serviceData);
+  const docRef = await addDoc(servicesCol, cleanedData);
+  return { id: docRef.id, ...(cleanedData as Omit<Service, 'id'>) };
 };
 
 export const updateService = async (serviceId: string, serviceData: Partial<Omit<Service, 'id'>>): Promise<void> => {
   const serviceDoc = doc(db, SERVICES_COLLECTION, serviceId);
-  await updateDoc(serviceDoc, serviceData);
+  await updateDoc(serviceDoc, cleanDataForFirestore(serviceData));
 };
 
 export const deleteService = async (serviceId: string): Promise<void> => {
