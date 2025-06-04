@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -20,9 +21,12 @@ interface ScheduleViewProps {
   services: Service[];
 }
 
+const ALL_SERVICES_OPTION_VALUE = "__ALL_SERVICES__";
+const ALL_EMPLOYEES_OPTION_VALUE = "__ALL_EMPLOYEES__";
+
 export default function ScheduleView({ shifts, employees, services }: ScheduleViewProps) {
-  const [selectedService, setSelectedService] = useState<string>('');
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
+  const [selectedService, setSelectedService] = useState<string>(ALL_SERVICES_OPTION_VALUE);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>(ALL_EMPLOYEES_OPTION_VALUE);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
@@ -32,8 +36,9 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
 
   const filteredShifts = useMemo(() => {
     return shifts.filter(shift => {
-      const matchesService = selectedService ? shift.serviceId === selectedService : true;
-      const matchesEmployee = selectedEmployee ? shift.employeeId === selectedEmployee : true;
+      const matchesService = selectedService === ALL_SERVICES_OPTION_VALUE ? true : shift.serviceId === selectedService;
+      const matchesEmployee = selectedEmployee === ALL_EMPLOYEES_OPTION_VALUE ? true : shift.employeeId === selectedEmployee;
+      
       const shiftDate = parseISO(shift.date);
       const matchesDate = selectedDate && isValid(shiftDate) ? format(shiftDate, 'yyyy-MM-dd', { locale: es }) === format(selectedDate, 'yyyy-MM-dd', { locale: es }) : true;
       
@@ -75,7 +80,7 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
               <SelectValue placeholder="Filtrar por Servicio" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos los Servicios</SelectItem>
+              <SelectItem value={ALL_SERVICES_OPTION_VALUE}>Todos los Servicios</SelectItem>
               {services.map(service => (
                 <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
               ))}
@@ -87,7 +92,7 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
               <SelectValue placeholder="Filtrar por Empleado" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos los Empleados</SelectItem>
+              <SelectItem value={ALL_EMPLOYEES_OPTION_VALUE}>Todos los Empleados</SelectItem>
               {employees.map(emp => (
                 <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
               ))}
@@ -113,7 +118,7 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
             className="w-full md:w-[200px]"
           />
 
-          <Button variant="ghost" onClick={() => { setSelectedService(''); setSelectedEmployee(''); setSelectedDate(undefined); setSearchTerm(''); }}>
+          <Button variant="ghost" onClick={() => { setSelectedService(ALL_SERVICES_OPTION_VALUE); setSelectedEmployee(ALL_EMPLOYEES_OPTION_VALUE); setSelectedDate(undefined); setSearchTerm(''); }}>
             <FilterIcon className="mr-2 h-4 w-4" /> Limpiar Filtros
           </Button>
         </div>
@@ -180,3 +185,4 @@ export default function ScheduleView({ shifts, employees, services }: ScheduleVi
     </Card>
   );
 }
+
