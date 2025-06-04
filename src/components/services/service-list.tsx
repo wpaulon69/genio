@@ -39,7 +39,7 @@ export default function ServiceList({ services, onEdit, onDelete, isLoading }: S
             <TableRow>
               <TableHead>Nombre</TableHead>
               <TableHead>Descripción</TableHead>
-              <TableHead className="hidden md:table-cell">Fragmento de Reglas</TableHead>
+              <TableHead className="hidden md:table-cell">Notas Adicionales</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -49,9 +49,13 @@ export default function ServiceList({ services, onEdit, onDelete, isLoading }: S
                 <TableCell className="font-medium">{service.name}</TableCell>
                 <TableCell>{service.description}</TableCell>
                 <TableCell className="hidden md:table-cell">
-                  <Badge variant="outline" className="truncate max-w-xs">
-                    {service.rules.substring(0, 50)}{service.rules.length > 50 ? '...' : ''}
-                  </Badge>
+                  {service.additionalNotes && service.additionalNotes.trim() !== '' ? (
+                    <Badge variant="outline" className="truncate max-w-xs">
+                      {service.additionalNotes.substring(0, 50)}{service.additionalNotes.length > 50 ? '...' : ''}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground italic">N/A</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
@@ -79,4 +83,3 @@ export default function ServiceList({ services, onEdit, onDelete, isLoading }: S
     </Card>
   );
 }
-

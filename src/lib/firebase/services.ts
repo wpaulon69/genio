@@ -1,7 +1,7 @@
 
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from './config';
-import type { Service } from '@/lib/types';
+import type { Service, StaffingNeeds } from '@/lib/types';
 import { cleanDataForFirestore } from '@/lib/utils';
 
 const SERVICES_COLLECTION = 'services';
@@ -9,11 +9,22 @@ const SERVICES_COLLECTION = 'services';
 // Helper to convert Firestore doc to Service type
 const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Service => {
   const data = snapshot.data();
+  // Provide default for staffingNeeds if it's missing or incomplete
+  const defaultStaffingNeeds: StaffingNeeds = {
+    morningWeekday: 0,
+    afternoonWeekday: 0,
+    nightWeekday: 0,
+    morningWeekendHoliday: 0,
+    afternoonWeekendHoliday: 0,
+    nightWeekendHoliday: 0,
+  };
   return {
     id: snapshot.id,
     name: data.name,
     description: data.description,
-    rules: data.rules,
+    enableNightShift: data.enableNightShift || false,
+    staffingNeeds: { ...defaultStaffingNeeds, ...data.staffingNeeds },
+    additionalNotes: data.additionalNotes || '',
   } as Service;
 };
 
