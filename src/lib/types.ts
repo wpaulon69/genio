@@ -60,3 +60,9 @@ export interface Shift {
   endTime: string; // HH:MM
   notes?: string;
 }
+
+export interface Holiday {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+}

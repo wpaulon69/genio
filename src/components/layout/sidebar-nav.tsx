@@ -15,7 +15,8 @@ import {
   UsersRound,
   CalendarDays,
   LineChart,
-  UserCog, // Corregido: UsersCog -> UserCog
+  UserCog,
+  CalendarHeart, // Nuevo icono para Feriados
   type LucideIcon,
 } from 'lucide-react';
 
@@ -32,7 +33,8 @@ const navItems: NavItem[] = [
   { href: '/employees', label: 'Empleados', icon: UsersRound, tooltip: 'Administrar Empleados' },
   { href: '/schedule', label: 'Horario', icon: CalendarDays, tooltip: 'Ver y Generar Horario' },
   { href: '/reports', label: 'Informes', icon: LineChart, tooltip: 'Ver Informes' },
-  { href: '/service-overview', label: 'Personal por Servicio', icon: UserCog, tooltip: 'Ver Personal por Servicio' }, // Corregido: UsersCog -> UserCog
+  { href: '/service-overview', label: 'Personal por Servicio', icon: UserCog, tooltip: 'Ver Personal por Servicio' },
+  { href: '/holidays', label: 'Feriados', icon: CalendarHeart, tooltip: 'Administrar Feriados' }, // Nueva entrada
 ];
 
 export default function SidebarNav() {
@@ -60,4 +62,3 @@ export default function SidebarNav() {
     </SidebarMenu>
   );
 }
-

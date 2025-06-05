@@ -10,14 +10,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, CalendarDays, Eye, Bot, Info } from 'lucide-react';
+import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle } from 'lucide-react';
 import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-scheduler';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import type { Employee, Service, FixedAssignment } from '@/lib/types';
+import type { Employee, Service, Holiday } from '@/lib/types';
 import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid';
+import { useQuery } from '@tanstack/react-query';
+import { getHolidays } from '@/lib/firebase/holidays';
 
 const shiftGenerationConfigSchema = z.object({
   serviceId: z.string().min(1, "Debe seleccionar un servicio."),
@@ -40,18 +42,6 @@ const months = Array.from({ length: 12 }, (_, i) => ({
   label: format(new Date(currentYear, i), 'MMMM', { locale: es }),
 }));
 
-// TEMPORAL: Lista de feriados. Eventualmente, esto debería venir de Firebase y ser editable por el usuario.
-// Usar formato YYYY-MM-DD
-const TEMP_HOLIDAYS: Array<{ date: string; name: string }> = [
-    { date: `${currentYear}-01-01`, name: "Año Nuevo" },
-    { date: `${currentYear}-05-01`, name: "Día del Trabajador" },
-    { date: `${currentYear}-07-09`, name: "Día de la Independencia" },
-    { date: `${currentYear}-12-25`, name: "Navidad" },
-    // Añadir más feriados relevantes para el año actual o próximos si es necesario
-    { date: `${currentYear + 1}-01-01`, name: "Año Nuevo" },
-];
-
-
 export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServices }: ShiftGeneratorFormProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -62,6 +52,10 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
   const [showGrid, setShowGrid] = useState(false);
   const [displayInfoText, setDisplayInfoText] = useState<string>("");
 
+  const { data: holidays = [], isLoading: isLoadingHolidays, error: errorHolidays } = useQuery<Holiday[]>({
+    queryKey: ['holidays'],
+    queryFn: getHolidays,
+  });
 
   const form = useForm<ShiftGenerationConfigFormData>({
     resolver: zodResolver(shiftGenerationConfigSchema),
@@ -73,16 +67,16 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
   });
 
   const selectedServiceId = form.watch('serviceId');
-  const selectedMonth = form.watch('month'); // string "1" a "12"
-  const selectedYear = form.watch('year');   // string "2024"
+  const selectedMonth = form.watch('month');
+  const selectedYear = form.watch('year');
   
   const selectedService = useMemo(() => {
     return allServices.find(s => s.id === selectedServiceId);
   }, [selectedServiceId, allServices]);
 
   useEffect(() => {
-    if (selectedService && selectedMonth && selectedYear && allEmployees) {
-      const monthIdx = parseInt(selectedMonth, 10) -1; // 0-11 for Date constructor
+    if (selectedService && selectedMonth && selectedYear && allEmployees && !isLoadingHolidays) {
+      const monthIdx = parseInt(selectedMonth, 10) - 1;
       const yearInt = parseInt(selectedYear, 10);
       
       const monthDate = new Date(yearInt, monthIdx, 1);
@@ -106,7 +100,7 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
       }
       info += "\n";
 
-      const holidaysInMonth = TEMP_HOLIDAYS.filter(h => {
+      const holidaysInMonth = holidays.filter(h => {
         const holidayDate = parseISO(h.date);
         return isValid(holidayDate) && getYearFromDate(holidayDate) === yearInt && getMonthFromDate(holidayDate) === monthIdx;
       });
@@ -117,8 +111,9 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
             info += `  - ${format(parseISO(h.date), 'dd/MM/yyyy')}: ${h.name}\n`;
         });
         info += "\n";
+      } else {
+        info += `No hay feriados registrados para ${months.find(m => m.value === selectedMonth)?.label || selectedMonth} ${selectedYear}.\n\n`;
       }
-
 
       const employeesInService = allEmployees.filter(emp => emp.serviceIds.includes(selectedService.id));
       info += `Empleados Asignados a ${selectedService.name} (${employeesInService.length}):\n`;
@@ -137,12 +132,8 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
           const relevantAssignments = (emp.fixedAssignments || []).filter(assign => {
             if (!assign.startDate) return false;
             const assignmentStartDate = parseISO(assign.startDate);
-            // For single day assignments (like 'D'), endDate might be undefined. Use startDate as endDate.
             const assignmentEndDate = assign.endDate ? parseISO(assign.endDate) : assignmentStartDate;
-            
             if (!isValid(assignmentStartDate) || !isValid(assignmentEndDate)) return false;
-            
-            // Check if the assignment's interval overlaps with the target month's interval
             const currentAssignmentInterval = { start: assignmentStartDate, end: assignmentEndDate };
             return isWithinInterval(assignmentStartDate, targetInterval) || 
                    isWithinInterval(assignmentEndDate, targetInterval) ||
@@ -160,17 +151,27 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
         });
       }
       setDisplayInfoText(info);
+    } else if (isLoadingHolidays) {
+      setDisplayInfoText("Cargando lista de feriados...");
     } else {
-      setDisplayInfoText("Seleccione un servicio, mes y año para ver el resumen.");
+      setDisplayInfoText("Seleccione un servicio, mes y año para ver el resumen. Asegúrese de que los feriados estén cargados.");
     }
-  }, [selectedServiceId, selectedMonth, selectedYear, allServices, allEmployees, selectedService]);
-
+  }, [selectedServiceId, selectedMonth, selectedYear, allServices, allEmployees, selectedService, holidays, isLoadingHolidays]);
 
   const handleGenerateSubmit = async (data: ShiftGenerationConfigFormData) => {
     if (!selectedService) {
         setError("Por favor, seleccione un servicio válido.");
         return;
     }
+    if (isLoadingHolidays) {
+        setError("Esperando a que cargue la lista de feriados.");
+        return;
+    }
+    if (errorHolidays) {
+        setError("Error al cargar feriados. No se puede generar el horario.");
+        return;
+    }
+
     setIsGenerating(true);
     setGeneratedResponseText(null);
     setAlgorithmGeneratedShifts(null);
@@ -178,13 +179,12 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
     setError(null);
     setShowGrid(false);
     try {
-      // Pass the TEMP_HOLIDAYS to the algorithm
       const result = await generateAlgorithmicSchedule(
         selectedService,
         data.month,
         data.year,
         allEmployees,
-        TEMP_HOLIDAYS 
+        holidays // Pasar la lista de feriados obtenida de Firebase
       );
       setGeneratedResponseText(result.responseText);
       if (result.generatedShifts && result.generatedShifts.length > 0) {
@@ -235,12 +235,21 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
             </CardTitle>
             <CardDescription>
               Seleccione el servicio, mes y año. El horario se generará automáticamente
-              basado en las reglas del servicio y la disponibilidad de empleados.
+              basado en las reglas del servicio, la disponibilidad de empleados y los feriados registrados.
             </CardDescription>
           </CardHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleGenerateSubmit)}>
               <CardContent className="space-y-6">
+                {errorHolidays && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Error al Cargar Feriados</AlertTitle>
+                    <AlertDescription>
+                      No se pudieron cargar los feriados: {errorHolidays.message}. La generación de horarios podría no ser precisa.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
@@ -248,7 +257,7 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Servicio</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={isGenerating}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isGenerating || isLoadingHolidays}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Seleccione un servicio" />
@@ -270,7 +279,7 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Mes</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={isGenerating}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isGenerating || isLoadingHolidays}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un mes" /></SelectTrigger></FormControl>
                           <SelectContent>{months.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
                         </Select>
@@ -284,7 +293,7 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Año</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={isGenerating}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isGenerating || isLoadingHolidays}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un año" /></SelectTrigger></FormControl>
                           <SelectContent>{years.map(y => (<SelectItem key={y} value={y}>{y}</SelectItem>))}</SelectContent>
                         </Select>
@@ -297,7 +306,7 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
                 <FormItem>
                   <FormLabel className="flex items-center"><Info className="mr-2 h-4 w-4 text-primary" /> Información para Generación</FormLabel>
                   <Textarea
-                    value={displayInfoText}
+                    value={isLoadingHolidays ? "Cargando feriados..." : displayInfoText}
                     readOnly
                     rows={10}
                     className="min-h-[150px] font-mono text-xs bg-muted/30 border-dashed"
@@ -307,7 +316,7 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
 
               </CardContent>
               <CardFooter className="flex flex-col items-stretch gap-4">
-                <Button type="submit" disabled={isGenerating || isSaving || !selectedServiceId} className="w-full">
+                <Button type="submit" disabled={isGenerating || isSaving || !selectedServiceId || isLoadingHolidays || !!errorHolidays} className="w-full">
                   {isGenerating ? (
                     <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generando Horario... </>
                   ) : (
