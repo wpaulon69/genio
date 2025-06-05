@@ -32,11 +32,19 @@ const AIShiftSchema = z.object({
 });
 export type AIShift = z.infer<typeof AIShiftSchema>;
 
-const SuggestShiftScheduleOutputSchema = z.object({
+// Esquema para la SALIDA del PROMPT (responseText es opcional)
+const PromptOutputSchema = z.object({
+  generatedShifts: z.array(AIShiftSchema).describe('Un array de objetos de turno generados según el prompt.'),
+  responseText: z.string().optional().describe('Un resumen legible por humanos del horario generado o cualquier comentario relevante.'),
+});
+
+// Esquema para la SALIDA del FLOW (responseText es REQUERIDO)
+const FlowOutputSchema = z.object({
   generatedShifts: z.array(AIShiftSchema).describe('Un array de objetos de turno generados según el prompt.'),
   responseText: z.string().describe('Un resumen legible por humanos del horario generado o cualquier comentario relevante.'),
 });
-export type SuggestShiftScheduleOutput = z.infer<typeof SuggestShiftScheduleOutputSchema>;
+export type SuggestShiftScheduleOutput = z.infer<typeof FlowOutputSchema>;
+
 
 /**
  * La función principal para sugerir un horario de turnos basado en la entrada proporcionada.
@@ -50,7 +58,7 @@ export async function suggestShiftSchedule(input: SuggestShiftScheduleInput): Pr
 const suggestShiftSchedulePrompt = ai.definePrompt({
   name: 'suggestShiftSchedulePrompt',
   input: {schema: SuggestShiftScheduleInputSchema},
-  output: {schema: SuggestShiftScheduleOutputSchema},
+  output: {schema: PromptOutputSchema}, // Usar el esquema más permisivo para el prompt
   prompt: `Eres un asistente de IA especializado en generar horarios de turnos para hospitales.
 
   Basado en los siguientes requisitos, genera un horario de turnos detallado:
@@ -86,13 +94,12 @@ const suggestShiftScheduleFlow = ai.defineFlow(
   {
     name: 'suggestShiftScheduleFlow',
     inputSchema: SuggestShiftScheduleInputSchema,
-    outputSchema: SuggestShiftScheduleOutputSchema,
+    outputSchema: FlowOutputSchema, // Usar el esquema estricto para la salida del flow
   },
-  async input => {
-    const {output} = await suggestShiftSchedulePrompt(input);
+  async (input): Promise<SuggestShiftScheduleOutput> => {
+    const {output: promptOutput} = await suggestShiftSchedulePrompt(input);
     
-    if (!output) {
-      // Si la IA no devuelve nada en 'output', retornamos una estructura válida pero vacía.
+    if (!promptOutput) {
       console.error("La IA no generó una respuesta (output es undefined/null).");
       return {
         generatedShifts: [],
@@ -100,21 +107,37 @@ const suggestShiftScheduleFlow = ai.defineFlow(
       };
     }
 
-    // Asegurarse de que generatedShifts sea siempre un array
-    const generatedShifts = Array.isArray(output.generatedShifts) ? output.generatedShifts : [];
+    const rawGeneratedShifts = Array.isArray(promptOutput.generatedShifts) ? promptOutput.generatedShifts : [];
     
-    // Asegurarse de que responseText siempre tenga un valor
-    const responseText = typeof output.responseText === 'string' ? output.responseText : "La IA no proporcionó un texto de respuesta o era de un tipo incorrecto.";
+    let responseText = (typeof promptOutput.responseText === 'string' && promptOutput.responseText.trim() !== '') 
+      ? promptOutput.responseText 
+      : "La IA no proporcionó un texto de respuesta o este estaba vacío.";
 
-    // Filtrar turnos incompletos para mayor robustez, aunque el prompt ya lo pide
-    const completeShifts = generatedShifts.filter(shift => 
-        shift.date && shift.startTime && shift.endTime && shift.employeeName && shift.serviceName
+    const completeShifts = rawGeneratedShifts.filter(shift => 
+        shift.date && 
+        typeof shift.date === 'string' && // Extra check for type safety
+        shift.startTime && 
+        typeof shift.startTime === 'string' &&
+        shift.endTime && 
+        typeof shift.endTime === 'string' &&
+        shift.employeeName && 
+        typeof shift.employeeName === 'string' &&
+        shift.serviceName &&
+        typeof shift.serviceName === 'string'
     );
 
-    if (completeShifts.length < generatedShifts.length) {
-        console.warn(`Se filtraron ${generatedShifts.length - completeShifts.length} turnos incompletos de la respuesta de la IA.`);
+    if (completeShifts.length < rawGeneratedShifts.length) {
+        const missingCount = rawGeneratedShifts.length - completeShifts.length;
+        const warningMessage = ` (Advertencia: Se filtraron ${missingCount} turnos incompletos de la respuesta de la IA.)`;
+        
+        if (responseText === "La IA no proporcionó un texto de respuesta o este estaba vacío.") {
+            responseText = `La IA generó datos pero faltó el texto de resumen. Además, ${missingCount} turnos estaban incompletos.`;
+        } else {
+            responseText += warningMessage;
+        }
+        console.warn(`Se filtraron ${missingCount} turnos incompletos de la respuesta de la IA. Turnos crudos:`, rawGeneratedShifts);
     }
-
+    
     return {
         generatedShifts: completeShifts,
         responseText: responseText,
