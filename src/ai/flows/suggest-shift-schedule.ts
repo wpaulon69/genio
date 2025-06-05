@@ -59,7 +59,8 @@ const suggestShiftSchedulePrompt = ai.definePrompt({
 
   Asegúrate de que el horario respete las reglas del servicio, las preferencias de los empleados y la disponibilidad.
 
-  Devuelve la respuesta en el siguiente formato JSON:
+  Devuelve la respuesta en el siguiente formato JSON. El campo 'responseText' SIEMPRE debe estar presente, incluso si hay problemas.
+  Cada objeto dentro de 'generatedShifts' DEBE tener todos los campos requeridos (date, startTime, endTime, employeeName, serviceName).
   {
     "generatedShifts": [
       {
@@ -72,7 +73,7 @@ const suggestShiftSchedulePrompt = ai.definePrompt({
       }
       // ... más objetos de turno si son necesarios
     ],
-    "responseText": "Un resumen legible por humanos del horario generado y cualquier comentario o advertencia importante."
+    "responseText": "Un resumen legible por humanos del horario generado y cualquier comentario o advertencia importante. Este campo es OBLIGATORIO."
   }
 
   Si no puedes generar un horario válido basado en el prompt, devuelve un array generatedShifts vacío y explica el problema en responseText.
@@ -89,13 +90,35 @@ const suggestShiftScheduleFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await suggestShiftSchedulePrompt(input);
+    
     if (!output) {
-      throw new Error("La IA no generó una respuesta válida.");
+      // Si la IA no devuelve nada en 'output', retornamos una estructura válida pero vacía.
+      console.error("La IA no generó una respuesta (output es undefined/null).");
+      return {
+        generatedShifts: [],
+        responseText: "La IA no generó una respuesta válida (output estaba vacío).",
+      };
     }
-    // Asegurarse de que generatedShifts sea siempre un array, incluso si la IA falla en algo
+
+    // Asegurarse de que generatedShifts sea siempre un array
+    const generatedShifts = Array.isArray(output.generatedShifts) ? output.generatedShifts : [];
+    
+    // Asegurarse de que responseText siempre tenga un valor
+    const responseText = typeof output.responseText === 'string' ? output.responseText : "La IA no proporcionó un texto de respuesta o era de un tipo incorrecto.";
+
+    // Filtrar turnos incompletos para mayor robustez, aunque el prompt ya lo pide
+    const completeShifts = generatedShifts.filter(shift => 
+        shift.date && shift.startTime && shift.endTime && shift.employeeName && shift.serviceName
+    );
+
+    if (completeShifts.length < generatedShifts.length) {
+        console.warn(`Se filtraron ${generatedShifts.length - completeShifts.length} turnos incompletos de la respuesta de la IA.`);
+    }
+
     return {
-        generatedShifts: output.generatedShifts || [],
-        responseText: output.responseText || "La IA no proporcionó un texto de respuesta."
+        generatedShifts: completeShifts,
+        responseText: responseText,
     };
   }
 );
+
