@@ -4,6 +4,7 @@
 import type { Service, Employee, FixedAssignment } from '@/lib/types';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule'; // Reusing this type for now
 import { format, getDaysInMonth, parseISO, isWithinInterval, startOfDay, endOfDay, getDay } from 'date-fns';
+import { es } from 'date-fns/locale/es'; // Import Spanish locale
 import { SHIFT_OPTIONS } from '@/components/schedule/InteractiveScheduleGrid'; // For default times
 
 interface AlgorithmicScheduleOutput {
@@ -130,15 +131,15 @@ export async function generateAlgorithmicSchedule(
         }
       };
     
-    assignShiftsForType('M', staffingNeeds.morning, format(currentDate, 'EEEE', { locale: navigator.language === 'es-ES' ? await import('date-fns/locale/es').then(m => m.default) : undefined }));
-    assignShiftsForType('T', staffingNeeds.afternoon, format(currentDate, 'EEEE', { locale: navigator.language === 'es-ES' ? await import('date-fns/locale/es').then(m => m.default) : undefined }));
+    assignShiftsForType('M', staffingNeeds.morning, format(currentDate, 'EEEE', { locale: es }));
+    assignShiftsForType('T', staffingNeeds.afternoon, format(currentDate, 'EEEE', { locale: es }));
     if (service.enableNightShift && staffingNeeds.night > 0) {
-      assignShiftsForType('N', staffingNeeds.night, format(currentDate, 'EEEE', { locale: navigator.language === 'es-ES' ? await import('date-fns/locale/es').then(m => m.default) : undefined }));
+      assignShiftsForType('N', staffingNeeds.night, format(currentDate, 'EEEE', { locale: es }));
     }
   }
 
   return {
     generatedShifts,
-    responseText: `Horario generado algorítmicamente para ${service.name} para ${format(new Date(yearInt, monthInt - 1), 'MMMM yyyy', { locale: navigator.language === 'es-ES' ? await import('date-fns/locale/es').then(m => m.default) : undefined })}. Se crearon ${generatedShifts.length} turnos.`,
+    responseText: `Horario generado algorítmicamente para ${service.name} para ${format(new Date(yearInt, monthInt - 1), 'MMMM yyyy', { locale: es })}. Se crearon ${generatedShifts.length} turnos.`,
   };
 }
