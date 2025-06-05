@@ -4,8 +4,8 @@
 import type { Service, Employee, FixedAssignment } from '@/lib/types';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule'; // Reusing this type for now
 import { format, getDaysInMonth, parseISO, isWithinInterval, startOfDay, endOfDay, getDay } from 'date-fns';
-import { es } from 'date-fns/locale/es'; // Import Spanish locale
-import { SHIFT_OPTIONS } from '@/components/schedule/InteractiveScheduleGrid'; // For default times
+import { es } from 'date-fns/locale';
+import { SHIFT_OPTIONS } from '@/lib/constants/schedule-constants'; // For default times
 
 interface AlgorithmicScheduleOutput {
   generatedShifts: AIShift[];

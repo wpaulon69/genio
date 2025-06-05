@@ -12,27 +12,8 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { format, getDaysInMonth, getDate, parse, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft } from 'lucide-react';
+import { SHIFT_OPTIONS, type GridShiftType, type ShiftOption } from '@/lib/constants/schedule-constants';
 
-export type GridShiftType = 'M' | 'T' | 'N' | 'D' | 'LAO' | 'LM' | '';
-
-export interface ShiftOption {
-  value: GridShiftType;
-  label: string;
-  startTime?: string;
-  endTime?: string;
-}
-
-// Definiciones estándar de turnos
-// Nota: La IA podría generar horas ligeramente diferentes. Esta es una simplificación para la edición manual.
-export const SHIFT_OPTIONS: ShiftOption[] = [
-  // { value: '', label: 'Vacío' }, // Removed to prevent Select.Item error; placeholder handles empty
-  { value: 'M', label: 'Mañana (M)', startTime: '07:00', endTime: '15:00' },
-  { value: 'T', label: 'Tarde (T)', startTime: '15:00', endTime: '23:00' },
-  { value: 'N', label: 'Noche (N)', startTime: '23:00', endTime: '07:00' }, // Noche puede cruzar medianoche
-  { value: 'D', label: 'Descanso (D)' },
-  { value: 'LAO', label: 'LAO' },
-  { value: 'LM', label: 'LM' },
-];
 
 // Helper para mapear un AIShift completo a un GridShiftType para visualización
 // Esto necesita ser robusto para interpretar lo que la IA devuelve.
@@ -276,14 +257,13 @@ export default function InteractiveScheduleGrid({
                     return (
                       <TableCell key={`${employeeName}-${header.dayNumber}`} className="p-1 w-[70px] min-w-[70px]">
                         <Select
-                          value={currentShiftType} // This can be '' which Select handles if placeholder is present
+                          value={currentShiftType} 
                           onValueChange={(value) => handleShiftChange(employeeName, header.dayNumber, value as GridShiftType)}
                         >
                           <SelectTrigger className="h-8 w-full text-xs px-2">
                             <SelectValue placeholder="-" />
                           </SelectTrigger>
                           <SelectContent>
-                            {/* Add a specific "Vacío" option at the top for clarity if needed, but placeholder should work */}
                              <SelectItem value="" className="text-xs">Vacío (-)</SelectItem>
                             {SHIFT_OPTIONS.map(opt => (
                               <SelectItem key={opt.value} value={opt.value} className="text-xs">
@@ -324,4 +304,3 @@ export default function InteractiveScheduleGrid({
     </Card>
   );
 }
-
