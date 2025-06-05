@@ -15,7 +15,7 @@ import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-schedul
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { Employee, Service, FixedAssignment } from '@/lib/types';
-import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
+import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid';
 
@@ -40,6 +40,18 @@ const months = Array.from({ length: 12 }, (_, i) => ({
   label: format(new Date(currentYear, i), 'MMMM', { locale: es }),
 }));
 
+// TEMPORAL: Lista de feriados. Eventualmente, esto debería venir de Firebase y ser editable por el usuario.
+// Usar formato YYYY-MM-DD
+const TEMP_HOLIDAYS: Array<{ date: string; name: string }> = [
+    { date: `${currentYear}-01-01`, name: "Año Nuevo" },
+    { date: `${currentYear}-05-01`, name: "Día del Trabajador" },
+    { date: `${currentYear}-07-09`, name: "Día de la Independencia" },
+    { date: `${currentYear}-12-25`, name: "Navidad" },
+    // Añadir más feriados relevantes para el año actual o próximos si es necesario
+    { date: `${currentYear + 1}-01-01`, name: "Año Nuevo" },
+];
+
+
 export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServices }: ShiftGeneratorFormProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -61,8 +73,8 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
   });
 
   const selectedServiceId = form.watch('serviceId');
-  const selectedMonth = form.watch('month');
-  const selectedYear = form.watch('year');
+  const selectedMonth = form.watch('month'); // string "1" a "12"
+  const selectedYear = form.watch('year');   // string "2024"
   
   const selectedService = useMemo(() => {
     return allServices.find(s => s.id === selectedServiceId);
@@ -70,7 +82,10 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
 
   useEffect(() => {
     if (selectedService && selectedMonth && selectedYear && allEmployees) {
-      const monthDate = parseISO(`${selectedYear}-${selectedMonth.padStart(2, '0')}-01`);
+      const monthIdx = parseInt(selectedMonth, 10) -1; // 0-11 for Date constructor
+      const yearInt = parseInt(selectedYear, 10);
+      
+      const monthDate = new Date(yearInt, monthIdx, 1);
       const monthStart = startOfMonth(monthDate);
       const monthEnd = endOfMonth(monthDate);
       const targetInterval = { start: monthStart, end: monthEnd };
@@ -91,6 +106,20 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
       }
       info += "\n";
 
+      const holidaysInMonth = TEMP_HOLIDAYS.filter(h => {
+        const holidayDate = parseISO(h.date);
+        return isValid(holidayDate) && getYearFromDate(holidayDate) === yearInt && getMonthFromDate(holidayDate) === monthIdx;
+      });
+
+      if (holidaysInMonth.length > 0) {
+        info += `Feriados en ${months.find(m => m.value === selectedMonth)?.label || selectedMonth} ${selectedYear}:\n`;
+        holidaysInMonth.forEach(h => {
+            info += `  - ${format(parseISO(h.date), 'dd/MM/yyyy')}: ${h.name}\n`;
+        });
+        info += "\n";
+      }
+
+
       const employeesInService = allEmployees.filter(emp => emp.serviceIds.includes(selectedService.id));
       info += `Empleados Asignados a ${selectedService.name} (${employeesInService.length}):\n`;
       if (employeesInService.length === 0) {
@@ -108,11 +137,14 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
           const relevantAssignments = (emp.fixedAssignments || []).filter(assign => {
             if (!assign.startDate) return false;
             const assignmentStartDate = parseISO(assign.startDate);
+            // For single day assignments (like 'D'), endDate might be undefined. Use startDate as endDate.
             const assignmentEndDate = assign.endDate ? parseISO(assign.endDate) : assignmentStartDate;
+            
             if (!isValid(assignmentStartDate) || !isValid(assignmentEndDate)) return false;
             
-            const assignmentInterval = { start: assignmentStartDate, end: assignmentEndDate };
-            return isWithinInterval(assignmentStartDate, targetInterval) ||
+            // Check if the assignment's interval overlaps with the target month's interval
+            const currentAssignmentInterval = { start: assignmentStartDate, end: assignmentEndDate };
+            return isWithinInterval(assignmentStartDate, targetInterval) || 
                    isWithinInterval(assignmentEndDate, targetInterval) ||
                    (assignmentStartDate < monthStart && assignmentEndDate > monthEnd);
           });
@@ -146,18 +178,18 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
     setError(null);
     setShowGrid(false);
     try {
+      // Pass the TEMP_HOLIDAYS to the algorithm
       const result = await generateAlgorithmicSchedule(
         selectedService,
         data.month,
         data.year,
-        allEmployees
+        allEmployees,
+        TEMP_HOLIDAYS 
       );
       setGeneratedResponseText(result.responseText);
       if (result.generatedShifts && result.generatedShifts.length > 0) {
         setAlgorithmGeneratedShifts(result.generatedShifts);
         setEditableShifts(result.generatedShifts); 
-        // No mostrar la cuadrícula automáticamente, permitir al usuario hacer clic en el botón
-        // setShowGrid(true); 
       } else if (!result.responseText?.toLowerCase().includes("error") && (!result.generatedShifts || result.generatedShifts.length === 0)) {
         setError("El algoritmo generó una respuesta pero no se encontraron turnos estructurados. Revise el texto de respuesta.");
       } else if (result.responseText?.toLowerCase().includes("error") || result.generatedShifts.length === 0) {
@@ -190,7 +222,6 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
 
   const handleBackToConfig = () => {
     setShowGrid(false);
-    // Considerar si resetear algo más aquí, como algorithmGeneratedShifts o generatedResponseText
   };
 
   return (
@@ -338,4 +369,3 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
     </Card>
   );
 }
-

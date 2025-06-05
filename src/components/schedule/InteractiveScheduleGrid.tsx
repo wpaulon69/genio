@@ -21,8 +21,8 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
 
   const note = aiShift.notes?.toUpperCase();
   // Primero chequear notas específicas para D, LAO, LM, C
-  if (note === 'D' || note === 'DESCANSO' || note === 'D (DESCANSO)') return 'D';
-  if (note === 'C' || note === 'FRANCO COMPENSATORIO' || note === 'C (FRANCO COMP.)') return 'C';
+  if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO')) return 'D';
+  if (note === 'C' || note === 'C (FRANCO COMP.)' || note?.includes('FRANCO COMP')) return 'C';
   if (note?.startsWith('LAO')) return 'LAO';
   if (note?.startsWith('LM')) return 'LM';
 
@@ -39,13 +39,9 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
     if (note?.includes('MAÑANA') || note?.includes('(M)')) return 'M';
     if (note?.includes('TARDE') || note?.includes('(T)')) return 'T';
     if (note?.includes('NOCHE') || note?.includes('(N)')) return 'N';
-    // Si es un turno de trabajo (tiene horas) pero no encaja en M, T, N por hora o nota,
-    // podría ser un turno personalizado. Por ahora, lo dejamos vacío para que el usuario elija.
-    // O podríamos devolver 'M' como un default muy genérico si queremos evitar celdas vacías para turnos con horas.
-    // Optaremos por vacío para forzar una revisión si la IA devuelve algo inesperado con horas.
   }
   
-  return ''; // Por defecto vacío si no se puede determinar o es un turno con horas no estándar
+  return ''; 
 }
 
 
@@ -86,7 +82,7 @@ export default function InteractiveScheduleGrid({
       const date = new Date(parseInt(year), parseInt(month) - 1, day);
       return {
         dayNumber: day,
-        shortName: format(date, 'E', { locale: es }).charAt(0) + format(date, 'EE', { locale: es }).slice(1,3), // ej. mar, mié
+        shortName: format(date, 'eee', { locale: es }), // Usar 'eee' para abreviatura de 3 letras
       };
     });
   }, [daysInMonth, month, year]);
@@ -124,7 +120,7 @@ export default function InteractiveScheduleGrid({
 
   const handleShiftChange = (employeeName: string, day: number, selectedShiftValue: GridShiftType) => {
     const newShifts = [...editableShifts];
-    const shiftDateStr = `${year}-${month.padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const shiftDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const existingShiftIndex = newShifts.findIndex(
       s => s.employeeName === employeeName && s.date === shiftDateStr
     );
@@ -205,14 +201,14 @@ export default function InteractiveScheduleGrid({
   }
   
   const monthName = format(monthDate, 'MMMM', { locale: es });
-  const currentYear = format(monthDate, 'yyyy');
+  const currentYearStr = format(monthDate, 'yyyy');
 
   return (
     <Card className="mt-6 w-full">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
             <CardTitle className="font-headline">
-                Horario Interactivo: {targetService?.name || "Turnos Generados"} - {monthName} {currentYear}
+                Horario Interactivo: {targetService?.name || "Turnos Generados"} - {monthName} {currentYearStr}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
                 Puede editar los turnos manualmente. Los cambios se reflejan para guardar. Use '-' para vaciar una celda.
@@ -257,7 +253,6 @@ export default function InteractiveScheduleGrid({
                             <SelectValue placeholder="-" />
                           </SelectTrigger>
                           <SelectContent>
-                            {/* <SelectItem value="" className="text-xs">Vacío (-)</SelectItem> */} {/* Esta línea fue eliminada para evitar el error del SelectItem */}
                             {SHIFT_OPTIONS.map(opt => (
                               <SelectItem key={opt.value} value={opt.value} className="text-xs">
                                 {opt.label}
