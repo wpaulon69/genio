@@ -32,6 +32,13 @@ export interface EmployeePreferences {
   fixedWeeklyShiftTiming: string | null; // e.g., "mañana", "tarde", "noche", "rest_day", or custom like "08:00-16:00", or null
 }
 
+export interface FixedAssignment {
+  type: 'D' | 'LAO' | 'LM';
+  startDate: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD, required for LAO/LM
+  description?: string;
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -41,6 +48,7 @@ export interface Employee {
   preferences?: EmployeePreferences;
   availability: string; // Textual description of availability (e.g., "Mon-Fri 9-5", "Not available on weekends")
   constraints: string; // Any other constraints (e.g., "Max 40 hours/week")
+  fixedAssignments?: FixedAssignment[];
 }
 
 export interface Shift {
