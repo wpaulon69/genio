@@ -264,7 +264,7 @@ export default function InteractiveScheduleGrid({
                             <SelectValue placeholder="-" />
                           </SelectTrigger>
                           <SelectContent>
-                             <SelectItem value="" className="text-xs">Vacío (-)</SelectItem>
+                            {/* The explicit SelectItem with value="" was removed from here */}
                             {SHIFT_OPTIONS.map(opt => (
                               <SelectItem key={opt.value} value={opt.value} className="text-xs">
                                 {opt.label}
@@ -304,3 +304,4 @@ export default function InteractiveScheduleGrid({
     </Card>
   );
 }
+
