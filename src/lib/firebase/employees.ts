@@ -16,7 +16,7 @@ const defaultPreferences: EmployeePreferences = {
 // Helper to convert Firestore doc to Employee type
 const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee => {
   const data = snapshot.data();
-  
+
   const preferencesData = data.preferences || {};
   const finalPreferences: EmployeePreferences = {
     eligibleForDayOffAfterDuty: preferencesData.eligibleForDayOffAfterDuty === undefined ? defaultPreferences.eligibleForDayOffAfterDuty : preferencesData.eligibleForDayOffAfterDuty,
@@ -32,7 +32,7 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee 
     endDate: assign.endDate, // Will be undefined if not in Firestore
     description: assign.description === undefined ? '' : assign.description, // Default to empty string if not present or explicitly null
   }));
-  
+
   return {
     id: snapshot.id,
     name: data.name,
@@ -46,9 +46,33 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee 
   } as Employee;
 };
 
+// Helper function to clean individual fixed assignment for Firestore
+const cleanFixedAssignmentForFirestore = (assignment: FixedAssignment): Partial<FixedAssignment> => {
+  const cleanedAssignment: Partial<FixedAssignment> = {
+    type: assignment.type,
+    startDate: assignment.startDate,
+  };
+  // Only include endDate if it's a non-empty string
+  if (assignment.endDate && typeof assignment.endDate === 'string' && assignment.endDate.trim() !== "") {
+    cleanedAssignment.endDate = assignment.endDate;
+  }
+  // Include description if it's defined (empty string is allowed and means "no description")
+  if (assignment.description !== undefined) {
+    cleanedAssignment.description = assignment.description;
+  }
+  return cleanedAssignment;
+};
+
+export const getEmployees = async (): Promise<Employee[]> => {
+  const employeesCol = collection(db, EMPLOYEES_COLLECTION);
+  const q = query(employeesCol, orderBy('name'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(fromFirestore);
+};
+
 export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<Employee> => {
   const employeesCol = collection(db, EMPLOYEES_COLLECTION);
-  
+
   let preferencesToSave: EmployeePreferences | undefined = undefined;
   if (employeeData.preferences) {
     preferencesToSave = {
@@ -61,21 +85,7 @@ export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<E
     preferencesToSave = { ...defaultPreferences };
   }
 
-  const processedFixedAssignments = (employeeData.fixedAssignments || []).map(
-    (originalAssignment: FixedAssignment) => {
-      const assignmentForDb: Partial<FixedAssignment> = {};
-      assignmentForDb.type = originalAssignment.type;
-      assignmentForDb.startDate = originalAssignment.startDate;
-
-      if (originalAssignment.endDate !== undefined && originalAssignment.endDate !== null && originalAssignment.endDate.trim() !== "") {
-        assignmentForDb.endDate = originalAssignment.endDate;
-      }
-      if (originalAssignment.description !== undefined) { // Allow empty string for description
-        assignmentForDb.description = originalAssignment.description;
-      }
-      return assignmentForDb as FixedAssignment;
-    }
-  );
+  const processedFixedAssignments = (employeeData.fixedAssignments || []).map(cleanFixedAssignmentForFirestore);
 
   const dataToSave = {
     ...employeeData,
@@ -95,14 +105,13 @@ export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<E
     savedEmployeeData.fixedAssignments = [];
   }
 
-
   return { id: docRef.id, ...savedEmployeeData };
 };
 
 export const updateEmployee = async (employeeId: string, employeeData: Partial<Omit<Employee, 'id'>>): Promise<void> => {
   const employeeDoc = doc(db, EMPLOYEES_COLLECTION, employeeId);
-  
-  let dataToUpdate: Partial<Employee> = { ...employeeData }; // Use Partial<Employee> for dataToUpdate
+
+  let dataToUpdate: Partial<Omit<Employee, 'id'>> = { ...employeeData };
 
   if (employeeData.hasOwnProperty('preferences')) {
     if (employeeData.preferences) {
@@ -113,29 +122,14 @@ export const updateEmployee = async (employeeId: string, employeeData: Partial<O
         fixedWeeklyShiftTiming: employeeData.preferences.fixedWeeklyShiftTiming === undefined ? defaultPreferences.fixedWeeklyShiftTiming : employeeData.preferences.fixedWeeklyShiftTiming,
       };
     } else {
-      // If preferences is explicitly passed as undefined or null by form, set to default
       dataToUpdate.preferences = { ...defaultPreferences };
     }
   }
 
   if (employeeData.hasOwnProperty('fixedAssignments')) {
-    dataToUpdate.fixedAssignments = (employeeData.fixedAssignments || []).map(
-      (originalAssignment: FixedAssignment) => {
-        const assignmentForDb: Partial<FixedAssignment> = {};
-        assignmentForDb.type = originalAssignment.type;
-        assignmentForDb.startDate = originalAssignment.startDate;
-  
-        if (originalAssignment.endDate !== undefined && originalAssignment.endDate !== null && originalAssignment.endDate.trim() !== "") {
-          assignmentForDb.endDate = originalAssignment.endDate;
-        }
-        if (originalAssignment.description !== undefined) {
-          assignmentForDb.description = originalAssignment.description;
-        }
-        return assignmentForDb as FixedAssignment;
-      }
-    );
+    dataToUpdate.fixedAssignments = (employeeData.fixedAssignments || []).map(cleanFixedAssignmentForFirestore);
   }
-  
+
   await updateDoc(employeeDoc, cleanDataForFirestore(dataToUpdate));
 };
 
