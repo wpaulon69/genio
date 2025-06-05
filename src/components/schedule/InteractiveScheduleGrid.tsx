@@ -16,31 +16,36 @@ import { SHIFT_OPTIONS, type GridShiftType, type ShiftOption } from '@/lib/const
 
 
 // Helper para mapear un AIShift completo a un GridShiftType para visualización
-// Esto necesita ser robusto para interpretar lo que la IA devuelve.
 export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined): GridShiftType {
   if (!aiShift) return '';
 
   const note = aiShift.notes?.toUpperCase();
+  // Primero chequear notas específicas para D, LAO, LM, C
   if (note === 'D' || note === 'DESCANSO' || note === 'D (DESCANSO)') return 'D';
+  if (note === 'C' || note === 'FRANCO COMPENSATORIO' || note === 'C (FRANCO COMP.)') return 'C';
   if (note?.startsWith('LAO')) return 'LAO';
   if (note?.startsWith('LM')) return 'LM';
 
-  // Coincidencia simple basada en la hora de inicio; puede necesitar ajustes
+  // Luego, coincidencia basada en la hora de inicio para M, T, N
   if (aiShift.startTime) {
     if (aiShift.startTime.startsWith('07:') || aiShift.startTime.startsWith('08:')) return 'M';
     if (aiShift.startTime.startsWith('14:') || aiShift.startTime.startsWith('15:')) return 'T';
     if (aiShift.startTime.startsWith('22:') || aiShift.startTime.startsWith('23:')) return 'N';
   }
-  // Si tiene horas pero no coincide, y no es una nota especial, asumimos un turno de trabajo
+  
+  // Si tiene horas pero no coincide con M, T, N por hora, y no es una nota especial,
+  // podríamos revisar si la nota incluye M, T, N (como fallback)
   if (aiShift.startTime && aiShift.endTime) {
-    // Check common labels in notes if they exist for M, T, N
     if (note?.includes('MAÑANA') || note?.includes('(M)')) return 'M';
     if (note?.includes('TARDE') || note?.includes('(T)')) return 'T';
     if (note?.includes('NOCHE') || note?.includes('(N)')) return 'N';
-    return 'M'; // Fallback a 'M' si es un turno de trabajo no reconocido y no es una nota especial
+    // Si es un turno de trabajo (tiene horas) pero no encaja en M, T, N por hora o nota,
+    // podría ser un turno personalizado. Por ahora, lo dejamos vacío para que el usuario elija.
+    // O podríamos devolver 'M' como un default muy genérico si queremos evitar celdas vacías para turnos con horas.
+    // Optaremos por vacío para forzar una revisión si la IA devuelve algo inesperado con horas.
   }
   
-  return ''; // Por defecto vacío si no se puede determinar
+  return ''; // Por defecto vacío si no se puede determinar o es un turno con horas no estándar
 }
 
 
@@ -86,10 +91,8 @@ export default function InteractiveScheduleGrid({
     });
   }, [daysInMonth, month, year]);
 
-  // Empleados que tienen al menos un turno en la lista generada o pertenecen al servicio objetivo
   const relevantEmployeeNames = useMemo(() => {
     const namesFromShifts = new Set(editableShifts.map(s => s.employeeName));
-    // Si no hay servicio objetivo, mostramos solo los de los turnos
     if (targetService) {
         allEmployees.forEach(emp => {
             if (emp.serviceIds.includes(targetService.id)) {
@@ -97,16 +100,6 @@ export default function InteractiveScheduleGrid({
             }
         });
     }
-    // Ensure employees from allEmployees for the target service are included even if they have no shifts yet.
-    if (targetService) {
-        allEmployees.forEach(emp => {
-            if (emp.serviceIds.includes(targetService.id)) {
-                namesFromShifts.add(emp.name);
-            }
-        });
-    }
-
-
     return Array.from(namesFromShifts).sort((a,b) => a.localeCompare(b));
   }, [editableShifts, allEmployees, targetService]);
 
@@ -116,12 +109,12 @@ export default function InteractiveScheduleGrid({
     relevantEmployeeNames.forEach(name => data[name] = {});
 
     editableShifts.forEach(shift => {
-      if (!shift.date || !shift.employeeName) return; // Skip incomplete shifts
+      if (!shift.date || !shift.employeeName) return; 
       const shiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
       if (isValid(shiftDate) && format(shiftDate, 'M') === month && format(shiftDate, 'yyyy') === year) {
         const dayOfMonth = getDate(shiftDate);
         if (!data[shift.employeeName]) {
-          data[shift.employeeName] = {}; // Asegurar que el empleado exista
+          data[shift.employeeName] = {}; 
         }
         data[shift.employeeName][dayOfMonth] = shift;
       }
@@ -138,23 +131,22 @@ export default function InteractiveScheduleGrid({
 
     const selectedOption = SHIFT_OPTIONS.find(opt => opt.value === selectedShiftValue);
 
-    if (selectedShiftValue === '') { // Vacío - eliminar turno si existe
+    if (selectedShiftValue === '') { 
       if (existingShiftIndex !== -1) {
         newShifts.splice(existingShiftIndex, 1);
       }
     } else if (selectedOption) {
       const serviceName = targetService?.name || (existingShiftIndex !== -1 ? newShifts[existingShiftIndex]?.serviceName : '') || 'Servicio Desconocido';
       
-      // Ensure serviceName is valid, if not available, it could be an issue or an employee not yet assigned.
-      // For now, we'll use the targetService's name or fallback.
-      
       const newOrUpdatedShift: AIShift = {
         date: shiftDateStr,
         employeeName: employeeName,
         serviceName: serviceName,
-        startTime: selectedOption.startTime || '', // Vacío si es D, LAO, LM
-        endTime: selectedOption.endTime || '',   // Vacío si es D, LAO, LM
-        notes: (selectedOption.value !== 'M' && selectedOption.value !== 'T' && selectedOption.value !== 'N' && selectedOption.value !== '') ? selectedOption.label : `Turno ${selectedOption.label}`,
+        startTime: selectedOption.startTime || '', 
+        endTime: selectedOption.endTime || '',   
+        notes: (selectedOption.value === 'D' || selectedOption.value === 'C' || selectedOption.value === 'LAO' || selectedOption.value === 'LM') 
+                ? selectedOption.label // Para D, C, LAO, LM usar la etiqueta como nota
+                : `Turno ${selectedOption.label}`, // Para M, T, N
       };
 
       if (existingShiftIndex !== -1) {
@@ -168,9 +160,9 @@ export default function InteractiveScheduleGrid({
   };
 
   const dailyTotals = useMemo(() => {
-    const totals: { [day: number]: { M: number; T: number; N: number; D: number; LAO: number; LM: number; totalStaff: number } } = {};
+    const totals: { [day: number]: { M: number; T: number; N: number; D: number; C: number; LAO: number; LM: number; totalStaff: number } } = {};
     dayHeaders.forEach(header => {
-      totals[header.dayNumber] = { M: 0, T: 0, N: 0, D:0, LAO:0, LM:0, totalStaff: 0 };
+      totals[header.dayNumber] = { M: 0, T: 0, N: 0, D:0, C:0, LAO:0, LM:0, totalStaff: 0 };
     });
 
     relevantEmployeeNames.forEach(employeeName => {
@@ -182,6 +174,7 @@ export default function InteractiveScheduleGrid({
           else if (shiftType === 'T') totals[header.dayNumber].T++;
           else if (shiftType === 'N') totals[header.dayNumber].N++;
           else if (shiftType === 'D') totals[header.dayNumber].D++;
+          else if (shiftType === 'C') totals[header.dayNumber].C++;
           else if (shiftType === 'LAO') totals[header.dayNumber].LAO++;
           else if (shiftType === 'LM') totals[header.dayNumber].LM++;
 
@@ -264,7 +257,7 @@ export default function InteractiveScheduleGrid({
                             <SelectValue placeholder="-" />
                           </SelectTrigger>
                           <SelectContent>
-                            {/* The explicit SelectItem with value="" was removed from here */}
+                            {/* <SelectItem value="" className="text-xs">Vacío (-)</SelectItem> */} {/* Esta línea fue eliminada para evitar el error del SelectItem */}
                             {SHIFT_OPTIONS.map(opt => (
                               <SelectItem key={opt.value} value={opt.value} className="text-xs">
                                 {opt.label}
@@ -304,4 +297,3 @@ export default function InteractiveScheduleGrid({
     </Card>
   );
 }
-
