@@ -25,7 +25,7 @@ export interface ShiftOption {
 // Definiciones estándar de turnos
 // Nota: La IA podría generar horas ligeramente diferentes. Esta es una simplificación para la edición manual.
 export const SHIFT_OPTIONS: ShiftOption[] = [
-  { value: '', label: 'Vacío' },
+  // { value: '', label: 'Vacío' }, // Removed to prevent Select.Item error; placeholder handles empty
   { value: 'M', label: 'Mañana (M)', startTime: '07:00', endTime: '15:00' },
   { value: 'T', label: 'Tarde (T)', startTime: '15:00', endTime: '23:00' },
   { value: 'N', label: 'Noche (N)', startTime: '23:00', endTime: '07:00' }, // Noche puede cruzar medianoche
@@ -40,21 +40,24 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
   if (!aiShift) return '';
 
   const note = aiShift.notes?.toUpperCase();
-  if (note === 'D' || note === 'DESCANSO') return 'D';
+  if (note === 'D' || note === 'DESCANSO' || note === 'D (DESCANSO)') return 'D';
   if (note?.startsWith('LAO')) return 'LAO';
   if (note?.startsWith('LM')) return 'LM';
 
   // Coincidencia simple basada en la hora de inicio; puede necesitar ajustes
   if (aiShift.startTime) {
-    if (aiShift.startTime.startsWith('07:')) return 'M';
-    if (aiShift.startTime.startsWith('08:')) return 'M'; // Ejemplo de flexibilidad
-    if (aiShift.startTime.startsWith('14:')) return 'T';
-    if (aiShift.startTime.startsWith('15:')) return 'T';
-    if (aiShift.startTime.startsWith('22:')) return 'N';
-    if (aiShift.startTime.startsWith('23:')) return 'N';
+    if (aiShift.startTime.startsWith('07:') || aiShift.startTime.startsWith('08:')) return 'M';
+    if (aiShift.startTime.startsWith('14:') || aiShift.startTime.startsWith('15:')) return 'T';
+    if (aiShift.startTime.startsWith('22:') || aiShift.startTime.startsWith('23:')) return 'N';
   }
   // Si tiene horas pero no coincide, y no es una nota especial, asumimos un turno de trabajo
-  if (aiShift.startTime && aiShift.endTime) return 'M'; // Fallback a 'M' si es un turno de trabajo no reconocido
+  if (aiShift.startTime && aiShift.endTime) {
+    // Check common labels in notes if they exist for M, T, N
+    if (note?.includes('MAÑANA') || note?.includes('(M)')) return 'M';
+    if (note?.includes('TARDE') || note?.includes('(T)')) return 'T';
+    if (note?.includes('NOCHE') || note?.includes('(N)')) return 'N';
+    return 'M'; // Fallback a 'M' si es un turno de trabajo no reconocido y no es una nota especial
+  }
   
   return ''; // Por defecto vacío si no se puede determinar
 }
@@ -113,7 +116,17 @@ export default function InteractiveScheduleGrid({
             }
         });
     }
-    return Array.from(namesFromShifts).sort();
+    // Ensure employees from allEmployees for the target service are included even if they have no shifts yet.
+    if (targetService) {
+        allEmployees.forEach(emp => {
+            if (emp.serviceIds.includes(targetService.id)) {
+                namesFromShifts.add(emp.name);
+            }
+        });
+    }
+
+
+    return Array.from(namesFromShifts).sort((a,b) => a.localeCompare(b));
   }, [editableShifts, allEmployees, targetService]);
 
 
@@ -122,6 +135,7 @@ export default function InteractiveScheduleGrid({
     relevantEmployeeNames.forEach(name => data[name] = {});
 
     editableShifts.forEach(shift => {
+      if (!shift.date || !shift.employeeName) return; // Skip incomplete shifts
       const shiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
       if (isValid(shiftDate) && format(shiftDate, 'M') === month && format(shiftDate, 'yyyy') === year) {
         const dayOfMonth = getDate(shiftDate);
@@ -148,14 +162,18 @@ export default function InteractiveScheduleGrid({
         newShifts.splice(existingShiftIndex, 1);
       }
     } else if (selectedOption) {
-      const serviceName = targetService?.name || newShifts[existingShiftIndex]?.serviceName || 'Servicio Desconocido';
+      const serviceName = targetService?.name || (existingShiftIndex !== -1 ? newShifts[existingShiftIndex]?.serviceName : '') || 'Servicio Desconocido';
+      
+      // Ensure serviceName is valid, if not available, it could be an issue or an employee not yet assigned.
+      // For now, we'll use the targetService's name or fallback.
+      
       const newOrUpdatedShift: AIShift = {
         date: shiftDateStr,
         employeeName: employeeName,
         serviceName: serviceName,
         startTime: selectedOption.startTime || '', // Vacío si es D, LAO, LM
         endTime: selectedOption.endTime || '',   // Vacío si es D, LAO, LM
-        notes: selectedOption.value !== 'M' && selectedOption.value !== 'T' && selectedOption.value !== 'N' ? selectedOption.label : `Turno ${selectedOption.label}`,
+        notes: (selectedOption.value !== 'M' && selectedOption.value !== 'T' && selectedOption.value !== 'N' && selectedOption.value !== '') ? selectedOption.label : `Turno ${selectedOption.label}`,
       };
 
       if (existingShiftIndex !== -1) {
@@ -196,14 +214,14 @@ export default function InteractiveScheduleGrid({
   }, [gridData, dayHeaders, relevantEmployeeNames]);
 
 
-  if (!targetService && initialShifts.length === 0) {
+  if (!targetService && initialShifts.length === 0 && relevantEmployeeNames.length === 0) {
     return (
          <Card className="mt-4">
             <CardHeader>
                 <CardTitle>Horario Generado</CardTitle>
             </CardHeader>
             <CardContent>
-                <p>No se han generado turnos o no hay un servicio específico para mostrar.</p>
+                <p>No se han generado turnos o no hay un servicio específico seleccionado para mostrar. Vuelva a la configuración y genere un horario.</p>
                  <Button onClick={onBackToConfig} variant="outline" className="mt-4">
                     <ChevronLeft className="mr-2 h-4 w-4" /> Volver a Configuración
                 </Button>
@@ -220,10 +238,10 @@ export default function InteractiveScheduleGrid({
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
             <CardTitle className="font-headline">
-                Horario Interactivo: {targetService?.name} - {monthName} {currentYear}
+                Horario Interactivo: {targetService?.name || "Turnos Generados"} - {monthName} {currentYear}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-                Puede editar los turnos manualmente. Los cambios se reflejan para guardar.
+                Puede editar los turnos manualmente. Los cambios se reflejan para guardar. Use '-' para vaciar una celda.
             </p>
         </div>
         <Button onClick={onBackToConfig} variant="outline">
@@ -231,11 +249,15 @@ export default function InteractiveScheduleGrid({
         </Button>
       </CardHeader>
       <CardContent>
+        {relevantEmployeeNames.length === 0 && (
+             <p className="text-muted-foreground">No hay empleados para mostrar para el servicio y mes seleccionados, o no se generaron turnos.</p>
+        )}
+        {relevantEmployeeNames.length > 0 && (
         <ScrollArea className="w-full whitespace-nowrap rounded-md border">
           <Table className="min-w-max">
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 bg-card z-10 w-[150px] min-w-[150px]">Empleado</TableHead>
+                <TableHead className="sticky left-0 bg-card z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">Empleado</TableHead>
                 {dayHeaders.map(header => (
                   <TableHead key={header.dayNumber} className="text-center w-[70px] min-w-[70px]">
                     <div>{header.dayNumber}</div>
@@ -247,20 +269,22 @@ export default function InteractiveScheduleGrid({
             <TableBody>
               {relevantEmployeeNames.map(employeeName => (
                 <TableRow key={employeeName}>
-                  <TableCell className="sticky left-0 bg-card z-10 font-medium w-[150px] min-w-[150px]">{employeeName}</TableCell>
+                  <TableCell className="sticky left-0 bg-card z-10 font-medium w-[180px] min-w-[180px] max-w-[180px] truncate" title={employeeName}>{employeeName}</TableCell>
                   {dayHeaders.map(header => {
                     const shift = gridData[employeeName]?.[header.dayNumber];
                     const currentShiftType = getGridShiftTypeFromAIShift(shift);
                     return (
                       <TableCell key={`${employeeName}-${header.dayNumber}`} className="p-1 w-[70px] min-w-[70px]">
                         <Select
-                          value={currentShiftType}
+                          value={currentShiftType} // This can be '' which Select handles if placeholder is present
                           onValueChange={(value) => handleShiftChange(employeeName, header.dayNumber, value as GridShiftType)}
                         >
                           <SelectTrigger className="h-8 w-full text-xs px-2">
                             <SelectValue placeholder="-" />
                           </SelectTrigger>
                           <SelectContent>
+                            {/* Add a specific "Vacío" option at the top for clarity if needed, but placeholder should work */}
+                             <SelectItem value="" className="text-xs">Vacío (-)</SelectItem>
                             {SHIFT_OPTIONS.map(opt => (
                               <SelectItem key={opt.value} value={opt.value} className="text-xs">
                                 {opt.label}
@@ -274,28 +298,30 @@ export default function InteractiveScheduleGrid({
                 </TableRow>
               ))}
               <TableRow className="bg-muted/50 font-semibold">
-                <TableCell className="sticky left-0 bg-muted/50 z-10">Total Mañana (M)</TableCell>
+                <TableCell className="sticky left-0 bg-muted/50 z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">Total Mañana (M)</TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-m-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].M}</TableCell>)}
               </TableRow>
               <TableRow className="bg-muted/50 font-semibold">
-                <TableCell className="sticky left-0 bg-muted/50 z-10">Total Tarde (T)</TableCell>
+                <TableCell className="sticky left-0 bg-muted/50 z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">Total Tarde (T)</TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-t-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].T}</TableCell>)}
               </TableRow>
               {targetService?.enableNightShift && (
                 <TableRow className="bg-muted/50 font-semibold">
-                  <TableCell className="sticky left-0 bg-muted/50 z-10">Total Noche (N)</TableCell>
+                  <TableCell className="sticky left-0 bg-muted/50 z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">Total Noche (N)</TableCell>
                   {dayHeaders.map(header => <TableCell key={`total-n-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].N}</TableCell>)}
                 </TableRow>
               )}
               <TableRow className="bg-muted/50 font-bold text-base">
-                <TableCell className="sticky left-0 bg-muted/50 z-10">TOTAL PERSONAL</TableCell>
+                <TableCell className="sticky left-0 bg-muted/50 z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">TOTAL PERSONAL</TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-staff-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].totalStaff}</TableCell>)}
               </TableRow>
             </TableBody>
           </Table>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
+        )}
       </CardContent>
     </Card>
   );
 }
+
