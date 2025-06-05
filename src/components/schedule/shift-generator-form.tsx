@@ -14,7 +14,7 @@ import { Sparkles, Loader2, AlertTriangle, Save, CalendarDays, Eye } from 'lucid
 import { suggestShiftSchedule, type SuggestShiftScheduleInput, type SuggestShiftScheduleOutput, type AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { Employee, Service } from '@/lib/types';
-import { format, getDaysInMonth, startOfMonth, getDay, parseISO, isWithinInterval, addMonths, subMonths, parse } from 'date-fns';
+import { format, getDaysInMonth, startOfMonth, getDay, parseISO, isWithinInterval, addMonths, subMonths, parse, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid'; // Importar el nuevo componente
 
