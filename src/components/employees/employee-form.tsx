@@ -25,9 +25,9 @@ const NO_FIXED_TIMING_VALUE = "none_selected";
 const REST_DAY_VALUE = "rest_day";
 
 // Form-specific type for FixedAssignment, includes client-side 'id' for useFieldArray
-type FormFixedAssignment = Omit<FixedAssignmentType, 'startDate' | 'endDate'> & {
+type FormFixedAssignment = Omit<FixedAssignmentType, 'startDate' | 'endDate' | 'type'> & {
   id: string;
-  type: 'D' | 'LAO' | 'LM' | ''; // Allow empty for initial state
+  type: 'D' | 'LAO' | 'LM' | ''; // Allow empty for initial state for form binding
   startDate?: Date;
   endDate?: Date;
   description?: string;
@@ -42,7 +42,10 @@ const preferencesSchema = z.object({
 
 const fixedAssignmentSchema = z.object({
   id: z.string(), // For react-hook-form's useFieldArray
-  type: z.enum(['D', 'LAO', 'LM', ''], { errorMap: () => ({ message: "Seleccione un tipo de asignación." }) }),
+  type: z.enum(['D', 'LAO', 'LM'], { 
+    required_error: "El tipo de asignación es obligatorio.",
+    invalid_type_error: "Seleccione un tipo de asignación válido."
+  }),
   startDate: z.date({ required_error: "La fecha de inicio es obligatoria." }),
   endDate: z.date().optional(),
   description: z.string().optional(),
@@ -102,7 +105,7 @@ const shiftTimings = [
 ];
 
 const assignmentTypes = [
-  { value: '', label: "Seleccione tipo..." },
+  // { value: '', label: "Seleccione tipo..." }, // Placeholder removed, handled by SelectValue
   { value: 'D', label: "D - Descanso" },
   { value: 'LAO', label: "LAO - Licencia Anual Ordinaria" },
   { value: 'LM', label: "LM - Licencia Médica" },
@@ -138,6 +141,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
         const assignmentsForForm: FormFixedAssignment[] = (employee.fixedAssignments || []).map((assign, index) => ({
           ...assign,
           id: `initial-${index}-${Date.now()}`,
+          type: assign.type || '', // Ensure type is '' if undefined for form binding
           startDate: assign.startDate && isValidDate(parseISO(assign.startDate)) ? parseISO(assign.startDate) : undefined,
           endDate: assign.endDate && isValidDate(parseISO(assign.endDate)) ? parseISO(assign.endDate) : undefined,
         }));
@@ -168,12 +172,16 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
   }, [employee, form, isOpen]);
 
   const handleSubmit = (data: EmployeeFormInput) => {
-    const processedAssignments = (data.fixedAssignments || []).map(({ id, ...rest }) => ({
+    // Filter out assignments that don't have a valid type selected
+    // The Zod schema will now ensure that 'type' is one of 'D', 'LAO', 'LM' if the assignment is to be submitted.
+    // Assignments added to the UI but not fully filled out (e.g., type not selected) will fail validation.
+    const processedAssignments = (data.fixedAssignments || [])
+      .map(({ id, ...rest }) => ({ // Remove client-side id
         ...rest,
-        type: rest.type as 'D' | 'LAO' | 'LM', // Ensure correct type after validation
-        startDate: rest.startDate ? format(rest.startDate, 'yyyy-MM-dd') : '', // This should be guaranteed by Zod
+        type: rest.type as 'D' | 'LAO' | 'LM', // Zod ensures this if validation passes
+        startDate: rest.startDate ? format(rest.startDate, 'yyyy-MM-dd') : '', // Should be guaranteed by Zod
         endDate: rest.endDate ? format(rest.endDate, 'yyyy-MM-dd') : undefined,
-    })).filter(assign => assign.type); // Filter out any assignments that might still have an empty type
+    }));
 
     const processedData = {
       ...data,
@@ -182,7 +190,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
         ...data.preferences,
         fixedWeeklyShiftTiming: data.preferences.fixedWeeklyShiftTiming === NO_FIXED_TIMING_VALUE ? null : data.preferences.fixedWeeklyShiftTiming,
         fixedWeeklyShiftDays: data.preferences.fixedWeeklyShiftDays || []
-      } : { ...formDefaultPreferences },
+      } : { ...formDefaultPreferences, fixedWeeklyShiftTiming: null },
       fixedAssignments: processedAssignments as FixedAssignmentType[],
     };
 
@@ -293,7 +301,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
                                 <FormItem><FormLabel>Tipo</FormLabel>
                                   <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
                                     <FormControl><SelectTrigger><SelectValue placeholder="Seleccione tipo..." /></SelectTrigger></FormControl>
-                                    <SelectContent>{assignmentTypes.map(t => (<SelectItem key={t.value} value={t.value} disabled={t.value === ''}>{t.label}</SelectItem>))}</SelectContent>
+                                    <SelectContent>{assignmentTypes.map(t => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent>
                                   </Select><FormMessage />
                                 </FormItem>)} />
                             
@@ -352,3 +360,5 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
     </Dialog>
   );
 }
+
+    
