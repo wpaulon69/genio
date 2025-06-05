@@ -136,11 +136,6 @@ export default function SchedulePage() {
     );
   }
   
-  // Prepara datos simplificados para el prompt del formulario
-  const employeeNamesForPrompt = employees.map(e => ({id: e.id, name: e.name}));
-  const serviceNamesForPrompt = services.map(s => ({id: s.id, name: s.name}));
-
-
   return (
     <div className="container mx-auto">
       <PageHeader
@@ -162,8 +157,8 @@ export default function SchedulePage() {
         <TabsContent value="generate-shifts" className="mt-6">
           <ShiftGeneratorForm 
             onSaveShifts={handleSaveGeneratedShifts} 
-            employeesAvailable={employeeNamesForPrompt}
-            servicesAvailable={serviceNamesForPrompt}
+            allEmployees={employees} // Pasar el array completo
+            allServices={services}   // Pasar el array completo
           />
         </TabsContent>
       </Tabs>
