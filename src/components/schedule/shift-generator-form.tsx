@@ -10,22 +10,25 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sparkles, Loader2, AlertTriangle, Save, CalendarDays, Eye } from 'lucide-react';
-import { suggestShiftSchedule, type SuggestShiftScheduleInput, type SuggestShiftScheduleOutput, type AIShift } from '@/ai/flows/suggest-shift-schedule';
+import { Sparkles, Loader2, AlertTriangle, Save, CalendarDays, Eye, Bot } from 'lucide-react';
+// import { suggestShiftSchedule, type SuggestShiftScheduleInput, type SuggestShiftScheduleOutput, type AIShift } from '@/ai/flows/suggest-shift-schedule';
+import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-scheduler';
+import type { AIShift } from '@/ai/flows/suggest-shift-schedule'; // Reusing this type
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { Employee, Service } from '@/lib/types';
-import { format, getDaysInMonth, startOfMonth, getDay, parseISO, isWithinInterval, addMonths, subMonths, parse, isValid } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
-import InteractiveScheduleGrid from './InteractiveScheduleGrid'; // Importar el nuevo componente
+import InteractiveScheduleGrid from './InteractiveScheduleGrid';
 
-const shiftPromptSchema = z.object({
-  prompt: z.string().min(50, "El prompt debe tener al menos 50 caracteres para proporcionar suficientes detalles para la generación del horario."),
+const shiftGenerationConfigSchema = z.object({
+  // Prompt field is no longer primary, but schema might be kept for future AI toggle
+  // prompt: z.string().min(50, "El prompt debe tener al menos 50 caracteres para proporcionar suficientes detalles para la generación del horario."),
   serviceId: z.string().min(1, "Debe seleccionar un servicio."),
   month: z.string().min(1, "Debe seleccionar un mes."),
   year: z.string().min(1, "Debe seleccionar un año."),
 });
 
-type ShiftPromptFormData = z.infer<typeof shiftPromptSchema>;
+type ShiftGenerationConfigFormData = z.infer<typeof shiftGenerationConfigSchema>;
 
 interface ShiftGeneratorFormProps {
   onSaveShifts: (aiShifts: AIShift[]) => Promise<{ successCount: number; errorCount: number }>;
@@ -44,15 +47,15 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [generatedResponseText, setGeneratedResponseText] = useState<string | null>(null);
-  const [aiGeneratedShifts, setAiGeneratedShifts] = useState<AIShift[] | null>(null);
+  // const [aiGeneratedShifts, setAiGeneratedShifts] = useState<AIShift[] | null>(null); // Renaming to reflect general generated shifts
+  const [algorithmGeneratedShifts, setAlgorithmGeneratedShifts] = useState<AIShift[] | null>(null);
   const [editableShifts, setEditableShifts] = useState<AIShift[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(false);
 
-  const form = useForm<ShiftPromptFormData>({
-    resolver: zodResolver(shiftPromptSchema),
+  const form = useForm<ShiftGenerationConfigFormData>({
+    resolver: zodResolver(shiftGenerationConfigSchema),
     defaultValues: {
-      prompt: "Configure las opciones de servicio, mes y año. El prompt se actualizará automáticamente con los detalles relevantes.",
       serviceId: allServices.length > 0 ? allServices[0].id : '',
       month: (new Date().getMonth() + 1).toString(),
       year: new Date().getFullYear().toString(),
@@ -67,129 +70,41 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
     return allServices.find(s => s.id === selectedServiceId);
   }, [selectedServiceId, allServices]);
 
-  useEffect(() => {
-    if (!selectedServiceId || !selectedMonth || !selectedYear || !allServices.length || !allEmployees.length) {
-      form.setValue('prompt', "Seleccione un servicio, mes y año para generar el prompt detallado.");
-      return;
+  // useEffect for dynamic prompt generation is removed as AI is no longer the primary generation method.
+  // The prompt textarea will also be removed or hidden.
+
+  const handleGenerateSubmit = async (data: ShiftGenerationConfigFormData) => {
+    if (!selectedService) {
+        setError("Por favor, seleccione un servicio válido.");
+        return;
     }
-
-    const service = allServices.find(s => s.id === selectedServiceId);
-    if (!service) {
-      form.setValue('prompt', "Servicio seleccionado no encontrado. Por favor, elija un servicio válido.");
-      return;
-    }
-
-    const monthNum = parseInt(selectedMonth, 10);
-    const yearNum = parseInt(selectedYear, 10);
-    const targetDate = new Date(yearNum, monthNum - 1, 1);
-    const monthName = format(targetDate, 'MMMM', { locale: es });
-    const firstDayOfMonth = startOfMonth(targetDate);
-    // const firstDayOfWeek = getDay(firstDayOfMonth); // 0 (Sun) - 6 (Sat), adapt if needed (es locale makes Monday 1)
-    const daysInMonthVal = getDaysInMonth(targetDate);
-
-    let dynamicPrompt = `Generar un horario de turnos mensual para ${monthName} de ${yearNum} para el servicio: ${service.name}.\n`;
-    dynamicPrompt += `El mes de ${monthName} ${yearNum} tiene ${daysInMonthVal} días. El primer día del mes es ${format(firstDayOfMonth, 'EEEE', { locale: es })}.\n\n`;
-
-    dynamicPrompt += "Reglas del Servicio:\n";
-    dynamicPrompt += `- Nombre del Servicio: ${service.name}\n`;
-    dynamicPrompt += `- Descripción: ${service.description}\n`;
-    dynamicPrompt += `- Turno Noche Habilitado: ${service.enableNightShift ? 'Sí' : 'No'}\n`;
-    dynamicPrompt += "Dotación Objetivo (Personal Requerido por turno):\n";
-    dynamicPrompt += `  Lunes a Viernes:\n`;
-    dynamicPrompt += `    Mañana: ${service.staffingNeeds.morningWeekday}, Tarde: ${service.staffingNeeds.afternoonWeekday}${service.enableNightShift ? `, Noche: ${service.staffingNeeds.nightWeekday}` : ''}\n`;
-    dynamicPrompt += `  Sábados, Domingos y Feriados:\n`;
-    dynamicPrompt += `    Mañana: ${service.staffingNeeds.morningWeekendHoliday}, Tarde: ${service.staffingNeeds.afternoonWeekendHoliday}${service.enableNightShift ? `, Noche: ${service.staffingNeeds.nightWeekendHoliday}` : ''}\n`;
-    if (service.consecutivenessRules) {
-      dynamicPrompt += "Reglas de Consecutividad:\n";
-      dynamicPrompt += `  - Máx. Días de Trabajo Consecutivos: ${service.consecutivenessRules.maxConsecutiveWorkDays}\n`;
-      dynamicPrompt += `  - Días de Trabajo Consecutivos Preferidos: ${service.consecutivenessRules.preferredConsecutiveWorkDays}\n`;
-      dynamicPrompt += `  - Máx. Días de Descanso Consecutivos: ${service.consecutivenessRules.maxConsecutiveDaysOff}\n`;
-      dynamicPrompt += `  - Días de Descanso Consecutivos Preferidos: ${service.consecutivenessRules.preferredConsecutiveDaysOff}\n`;
-    }
-    if (service.additionalNotes) {
-      dynamicPrompt += `Notas Adicionales del Servicio: ${service.additionalNotes}\n`;
-    }
-    dynamicPrompt += "\n";
-
-    const relevantEmployees = allEmployees.filter(emp => emp.serviceIds.includes(selectedServiceId));
-    dynamicPrompt += `Personal Disponible para ${service.name} (${relevantEmployees.length}):\n`;
-    if (relevantEmployees.length === 0) {
-      dynamicPrompt += "- No hay empleados asignados directamente a este servicio.\n";
-    }
-    relevantEmployees.forEach(emp => {
-      dynamicPrompt += `- ${emp.name} (Roles: ${emp.roles.join(', ')})\n`;
-      if (emp.preferences) {
-        if (emp.preferences.eligibleForDayOffAfterDuty) dynamicPrompt += `    - Elegible para D/D (Franco post-guardia).\n`;
-        if (emp.preferences.prefersWeekendWork) dynamicPrompt += `    - Prefiere trabajar fines de semana.\n`;
-        if (emp.preferences.fixedWeeklyShiftTiming && emp.preferences.fixedWeeklyShiftTiming !== 'none_selected') {
-            const timingLabel = emp.preferences.fixedWeeklyShiftTiming === 'rest_day' ? 'D (Descanso)' : emp.preferences.fixedWeeklyShiftTiming;
-            dynamicPrompt += `    - Turno Fijo Semanal: ${timingLabel} los días: ${emp.preferences.fixedWeeklyShiftDays?.join(', ') || 'No especificado'}\n`;
-        }
-      }
-      if (emp.fixedAssignments && emp.fixedAssignments.length > 0) {
-        const monthStartDate = new Date(yearNum, monthNum - 1, 1);
-        const monthEndDate = new Date(yearNum, monthNum - 1, daysInMonthVal);
-        const assignmentsInMonth = emp.fixedAssignments.filter(assign => {
-            if (!assign.startDate) return false;
-            const assignmentStartDate = parseISO(assign.startDate);
-            const assignmentEndDate = assign.endDate ? parseISO(assign.endDate) : assignmentStartDate;
-            
-            const targetInterval = { start: monthStartDate, end: monthEndDate };
-            const assignmentInterval = { start: assignmentStartDate, end: assignmentEndDate };
-
-            return isValid(assignmentStartDate) && isValid(assignmentEndDate) && (
-                isWithinInterval(assignmentStartDate, targetInterval) ||
-                isWithinInterval(assignmentEndDate, targetInterval) ||
-                (assignmentStartDate < monthStartDate && assignmentEndDate > monthEndDate)
-            );
-        });
-        if (assignmentsInMonth.length > 0) {
-          dynamicPrompt += `    - Asignaciones Fijas en ${monthName} ${yearNum}:\n`;
-          assignmentsInMonth.forEach(assign => {
-            dynamicPrompt += `      - Tipo: ${assign.type}, Inicio: ${assign.startDate}${assign.endDate ? `, Fin: ${assign.endDate}` : ''}${assign.description ? `, Desc: ${assign.description}` : ''}\n`;
-          });
-        }
-      }
-      if (emp.availability) dynamicPrompt += `    - Disponibilidad General: ${emp.availability}\n`;
-      if (emp.constraints) dynamicPrompt += `    - Restricciones: ${emp.constraints}\n`;
-    });
-    dynamicPrompt += "\nInstrucciones Adicionales para la IA:\n";
-    dynamicPrompt += "- Genere los turnos para todos los días del mes especificado.\n";
-    dynamicPrompt += "- Asegúrese de que cada turno tenga fecha (YYYY-MM-DD), hora de inicio (HH:MM), hora de fin (HH:MM), nombre del empleado y nombre del servicio.\n";
-    dynamicPrompt += "- Los horarios típicos son: Mañana (M) 07:00-15:00, Tarde (T) 15:00-23:00, Noche (N) 23:00-07:00 del día siguiente (si aplica y está habilitado). Considere estos horarios como guía si no se especifica otro.\n";
-    dynamicPrompt += "- Respete estrictamente todas las reglas de dotación, consecutividad y las asignaciones fijas (D, LAO, LM) y preferencias de los empleados al generar el horario.\n";
-    dynamicPrompt += "- Si un empleado tiene una asignación fija (ej. LAO) en ciertas fechas, no se le deben asignar turnos de trabajo en esas fechas.\n";
-    dynamicPrompt += "- Distribuya la carga de trabajo y los tipos de turno (mañana, tarde, noche) de manera equitativa si es posible, respetando las preferencias.\n";
-    dynamicPrompt += "- Devuelva la respuesta en el formato JSON especificado, incluyendo 'generatedShifts' y 'responseText'. Si no puede generar un horario válido, explique el problema en 'responseText'.\n";
-
-    form.setValue('prompt', dynamicPrompt);
-
-  }, [selectedServiceId, selectedMonth, selectedYear, allServices, allEmployees, form]);
-
-
-  const handleGenerateSubmit = async (data: ShiftPromptFormData) => {
     setIsGenerating(true);
     setGeneratedResponseText(null);
-    setAiGeneratedShifts(null);
+    setAlgorithmGeneratedShifts(null);
     setEditableShifts(null);
     setError(null);
     setShowGrid(false);
     try {
-      const input: SuggestShiftScheduleInput = { prompt: data.prompt };
-      const result: SuggestShiftScheduleOutput = await suggestShiftSchedule(input);
+      // Call the algorithmic scheduler
+      const result = await generateAlgorithmicSchedule(
+        selectedService,
+        data.month,
+        data.year,
+        allEmployees // Pass all employees for the algorithm to filter by service and access full details
+      );
       setGeneratedResponseText(result.responseText);
       if (result.generatedShifts && result.generatedShifts.length > 0) {
-        setAiGeneratedShifts(result.generatedShifts);
-        setEditableShifts(result.generatedShifts); // Initialize editable shifts
-        setShowGrid(true); // Mostrar la cuadrícula
+        setAlgorithmGeneratedShifts(result.generatedShifts);
+        setEditableShifts(result.generatedShifts); 
+        setShowGrid(true); 
       } else if (!result.responseText?.toLowerCase().includes("error") && (!result.generatedShifts || result.generatedShifts.length === 0)) {
-        setError("La IA generó una respuesta pero no se encontraron turnos estructurados. Revise el texto de respuesta.");
-      } else if (result.responseText?.toLowerCase().includes("error")) {
-         setError(`Respuesta de la IA: ${result.responseText}`);
+        setError("El algoritmo generó una respuesta pero no se encontraron turnos estructurados. Revise el texto de respuesta.");
+      } else if (result.responseText?.toLowerCase().includes("error") || result.generatedShifts.length === 0) {
+         setError(`Respuesta del algoritmo: ${result.responseText}`);
       }
     } catch (e) {
-      console.error("Error generando el horario:", e);
-      setError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante la generación del horario.");
+      console.error("Error generando el horario con el algoritmo:", e);
+      setError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante la generación algorítmica del horario.");
     } finally {
       setIsGenerating(false);
     }
@@ -204,11 +119,6 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
     setError(null);
     try {
       await onSaveShifts(editableShifts);
-      // Opcional: limpiar después de guardar
-      // setAiGeneratedShifts(null);
-      // setEditableShifts(null);
-      // setShowGrid(false);
-      // setGeneratedResponseText("Turnos guardados exitosamente. Puede generar un nuevo horario.");
     } catch (e) {
        console.error("Error guardando los turnos:", e);
        setError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante el guardado de los turnos.");
@@ -219,9 +129,6 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
 
   const handleBackToConfig = () => {
     setShowGrid(false);
-    // Opcionalmente, limpiar aiGeneratedShifts y editableShifts si se desea un reinicio completo
-    // setAiGeneratedShifts(null);
-    // setEditableShifts(null);
   };
 
   return (
@@ -230,12 +137,12 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
         <>
           <CardHeader>
             <CardTitle className="font-headline flex items-center">
-              <Sparkles className="mr-2 h-6 w-6 text-primary" />
-              Generador de Turnos con IA
+              <Bot className="mr-2 h-6 w-6 text-primary" /> {/* Changed icon */}
+              Generador de Turnos Algorítmico
             </CardTitle>
             <CardDescription>
-              Seleccione el servicio, mes y año. El prompt se llenará con las reglas y preferencias relevantes.
-              Puede ajustarlo antes de generar el horario.
+              Seleccione el servicio, mes y año. El horario se generará automáticamente
+              basado en las reglas del servicio y la disponibilidad de empleados.
             </CardDescription>
           </CardHeader>
           <Form {...form}>
@@ -293,25 +200,7 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
                     )}
                   />
                 </div>
-                <FormField
-                  control={form.control}
-                  name="prompt"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Prompt de Programación Detallado</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="El prompt se generará aquí basado en sus selecciones..."
-                          rows={20}
-                          className="min-h-[300px] font-mono text-xs bg-muted/30"
-                          {...field}
-                          disabled={isGenerating}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Prompt Textarea is removed/hidden as it's not used for algorithmic generation */}
               </CardContent>
               <CardFooter className="flex flex-col items-stretch gap-4">
                 <Button type="submit" disabled={isGenerating || isSaving || !selectedServiceId} className="w-full">
@@ -321,11 +210,11 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
                     <> <CalendarDays className="mr-2 h-4 w-4" /> Generar Horario para {selectedService?.name || ''} </>
                   )}
                 </Button>
-                 {generatedResponseText && !showGrid && ( // Mostrar respuesta de IA si no se muestra la cuadrícula
+                 {generatedResponseText && !showGrid && ( 
                     <Card className="mt-4 w-full">
-                        <CardHeader><CardTitle>Respuesta de la IA</CardTitle></CardHeader>
+                        <CardHeader><CardTitle>Respuesta del Algoritmo</CardTitle></CardHeader>
                         <CardContent>
-                        <Textarea value={generatedResponseText} readOnly rows={8} className="min-h-[100px] font-mono text-xs bg-muted/30"/>
+                        <Textarea value={generatedResponseText} readOnly rows={5} className="min-h-[80px] font-mono text-xs bg-muted/30"/>
                         </CardContent>
                     </Card>
                 )}
@@ -334,7 +223,6 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
           </Form>
         </>
       ) : (
-        // Mostrar la cuadrícula interactiva
         editableShifts && selectedMonth && selectedYear && (
           <InteractiveScheduleGrid
             initialShifts={editableShifts}
@@ -367,14 +255,13 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
             </Button>
         </CardFooter>
       )}
-       {!showGrid && generatedResponseText && aiGeneratedShifts && aiGeneratedShifts.length > 0 && (
+       {!showGrid && generatedResponseText && algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0 && (
          <CardFooter className="flex flex-col items-stretch gap-4 pt-0">
             <Button onClick={() => setShowGrid(true)} variant="outline" className="w-full">
-                <Eye className="mr-2 h-4 w-4" /> Ver y Editar Horario Interactivo ({aiGeneratedShifts.length} turnos)
+                <Eye className="mr-2 h-4 w-4" /> Ver y Editar Horario Interactivo ({algorithmGeneratedShifts.length} turnos)
             </Button>
          </CardFooter>
       )}
     </Card>
   );
 }
-
