@@ -10,16 +10,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle } from 'lucide-react';
+import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, Archive } from 'lucide-react';
 import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-scheduler';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import type { Employee, Service, Holiday } from '@/lib/types';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import type { Employee, Service, Holiday, MonthlySchedule } from '@/lib/types';
 import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getHolidays } from '@/lib/firebase/holidays';
+import { getActiveMonthlySchedule, saveNewActiveSchedule, updateExistingActiveSchedule, generateScheduleKey } from '@/lib/firebase/monthlySchedules';
+import { useToast } from '@/hooks/use-toast';
 
 const shiftGenerationConfigSchema = z.object({
   serviceId: z.string().min(1, "Debe seleccionar un servicio."),
@@ -30,7 +33,7 @@ const shiftGenerationConfigSchema = z.object({
 type ShiftGenerationConfigFormData = z.infer<typeof shiftGenerationConfigSchema>;
 
 interface ShiftGeneratorFormProps {
-  onSaveShifts: (aiShifts: AIShift[]) => Promise<{ successCount: number; errorCount: number }>;
+  onSaveShifts: (aiShifts: AIShift[]) => Promise<{ successCount: number; errorCount: number }>; // This prop might become obsolete or change
   allEmployees: Employee[];
   allServices: Service[];
 }
@@ -43,14 +46,28 @@ const months = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServices }: ShiftGeneratorFormProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
+  
   const [generatedResponseText, setGeneratedResponseText] = useState<string | null>(null);
   const [algorithmGeneratedShifts, setAlgorithmGeneratedShifts] = useState<AIShift[] | null>(null);
   const [editableShifts, setEditableShifts] = useState<AIShift[] | null>(null);
+  
   const [error, setError] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(false);
   const [displayInfoText, setDisplayInfoText] = useState<string>("");
+
+  const [currentLoadedSchedule, setCurrentLoadedSchedule] = useState<MonthlySchedule | null>(null);
+  const [showInitialChoiceDialog, setShowInitialChoiceDialog] = useState(false);
+  const [userChoiceForExisting, setUserChoiceForExisting] = useState<'modify' | 'generate_new' | null>(null);
+
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveActionType, setSaveActionType] = useState<'update_or_new_version' | 'confirm_new_with_archive' | 'confirm_save_brand_new' | null>(null);
+
 
   const { data: holidays = [], isLoading: isLoadingHolidays, error: errorHolidays } = useQuery<Holiday[]>({
     queryKey: ['holidays'],
@@ -73,6 +90,38 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
   const selectedService = useMemo(() => {
     return allServices.find(s => s.id === selectedServiceId);
   }, [selectedServiceId, allServices]);
+
+  // Effect to load existing schedule when service/month/year changes
+  useEffect(() => {
+    const loadSchedule = async () => {
+      if (selectedServiceId && selectedMonth && selectedYear) {
+        setIsLoadingSchedule(true);
+        setError(null);
+        setAlgorithmGeneratedShifts(null);
+        setEditableShifts(null);
+        setGeneratedResponseText(null);
+        setShowGrid(false);
+        setUserChoiceForExisting(null);
+        try {
+          const existingSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
+          setCurrentLoadedSchedule(existingSchedule);
+          if (existingSchedule) {
+            setShowInitialChoiceDialog(true);
+          } else {
+            setShowInitialChoiceDialog(false); // No existing schedule, proceed to generate new
+          }
+        } catch (e) {
+          console.error("Error cargando horario existente:", e);
+          setError("Error al cargar horario existente.");
+          setCurrentLoadedSchedule(null);
+        } finally {
+          setIsLoadingSchedule(false);
+        }
+      }
+    };
+    loadSchedule();
+  }, [selectedServiceId, selectedMonth, selectedYear]);
+
 
   useEffect(() => {
     if (selectedService && selectedMonth && selectedYear && allEmployees && !isLoadingHolidays) {
@@ -134,9 +183,14 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
             const assignmentStartDate = parseISO(assign.startDate);
             const assignmentEndDate = assign.endDate ? parseISO(assign.endDate) : assignmentStartDate;
             if (!isValid(assignmentStartDate) || !isValid(assignmentEndDate)) return false;
-            const currentAssignmentInterval = { start: assignmentStartDate, end: assignmentEndDate };
-            return isWithinInterval(assignmentStartDate, targetInterval) || 
-                   isWithinInterval(assignmentEndDate, targetInterval) ||
+            
+            const currentAssignmentInterval = { 
+                start: startOfDay(assignmentStartDate), 
+                end: endOfDay(assignmentEndDate) 
+            };
+            
+            return isWithinInterval(monthStart, currentAssignmentInterval) || 
+                   isWithinInterval(monthEnd, currentAssignmentInterval) ||
                    (assignmentStartDate < monthStart && assignmentEndDate > monthEnd);
           });
 
@@ -177,14 +231,14 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
     setAlgorithmGeneratedShifts(null);
     setEditableShifts(null);
     setError(null);
-    setShowGrid(false);
+    setShowGrid(false); 
     try {
       const result = await generateAlgorithmicSchedule(
         selectedService,
         data.month,
         data.year,
         allEmployees,
-        holidays // Pasar la lista de feriados obtenida de Firebase
+        holidays 
       );
       setGeneratedResponseText(result.responseText);
       if (result.generatedShifts && result.generatedShifts.length > 0) {
@@ -203,26 +257,91 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
     }
   };
 
-  const handleSaveGeneratedShifts = async () => {
-    if (!editableShifts || editableShifts.length === 0) {
-      setError("No hay turnos para guardar.");
-      return;
+  const handleConfirmSave = async (action: 'update' | 'new_version') => {
+    setShowSaveDialog(false);
+    if (!editableShifts || !selectedService || !selectedYear || !selectedMonth) {
+        setError("Faltan datos para guardar el horario.");
+        return;
     }
     setIsSaving(true);
     setError(null);
+
     try {
-      await onSaveShifts(editableShifts);
+        if (action === 'update' && currentLoadedSchedule?.id) {
+            await updateExistingActiveSchedule(currentLoadedSchedule.id, editableShifts, generatedResponseText || currentLoadedSchedule.responseText);
+            toast({ title: "Horario Actualizado", description: "El horario activo ha sido actualizado." });
+            const updatedSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
+            setCurrentLoadedSchedule(updatedSchedule);
+            if(updatedSchedule?.shifts) setEditableShifts(updatedSchedule.shifts);
+        } else { // new_version or saving a brand new schedule (or new after choosing to archive)
+            const scheduleData: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'> = {
+                scheduleKey: generateScheduleKey(selectedYear, selectedMonth, selectedServiceId),
+                year: selectedYear,
+                month: selectedMonth,
+                serviceId: selectedServiceId,
+                serviceName: selectedService.name,
+                shifts: editableShifts,
+                responseText: generatedResponseText || "Horario guardado.",
+            };
+            const newActive = await saveNewActiveSchedule(scheduleData, currentLoadedSchedule?.id);
+            setCurrentLoadedSchedule(newActive);
+            if(newActive?.shifts) setEditableShifts(newActive.shifts);
+            toast({ title: "Horario Guardado", description: `El horario para ${selectedService.name} - ${months.find(m=>m.value===selectedMonth)?.label}/${selectedYear} se guardó como activo.` });
+        }
+        queryClient.invalidateQueries({ queryKey: ['monthlySchedules', selectedYear, selectedMonth, selectedServiceId] });
+        setShowGrid(true); // Keep grid visible
     } catch (e) {
-       console.error("Error guardando los turnos:", e);
-       setError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante el guardado de los turnos.");
+        console.error("Error guardando el horario:", e);
+        const message = e instanceof Error ? e.message : "Ocurrió un error desconocido al guardar el horario.";
+        setError(message);
+        toast({ variant: "destructive", title: "Error al Guardar", description: message });
     } finally {
-      setIsSaving(false);
+        setIsSaving(false);
     }
+};
+
+
+  const handleSaveGeneratedShiftsClick = () => {
+    if (!editableShifts || editableShifts.length === 0) {
+      setError("No hay turnos para guardar.");
+      toast({ variant: "destructive", title: "Error", description: "No hay turnos generados o editados para guardar." });
+      return;
+    }
+
+    if (userChoiceForExisting === 'modify' && currentLoadedSchedule) {
+        setSaveActionType('update_or_new_version');
+    } else if (currentLoadedSchedule && (userChoiceForExisting === 'generate_new' || !userChoiceForExisting /* implies new generation over existing */)) {
+        setSaveActionType('confirm_new_with_archive');
+    } else {
+        setSaveActionType('confirm_save_brand_new');
+    }
+    setShowSaveDialog(true);
   };
+
 
   const handleBackToConfig = () => {
     setShowGrid(false);
+    // No reseteamos currentLoadedSchedule aquí, porque si el usuario vuelve a la config y luego
+    // a la grilla sin cambiar mes/servicio/año, debería ver lo que estaba editando o lo cargado.
+    // El reset de currentLoadedSchedule se maneja en el useEffect de carga.
   };
+
+  const handleInitialChoice = (choice: 'modify' | 'generate_new') => {
+    setShowInitialChoiceDialog(false);
+    setUserChoiceForExisting(choice);
+    if (choice === 'modify' && currentLoadedSchedule) {
+        setEditableShifts(currentLoadedSchedule.shifts);
+        setGeneratedResponseText(currentLoadedSchedule.responseText || "");
+        setShowGrid(true);
+    } else { // generate_new or no schedule loaded
+        setEditableShifts(null);
+        setAlgorithmGeneratedShifts(null);
+        setGeneratedResponseText(null);
+        setShowGrid(false);
+    }
+  };
+
+  const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingSchedule;
 
   return (
     <Card className="w-full">
@@ -231,98 +350,69 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
           <CardHeader>
             <CardTitle className="font-headline flex items-center">
               <Bot className="mr-2 h-6 w-6 text-primary" />
-              Generador de Turnos Algorítmico
+              Generador de Horarios
             </CardTitle>
             <CardDescription>
-              Seleccione el servicio, mes y año. El horario se generará automáticamente
-              basado en las reglas del servicio, la disponibilidad de empleados y los feriados registrados.
+              Seleccione servicio, mes y año. Si existe un horario activo, podrá modificarlo o generar uno nuevo.
             </CardDescription>
           </CardHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleGenerateSubmit)}>
-              <CardContent className="space-y-6">
-                {errorHolidays && (
-                  <Alert variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Error al Cargar Feriados</AlertTitle>
-                    <AlertDescription>
-                      No se pudieron cargar los feriados: {errorHolidays.message}. La generación de horarios podría no ser precisa.
-                    </AlertDescription>
-                  </Alert>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="serviceId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Servicio</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={isGenerating || isLoadingHolidays}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccione un servicio" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {allServices.map(service => (
-                              <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="month"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Mes</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={isGenerating || isLoadingHolidays}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un mes" /></SelectTrigger></FormControl>
-                          <SelectContent>{months.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="year"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Año</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={isGenerating || isLoadingHolidays}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un año" /></SelectTrigger></FormControl>
-                          <SelectContent>{years.map(y => (<SelectItem key={y} value={y}>{y}</SelectItem>))}</SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <FormItem>
-                  <FormLabel className="flex items-center"><Info className="mr-2 h-4 w-4 text-primary" /> Información para Generación</FormLabel>
-                  <Textarea
-                    value={isLoadingHolidays ? "Cargando feriados..." : displayInfoText}
-                    readOnly
-                    rows={10}
-                    className="min-h-[150px] font-mono text-xs bg-muted/30 border-dashed"
-                    placeholder="Seleccione servicio, mes y año para ver el resumen..."
-                  />
-                </FormItem>
-
-              </CardContent>
-              <CardFooter className="flex flex-col items-stretch gap-4">
-                <Button type="submit" disabled={isGenerating || isSaving || !selectedServiceId || isLoadingHolidays || !!errorHolidays} className="w-full">
-                  {isGenerating ? (
-                    <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generando Horario... </>
-                  ) : (
-                    <> <CalendarDays className="mr-2 h-4 w-4" /> Generar Horario para {selectedService?.name || ''} </>
+          {isLoadingSchedule && (
+            <CardContent className="flex justify-center items-center py-6">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" /> Cargando horario existente...
+            </CardContent>
+          )}
+          {!isLoadingSchedule && (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleGenerateSubmit)}>
+                <CardContent className="space-y-6">
+                  {errorHolidays && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>Error al Cargar Feriados</AlertTitle>
+                      <AlertDescription>
+                        No se pudieron cargar los feriados: {errorHolidays.message}. La generación de horarios podría no ser precisa.
+                      </AlertDescription>
+                    </Alert>
                   )}
-                </Button>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <FormField control={form.control} name="serviceId" render={({ field }) => (
+                        <FormItem> <FormLabel>Servicio</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={isActionDisabled}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un servicio" /></SelectTrigger></FormControl>
+                            <SelectContent>{allServices.map(service => (<SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>))}</SelectContent>
+                          </Select><FormMessage />
+                        </FormItem>)} />
+                    <FormField control={form.control} name="month" render={({ field }) => (
+                        <FormItem> <FormLabel>Mes</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={isActionDisabled}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un mes" /></SelectTrigger></FormControl>
+                            <SelectContent>{months.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
+                          </Select><FormMessage />
+                        </FormItem>)} />
+                    <FormField control={form.control} name="year" render={({ field }) => (
+                        <FormItem> <FormLabel>Año</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={isActionDisabled}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un año" /></SelectTrigger></FormControl>
+                            <SelectContent>{years.map(y => (<SelectItem key={y} value={y}>{y}</SelectItem>))}</SelectContent>
+                          </Select><FormMessage />
+                        </FormItem>)} />
+                  </div>
+                  
+                  {userChoiceForExisting !== 'modify' && (
+                    <FormItem>
+                        <FormLabel className="flex items-center"><Info className="mr-2 h-4 w-4 text-primary" /> Información para Generación</FormLabel>
+                        <Textarea value={isLoadingHolidays ? "Cargando feriados..." : displayInfoText} readOnly rows={10} className="min-h-[150px] font-mono text-xs bg-muted/30 border-dashed" placeholder="Seleccione servicio, mes y año para ver el resumen..." />
+                    </FormItem>
+                  )}
+
+                </CardContent>
+                <CardFooter className="flex flex-col items-stretch gap-4">
+                { userChoiceForExisting !== 'modify' && (
+                    <Button type="submit" disabled={isActionDisabled || !selectedServiceId || showInitialChoiceDialog} className="w-full">
+                        {isGenerating ? ( <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generando Horario... </>
+                        ) : ( <> <CalendarDays className="mr-2 h-4 w-4" /> Generar Horario para {selectedService?.name || ''} </> )}
+                    </Button>
+                )}
                  {generatedResponseText && !showGrid && ( 
                     <Card className="mt-4 w-full border-dashed">
                         <CardHeader className="pb-2 pt-4"><CardTitle className="text-base">Respuesta del Algoritmo</CardTitle></CardHeader>
@@ -332,8 +422,9 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
                     </Card>
                 )}
               </CardFooter>
-            </form>
-          </Form>
+              </form>
+            </Form>
+          )}
         </>
       ) : (
         editableShifts && selectedMonth && selectedYear && (
@@ -359,22 +450,90 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
 
       {showGrid && editableShifts && editableShifts.length > 0 && (
         <CardFooter className="flex flex-col items-stretch gap-4 pt-6">
-            <Button onClick={handleSaveGeneratedShifts} disabled={isSaving || isGenerating} className="w-full">
+            <Button onClick={handleSaveGeneratedShiftsClick} disabled={isSaving || isGenerating || isLoadingSchedule} className="w-full">
             {isSaving ? (
-                <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando {editableShifts.length} Turno(s)... </>
+                <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando... </>
             ) : (
-                <> <Save className="mr-2 h-4 w-4" /> Guardar {editableShifts.length} Turno(s) del Horario Editado </>
+                <> <Save className="mr-2 h-4 w-4" /> Guardar Horario Editado ({editableShifts.length} turnos) </>
             )}
             </Button>
         </CardFooter>
       )}
        {!showGrid && generatedResponseText && algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0 && (
          <CardFooter className="flex flex-col items-stretch gap-4 pt-0">
-            <Button onClick={() => setShowGrid(true)} variant="outline" className="w-full">
-                <Eye className="mr-2 h-4 w-4" /> Ver y Editar Horario Interactivo ({algorithmGeneratedShifts.length} turnos)
+            <Button onClick={() => setShowGrid(true)} variant="outline" className="w-full" disabled={isActionDisabled}>
+                <Eye className="mr-2 h-4 w-4" /> Ver y Editar Horario Generado ({algorithmGeneratedShifts.length} turnos)
             </Button>
          </CardFooter>
       )}
+
+      {/* Dialogo para elegir acción si existe horario */}
+      <AlertDialog open={showInitialChoiceDialog} onOpenChange={setShowInitialChoiceDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Horario Existente Encontrado</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ya existe un horario activo para {selectedService?.name} en {months.find(m=>m.value===selectedMonth)?.label || selectedMonth}/{selectedYear}. ¿Qué desea hacer?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Button variant="outline" onClick={() => handleInitialChoice('modify')}>
+              <Edit className="mr-2 h-4 w-4" /> Modificar Horario Existente
+            </Button>
+            <Button onClick={() => handleInitialChoice('generate_new')}>
+              <FilePlus2 className="mr-2 h-4 w-4" /> Generar Nuevo Horario
+              <span className="text-xs ml-1">(El actual se archivará al guardar el nuevo)</span>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialogo para confirmar guardado */}
+      <AlertDialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Guardado de Horario</AlertDialogTitle>
+            {saveActionType === 'update_or_new_version' && currentLoadedSchedule && (
+                <AlertDialogDescription>
+                    Está modificando el horario activo para {selectedService?.name} ({months.find(m=>m.value===selectedMonth)?.label}/{selectedYear}).<br/>
+                    ¿Desea actualizar directamente este horario o guardarlo como una nueva versión activa (archivando la actual)?
+                </AlertDialogDescription>
+            )}
+            {saveActionType === 'confirm_new_with_archive' && currentLoadedSchedule && (
+                <AlertDialogDescription>
+                    Se guardará el nuevo horario generado como activo. El horario activo anterior para {selectedService?.name} ({months.find(m=>m.value===selectedMonth)?.label}/{selectedYear}) será archivado (marcado como inactivo). ¿Continuar?
+                </AlertDialogDescription>
+            )}
+            {saveActionType === 'confirm_save_brand_new' && (
+                 <AlertDialogDescription>
+                    Se guardará este nuevo horario como activo para {selectedService?.name} ({months.find(m=>m.value===selectedMonth)?.label}/{selectedYear}). ¿Continuar?
+                </AlertDialogDescription>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowSaveDialog(false)}>Cancelar</AlertDialogCancel>
+            {saveActionType === 'update_or_new_version' && (
+                <>
+                    <AlertDialogAction onClick={() => handleConfirmSave('update')}>
+                        <Edit className="mr-2 h-4 w-4" /> Actualizar Existente
+                    </AlertDialogAction>
+                    <AlertDialogAction onClick={() => handleConfirmSave('new_version')}>
+                       <Archive className="mr-2 h-4 w-4" /> Guardar como Nueva Versión
+                    </AlertDialogAction>
+                </>
+            )}
+             {(saveActionType === 'confirm_new_with_archive' || saveActionType === 'confirm_save_brand_new') && (
+                 <AlertDialogAction onClick={() => handleConfirmSave('new_version')}> {/* 'new_version' here effectively saves it as new active */}
+                    <Save className="mr-2 h-4 w-4" /> Confirmar y Guardar
+                </AlertDialogAction>
+             )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </Card>
   );
 }
+
+
+    
