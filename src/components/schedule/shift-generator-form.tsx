@@ -16,7 +16,7 @@ import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Employee, Service, Holiday, MonthlySchedule } from '@/lib/types';
-import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate } from 'date-fns';
+import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate, startOfDay, endOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -102,6 +102,7 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
         setGeneratedResponseText(null);
         setShowGrid(false);
         setUserChoiceForExisting(null);
+        setCurrentLoadedSchedule(null); // Reset loaded schedule before fetching
         try {
           const existingSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
           setCurrentLoadedSchedule(existingSchedule);
@@ -131,7 +132,6 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
       const monthDate = new Date(yearInt, monthIdx, 1);
       const monthStart = startOfMonth(monthDate);
       const monthEnd = endOfMonth(monthDate);
-      const targetInterval = { start: monthStart, end: monthEnd };
 
       let info = `Resumen para generar horario para el servicio: ${selectedService.name}\n`;
       info += `Mes: ${months.find(m => m.value === selectedMonth)?.label || selectedMonth}, Año: ${selectedYear}\n\n`;
@@ -261,19 +261,20 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
     setShowSaveDialog(false);
     if (!editableShifts || !selectedService || !selectedYear || !selectedMonth) {
         setError("Faltan datos para guardar el horario.");
+        toast({ variant: "destructive", title: "Error", description: "Faltan datos para guardar el horario." });
         return;
     }
     setIsSaving(true);
     setError(null);
 
     try {
+        let savedOrUpdatedSchedule: MonthlySchedule | null = null;
         if (action === 'update' && currentLoadedSchedule?.id) {
             await updateExistingActiveSchedule(currentLoadedSchedule.id, editableShifts, generatedResponseText || currentLoadedSchedule.responseText);
             toast({ title: "Horario Actualizado", description: "El horario activo ha sido actualizado." });
             const updatedSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
-            setCurrentLoadedSchedule(updatedSchedule);
-            if(updatedSchedule?.shifts) setEditableShifts(updatedSchedule.shifts);
-        } else { // new_version or saving a brand new schedule (or new after choosing to archive)
+            savedOrUpdatedSchedule = updatedSchedule;
+        } else { 
             const scheduleData: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'> = {
                 scheduleKey: generateScheduleKey(selectedYear, selectedMonth, selectedServiceId),
                 year: selectedYear,
@@ -284,9 +285,13 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
                 responseText: generatedResponseText || "Horario guardado.",
             };
             const newActive = await saveNewActiveSchedule(scheduleData, currentLoadedSchedule?.id);
-            setCurrentLoadedSchedule(newActive);
-            if(newActive?.shifts) setEditableShifts(newActive.shifts);
+            savedOrUpdatedSchedule = newActive;
             toast({ title: "Horario Guardado", description: `El horario para ${selectedService.name} - ${months.find(m=>m.value===selectedMonth)?.label}/${selectedYear} se guardó como activo.` });
+        }
+        
+        setCurrentLoadedSchedule(savedOrUpdatedSchedule);
+        if(savedOrUpdatedSchedule?.shifts) {
+            setEditableShifts([...savedOrUpdatedSchedule.shifts]); // Ensure a new array reference
         }
         queryClient.invalidateQueries({ queryKey: ['monthlySchedules', selectedYear, selectedMonth, selectedServiceId] });
         setShowGrid(true); // Keep grid visible
@@ -312,7 +317,7 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
         setSaveActionType('update_or_new_version');
     } else if (currentLoadedSchedule && (userChoiceForExisting === 'generate_new' || !userChoiceForExisting /* implies new generation over existing */)) {
         setSaveActionType('confirm_new_with_archive');
-    } else {
+    } else { // No currentLoadedSchedule, brand new
         setSaveActionType('confirm_save_brand_new');
     }
     setShowSaveDialog(true);
@@ -321,19 +326,26 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
 
   const handleBackToConfig = () => {
     setShowGrid(false);
-    // No reseteamos currentLoadedSchedule aquí, porque si el usuario vuelve a la config y luego
-    // a la grilla sin cambiar mes/servicio/año, debería ver lo que estaba editando o lo cargado.
-    // El reset de currentLoadedSchedule se maneja en el useEffect de carga.
+    // When going back, if we were modifying a loaded schedule, keep it as currentLoadedSchedule.
+    // Otherwise, if we generated something new, clear it to allow fresh load/generation next time.
+    if (userChoiceForExisting !== 'modify') {
+        //setCurrentLoadedSchedule(null); // This might be too aggressive, let useEffect handle reload based on keys
+        // setAlgorithmGeneratedShifts(null);
+        // setEditableShifts(null);
+        // setGeneratedResponseText(null);
+    }
+     // Reset user choice so the dialog appears again if needed
+     // setUserChoiceForExisting(null); // Let the main useEffect handle this based on loaded data.
   };
 
   const handleInitialChoice = (choice: 'modify' | 'generate_new') => {
     setShowInitialChoiceDialog(false);
     setUserChoiceForExisting(choice);
     if (choice === 'modify' && currentLoadedSchedule) {
-        setEditableShifts(currentLoadedSchedule.shifts);
+        setEditableShifts(currentLoadedSchedule.shifts ? [...currentLoadedSchedule.shifts] : []);
         setGeneratedResponseText(currentLoadedSchedule.responseText || "");
         setShowGrid(true);
-    } else { // generate_new or no schedule loaded
+    } else { 
         setEditableShifts(null);
         setAlgorithmGeneratedShifts(null);
         setGeneratedResponseText(null);
@@ -448,13 +460,13 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
         </Alert>
       )}
 
-      {showGrid && editableShifts && editableShifts.length > 0 && (
+      {showGrid && editableShifts && (
         <CardFooter className="flex flex-col items-stretch gap-4 pt-6">
-            <Button onClick={handleSaveGeneratedShiftsClick} disabled={isSaving || isGenerating || isLoadingSchedule} className="w-full">
+            <Button onClick={handleSaveGeneratedShiftsClick} disabled={isActionDisabled || editableShifts.length === 0} className="w-full">
             {isSaving ? (
                 <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando... </>
             ) : (
-                <> <Save className="mr-2 h-4 w-4" /> Guardar Horario Editado ({editableShifts.length} turnos) </>
+                <> <Save className="mr-2 h-4 w-4" /> Guardar Horario ({editableShifts.length} turnos) </>
             )}
             </Button>
         </CardFooter>
@@ -477,12 +489,12 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Button variant="outline" onClick={() => handleInitialChoice('modify')}>
+            <Button variant="outline" onClick={() => handleInitialChoice('modify')} disabled={isSaving || isGenerating}>
               <Edit className="mr-2 h-4 w-4" /> Modificar Horario Existente
             </Button>
-            <Button onClick={() => handleInitialChoice('generate_new')}>
+            <Button onClick={() => handleInitialChoice('generate_new')} disabled={isSaving || isGenerating}>
               <FilePlus2 className="mr-2 h-4 w-4" /> Generar Nuevo Horario
-              <span className="text-xs ml-1">(El actual se archivará al guardar el nuevo)</span>
+              <span className="text-xs ml-1 block sm:inline">(El actual se archivará al guardar el nuevo)</span>
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -510,21 +522,24 @@ export default function ShiftGeneratorForm({ onSaveShifts, allEmployees, allServ
                 </AlertDialogDescription>
             )}
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowSaveDialog(false)}>Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <AlertDialogCancel onClick={() => setShowSaveDialog(false)} disabled={isSaving}>Cancelar</AlertDialogCancel>
             {saveActionType === 'update_or_new_version' && (
                 <>
-                    <AlertDialogAction onClick={() => handleConfirmSave('update')}>
-                        <Edit className="mr-2 h-4 w-4" /> Actualizar Existente
-                    </AlertDialogAction>
-                    <AlertDialogAction onClick={() => handleConfirmSave('new_version')}>
-                       <Archive className="mr-2 h-4 w-4" /> Guardar como Nueva Versión
+                    <Button variant="outline" onClick={() => handleConfirmSave('update')} disabled={isSaving}>
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit className="mr-2 h-4 w-4" />}
+                         Actualizar Existente
+                    </Button>
+                    <AlertDialogAction onClick={() => handleConfirmSave('new_version')} disabled={isSaving}>
+                       {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Archive className="mr-2 h-4 w-4" />}
+                        Guardar como Nueva Versión
                     </AlertDialogAction>
                 </>
             )}
              {(saveActionType === 'confirm_new_with_archive' || saveActionType === 'confirm_save_brand_new') && (
-                 <AlertDialogAction onClick={() => handleConfirmSave('new_version')}> {/* 'new_version' here effectively saves it as new active */}
-                    <Save className="mr-2 h-4 w-4" /> Confirmar y Guardar
+                 <AlertDialogAction onClick={() => handleConfirmSave('new_version')} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                     Confirmar y Guardar
                 </AlertDialogAction>
              )}
           </AlertDialogFooter>
