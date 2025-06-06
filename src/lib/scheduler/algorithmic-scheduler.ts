@@ -1,15 +1,25 @@
 
 'use server';
 
-import type { Service, Employee, FixedAssignment } from '@/lib/types';
+import type { Service, Employee, FixedAssignment, Holiday } from '@/lib/types';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule'; 
-import { format, getDaysInMonth, parseISO, isWithinInterval, startOfDay, endOfDay, getDay } from 'date-fns';
+import { format, getDaysInMonth, parseISO, isWithinInterval, startOfDay, endOfDay, getDay, subDays, lastDayOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { SHIFT_OPTIONS } from '@/lib/constants/schedule-constants'; 
 
 interface AlgorithmicScheduleOutput {
   generatedShifts: AIShift[];
   responseText: string;
+}
+
+interface EmployeeState {
+  id: string;
+  name: string;
+  consecutiveWorkDays: number;
+  consecutiveRestDays: number;
+  shiftsThisMonth: number; // Count of M, T, N shifts
+  lastShiftType?: AIShift['notes']; // Store the 'notes' field which indicates type for D, LAO, LM, or M/T/N
+  // Potentially add more specific tracking for preferences if needed
 }
 
 // Helper to check if a date falls within a range
@@ -31,6 +41,8 @@ const isEmployeeOnFixedAssignmentOnDate = (
     if (!assignment.startDate) continue;
     const assignmentStartDate = parseISO(assignment.startDate);
     const assignmentEndDate = assignment.endDate ? parseISO(assignment.endDate) : assignmentStartDate;
+
+    if (!isValid(assignmentStartDate) || (assignment.endDate && !isValid(assignmentEndDate))) continue;
 
     if (isDateInRange(targetDate, assignmentStartDate, assignmentEndDate)) {
       return assignment;
@@ -54,7 +66,8 @@ export async function generateAlgorithmicSchedule(
   month: string, // "1"-"12"
   year: string,  // "2024"
   allEmployees: Employee[],
-  holidays: Array<{ date: string; name: string }> // YYYY-MM-DD
+  holidays: Holiday[],
+  previousMonthShifts: AIShift[] | null // Shifts from the last 5 days of previous month
 ): Promise<AlgorithmicScheduleOutput> {
   const generatedShifts: AIShift[] = [];
   const monthInt = parseInt(month, 10);
@@ -66,15 +79,57 @@ export async function generateAlgorithmicSchedule(
     return { generatedShifts: [], responseText: `No hay empleados asignados al servicio ${service.name} para generar el horario.` };
   }
 
-  const employeeShiftCounts: Record<string, number> = {};
-  employeesForService.forEach(emp => employeeShiftCounts[emp.id] = 0);
+  // Initialize Employee States
+  const employeeStates: Record<string, EmployeeState> = {};
+  employeesForService.forEach(emp => {
+    employeeStates[emp.id] = {
+      id: emp.id,
+      name: emp.name,
+      consecutiveWorkDays: 0,
+      consecutiveRestDays: 0,
+      shiftsThisMonth: 0,
+      lastShiftType: undefined,
+    };
+  });
+
+  // TODO: Initialize employeeStates based on previousMonthShifts (last 5 days)
+  // This involves iterating through the last few days of previousMonthShifts
+  // and updating consecutiveWorkDays, consecutiveRestDays, and lastShiftType.
+  if (previousMonthShifts && previousMonthShifts.length > 0) {
+    const firstDayOfCurrentMonth = new Date(yearInt, monthInt - 1, 1);
+    for (let i = 1; i <= 5; i++) { // Check last 5 days
+        const dateToCheck = subDays(firstDayOfCurrentMonth, i);
+        const dateToCheckStr = format(dateToCheck, 'yyyy-MM-dd');
+        
+        // Sort shifts by employee to process them in order for consecutiveness
+        const shiftsOnDate = previousMonthShifts.filter(s => s.date === dateToCheckStr).sort((a,b) => a.employeeName.localeCompare(b.employeeName));
+
+        for (const shift of shiftsOnDate) {
+            const employee = employeesForService.find(e => e.name === shift.employeeName);
+            if (employee && employeeStates[employee.id]) {
+                // This is a simplified update. A more robust one would re-calculate from the start of the previous 5 days.
+                if (shift.startTime && shift.endTime) { // Assuming M, T, N are work shifts
+                    employeeStates[employee.id].consecutiveWorkDays++;
+                    employeeStates[employee.id].consecutiveRestDays = 0;
+                } else if (shift.notes?.includes('D') || shift.notes?.includes('LAO') || shift.notes?.includes('LM')) {
+                    employeeStates[employee.id].consecutiveRestDays++;
+                    employeeStates[employee.id].consecutiveWorkDays = 0;
+                }
+                if (i === 1) { // Most recent shift from previous month
+                    employeeStates[employee.id].lastShiftType = shift.notes;
+                }
+            }
+        }
+    }
+  }
+
 
   for (let day = 1; day <= daysInMonthCount; day++) {
     const currentDate = new Date(yearInt, monthInt - 1, day);
     const currentDateStrYYYYMMDD = format(currentDate, 'yyyy-MM-dd');
     
     const dayOfWeek = getDay(currentDate); 
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // 0 for Sunday, 6 for Saturday
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; 
     
     const holidayOnDate = holidays.find(h => h.date === currentDateStrYYYYMMDD);
     const isHoliday = !!holidayOnDate;
@@ -89,6 +144,7 @@ export async function generateAlgorithmicSchedule(
     const dailyAssignedWorkShifts = new Set<string>(); 
     const dailyProcessedAssignments = new Set<string>(); 
 
+    // Step 1: Process Absences (LAO, LM)
     employeesForService.forEach(emp => {
       const fixedAssignment = isEmployeeOnFixedAssignmentOnDate(emp, currentDate);
       if (fixedAssignment && (fixedAssignment.type === 'LAO' || fixedAssignment.type === 'LM')) {
@@ -101,9 +157,16 @@ export async function generateAlgorithmicSchedule(
             notes: fixedAssignment.type + (fixedAssignment.description ? ` - ${fixedAssignment.description}` : ''),
         });
         dailyProcessedAssignments.add(emp.id); 
+        // Update employee state for LAO/LM
+        employeeStates[emp.id].consecutiveRestDays++;
+        employeeStates[emp.id].consecutiveWorkDays = 0;
+        employeeStates[emp.id].lastShiftType = fixedAssignment.type;
       }
     });
     
+    // TODO: Step 2: Process Fixed Weekly Shifts (Preferences)
+
+    // Step 3: Cover Staffing Needs (M, T, N)
     const assignShiftsForType = (
         shiftType: 'M' | 'T' | 'N',
         needed: number
@@ -113,9 +176,11 @@ export async function generateAlgorithmicSchedule(
         let assignedCount = 0;
         const {startTime, endTime, notesSuffix} = getShiftDetails(shiftType);
         
+        // TODO: Improve candidate selection based on employeeStates, preferences, and consecutiveness rules
         const availableForWork = employeesForService
-            .filter(emp => !dailyProcessedAssignments.has(emp.id))
-            .sort((a, b) => employeeShiftCounts[a.id] - employeeShiftCounts[b.id]);
+            .filter(emp => !dailyProcessedAssignments.has(emp.id)) // Not on LAO/LM
+            // Add more filters: maxConsecutiveWorkDays, minConsecutiveRestDays
+            .sort((a, b) => employeeStates[a.id].shiftsThisMonth - employeeStates[b.id].shiftsThisMonth); // Basic load balancing
 
         for (const emp of availableForWork) {
           if (assignedCount >= needed) break;
@@ -130,7 +195,11 @@ export async function generateAlgorithmicSchedule(
             });
             dailyAssignedWorkShifts.add(emp.id);
             dailyProcessedAssignments.add(emp.id); 
-            employeeShiftCounts[emp.id]++;
+            employeeStates[emp.id].shiftsThisMonth++;
+            // Update employee state for work shift
+            employeeStates[emp.id].consecutiveWorkDays++;
+            employeeStates[emp.id].consecutiveRestDays = 0;
+            employeeStates[emp.id].lastShiftType = shiftType; // Or use notesSuffix
             assignedCount++;
           }
         }
@@ -142,6 +211,7 @@ export async function generateAlgorithmicSchedule(
       assignShiftsForType('N', staffingNeeds.night);
     }
 
+    // Step 4: Assign Rest Days ('D')
     employeesForService.forEach(emp => {
         if (!dailyProcessedAssignments.has(emp.id)) {
             generatedShifts.push({
@@ -153,13 +223,19 @@ export async function generateAlgorithmicSchedule(
                 notes: 'D (Descanso)', 
             });
             dailyProcessedAssignments.add(emp.id); 
+            // Update employee state for Rest day
+            employeeStates[emp.id].consecutiveRestDays++;
+            employeeStates[emp.id].consecutiveWorkDays = 0;
+            employeeStates[emp.id].lastShiftType = 'D';
         }
     });
+
+    // TODO: Step 5: Franco Post-Guardia (D/D) logic (if applicable)
   }
 
   const monthName = format(new Date(yearInt, monthInt - 1), 'MMMM yyyy', { locale: es });
   return {
     generatedShifts,
-    responseText: `Horario generado algorítmicamente para ${service.name} para ${monthName}. Se crearon ${generatedShifts.length} turnos.`,
+    responseText: `Horario generado algorítmicamente para ${service.name} para ${monthName}. Se crearon ${generatedShifts.length} turnos. (Lógica de consecutividad avanzada y preferencias aún en desarrollo).`,
   };
 }

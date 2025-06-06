@@ -16,7 +16,7 @@ import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { Employee, Service, Holiday, MonthlySchedule } from '@/lib/types';
-import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate, startOfDay, endOfDay } from 'date-fns';
+import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate, startOfDay, endOfDay, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -61,6 +61,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const [displayInfoText, setDisplayInfoText] = useState<string>("");
 
   const [currentLoadedSchedule, setCurrentLoadedSchedule] = useState<MonthlySchedule | null>(null);
+  const [previousMonthSchedule, setPreviousMonthSchedule] = useState<MonthlySchedule | null>(null);
   const [showInitialChoiceDialog, setShowInitialChoiceDialog] = useState(false);
   const [userChoiceForExisting, setUserChoiceForExisting] = useState<'modify' | 'generate_new' | null>(null);
 
@@ -91,7 +92,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   }, [selectedServiceId, allServices]);
 
   useEffect(() => {
-    const loadSchedule = async () => {
+    const loadSchedules = async () => {
       if (selectedServiceId && selectedMonth && selectedYear) {
         setIsLoadingSchedule(true);
         setError(null);
@@ -100,26 +101,40 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setGeneratedResponseText(null);
         setShowGrid(false);
         setUserChoiceForExisting(null);
-        setCurrentLoadedSchedule(null); 
+        setCurrentLoadedSchedule(null);
+        setPreviousMonthSchedule(null);
+        
         try {
+          // Load current month's schedule
           const existingSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
           setCurrentLoadedSchedule(existingSchedule);
+
+          // Load previous month's schedule
+          const currentMonthDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
+          const prevMonthDate = subMonths(currentMonthDate, 1);
+          const prevMonthYearStr = format(prevMonthDate, 'yyyy');
+          const prevMonthMonthStr = format(prevMonthDate, 'M'); // 'M' for month 1-12
+          const prevSchedule = await getActiveMonthlySchedule(prevMonthYearStr, prevMonthMonthStr, selectedServiceId);
+          setPreviousMonthSchedule(prevSchedule);
+
+
           if (existingSchedule) {
             setShowInitialChoiceDialog(true);
           } else {
             setShowInitialChoiceDialog(false); 
-            setUserChoiceForExisting(null); // Ensure it's reset if no schedule found
+            setUserChoiceForExisting(null);
           }
         } catch (e) {
-          console.error("Error cargando horario existente:", e);
-          setError("Error al cargar horario existente.");
+          console.error("Error cargando horarios:", e);
+          setError("Error al cargar horarios.");
           setCurrentLoadedSchedule(null);
+          setPreviousMonthSchedule(null);
         } finally {
           setIsLoadingSchedule(false);
         }
       }
     };
-    loadSchedule();
+    loadSchedules();
   }, [selectedServiceId, selectedMonth, selectedYear]);
 
 
@@ -237,7 +252,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         data.month,
         data.year,
         allEmployees,
-        holidays 
+        holidays,
+        previousMonthSchedule?.shifts || null
       );
       setGeneratedResponseText(result.responseText);
       if (result.generatedShifts && result.generatedShifts.length > 0) {
@@ -292,7 +308,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         if(savedOrUpdatedSchedule?.shifts) {
             setEditableShifts([...savedOrUpdatedSchedule.shifts]); 
         }
-        queryClient.invalidateQueries({ queryKey: ['monthlySchedules', selectedYear, selectedMonth, selectedServiceId] });
+        queryClient.invalidateQueries({ queryKey: ['monthlySchedule', selectedYear, selectedMonth, selectedServiceId] });
         setShowGrid(true); 
     } catch (e) {
         console.error("Error guardando el horario:", e);
@@ -325,11 +341,6 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const handleBackToConfig = () => {
     setShowGrid(false);
-    // Reset user choice so the dialog appears again if needed when navigating back to config and schedule changes
-    // This ensures if a schedule was loaded, the dialog appears again.
-    // If user had selected "generate_new", this state remains, and if they select same month/year, dialog will appear.
-    // If they selected "modify", then currentLoadedSchedule is the one they were modifying.
-    // Let useEffect for loading handle resetting currentLoadedSchedule if params change.
   };
 
   const handleInitialChoice = (choice: 'modify' | 'generate_new') => {
@@ -343,7 +354,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setEditableShifts(null);
         setAlgorithmGeneratedShifts(null);
         setGeneratedResponseText(null);
-        setShowGrid(false); // Stay on config to generate new
+        setShowGrid(false);
     }
   };
 
@@ -364,7 +375,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
           </CardHeader>
           {isLoadingSchedule && (
             <CardContent className="flex justify-center items-center py-6">
-                <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" /> Cargando horario existente...
+                <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" /> Cargando información de horarios...
             </CardContent>
           )}
           {!isLoadingSchedule && (
