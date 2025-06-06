@@ -2,28 +2,33 @@
 "use client";
 
 import PageHeader from '@/components/common/page-header';
-import ScheduleView from '@/components/schedule/schedule-view';
 import ShiftGeneratorForm from '@/components/schedule/shift-generator-form';
+import InteractiveScheduleGrid from '@/components/schedule/InteractiveScheduleGrid';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { Shift, Employee, Service } from '@/lib/types';
-import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
-import React from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getShifts, addShift } from '@/lib/firebase/shifts';
+import type { Employee, Service, MonthlySchedule } from '@/lib/types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEmployees } from '@/lib/firebase/employees';
 import { getServices } from '@/lib/firebase/services';
-import { Loader2 } from 'lucide-react';
+import { getActiveMonthlySchedule } from '@/lib/firebase/monthlySchedules';
+import { Loader2, CalendarSearch, AlertTriangle, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useToast } from '@/hooks/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+const currentYear = new Date().getFullYear();
+const scheduleYears = Array.from({ length: 5 }, (_, i) => (currentYear - 2 + i).toString());
+const scheduleMonths = Array.from({ length: 12 }, (_, i) => ({
+  value: (i + 1).toString(),
+  label: format(new Date(currentYear, i), 'MMMM', { locale: es }),
+}));
 
 export default function SchedulePage() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const { data: shifts = [], isLoading: isLoadingShifts, error: errorShifts } = useQuery<Shift[]>({
-    queryKey: ['shifts'],
-    queryFn: getShifts,
-  });
+  const [selectedYearView, setSelectedYearView] = useState<string>(currentYear.toString());
+  const [selectedMonthView, setSelectedMonthView] = useState<string>((new Date().getMonth() + 1).toString());
+  const [selectedServiceIdView, setSelectedServiceIdView] = useState<string | undefined>(undefined);
+  
   const { data: employees = [], isLoading: isLoadingEmployees, error: errorEmployees } = useQuery<Employee[]>({
     queryKey: ['employees'],
     queryFn: getEmployees,
@@ -33,89 +38,34 @@ export default function SchedulePage() {
     queryFn: getServices,
   });
 
-  const addShiftMutation = useMutation({
-    mutationFn: (newShift: Omit<Shift, 'id'>) => addShift(newShift),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['shifts'] });
-      // Toast individual por turno guardado puede ser mucho, un resumen al final es mejor
+  // Set default service for view once services are loaded
+  useEffect(() => {
+    if (services.length > 0 && !selectedServiceIdView) {
+      setSelectedServiceIdView(services[0].id);
+    }
+  }, [services, selectedServiceIdView]);
+
+  const { 
+    data: viewableSchedule, 
+    isLoading: isLoadingViewableSchedule, 
+    error: errorViewableSchedule 
+  } = useQuery<MonthlySchedule | null>({
+    queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView],
+    queryFn: () => {
+      if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) {
+        return Promise.resolve(null); // Or throw an error if selection is mandatory
+      }
+      return getActiveMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
     },
-    onError: (err: Error, variables) => {
-      console.error(`Error guardando turno para ${variables.employeeId} en ${variables.date}: ${err.message}`);
-      // El toast de error individual también podría ser verboso.
-    },
+    enabled: !!selectedServiceIdView && !!selectedYearView && !!selectedMonthView,
   });
 
-  const handleSaveGeneratedShifts = async (aiShifts: AIShift[]): Promise<{ successCount: number; errorCount: number }> => {
-    let successCount = 0;
-    let errorCount = 0;
+  const selectedServiceForView = useMemo(() => {
+    return services.find(s => s.id === selectedServiceIdView);
+  }, [selectedServiceIdView, services]);
 
-    toast({
-      title: "Procesando Turnos...",
-      description: `Intentando guardar ${aiShifts.length} turnos generados.`,
-    });
-
-    for (const aiShift of aiShifts) {
-      const employee = employees.find(e => e.name.toLowerCase() === aiShift.employeeName.toLowerCase());
-      const service = services.find(s => s.name.toLowerCase() === aiShift.serviceName.toLowerCase());
-
-      if (!employee) {
-        console.warn(`Empleado "${aiShift.employeeName}" no encontrado. Omitiendo turno.`);
-        errorCount++;
-        continue;
-      }
-      if (!service) {
-        console.warn(`Servicio "${aiShift.serviceName}" no encontrado. Omitiendo turno.`);
-        errorCount++;
-        continue;
-      }
-
-      const newShift: Omit<Shift, 'id'> = {
-        employeeId: employee.id,
-        serviceId: service.id,
-        date: aiShift.date, // Asegúrate que la IA devuelva YYYY-MM-DD
-        startTime: aiShift.startTime, // Asegúrate que la IA devuelva HH:MM
-        endTime: aiShift.endTime,   // Asegúrate que la IA devuelva HH:MM
-        notes: aiShift.notes || `Generado por IA el ${new Date().toLocaleDateString()}`,
-      };
-
-      try {
-        await addShiftMutation.mutateAsync(newShift);
-        successCount++;
-      } catch (e) {
-        errorCount++;
-        // El error ya se loguea en onError de la mutación
-      }
-    }
-
-    if (successCount > 0) {
-      toast({
-        title: "Turnos Guardados",
-        description: `${successCount} de ${aiShifts.length} turnos generados fueron guardados exitosamente.`,
-      });
-    }
-    if (errorCount > 0) {
-      toast({
-        variant: "destructive",
-        title: "Error al Guardar Turnos",
-        description: `${errorCount} turnos no pudieron ser guardados. Revise la consola para más detalles (empleados/servicios no encontrados o errores de guardado).`,
-        duration: 7000,
-      });
-    }
-    if (successCount === 0 && errorCount === 0 && aiShifts.length > 0) {
-        toast({
-            variant: "default",
-            title: "Sin cambios",
-            description: "No se procesaron nuevos turnos para guardar.",
-        });
-    }
-    
-    queryClient.invalidateQueries({ queryKey: ['shifts'] }); // Invalida una vez después del lote
-    return { successCount, errorCount };
-  };
-
-
-  const isLoading = isLoadingShifts || isLoadingEmployees || isLoadingServices;
-  const error = errorShifts || errorEmployees || errorServices;
+  const isLoading = isLoadingEmployees || isLoadingServices;
+  const dataError = errorEmployees || errorServices;
 
   if (isLoading) {
     return (
@@ -125,12 +75,13 @@ export default function SchedulePage() {
     );
   }
 
-  if (error) {
+  if (dataError) {
     return (
       <div className="container mx-auto">
         <Alert variant="destructive">
+          <AlertTriangle className="h-5 w-5 mr-2"/>
           <AlertTitle>Error al Cargar Datos del Horario</AlertTitle>
-          <AlertDescription>{error.message}</AlertDescription>
+          <AlertDescription>{dataError.message}</AlertDescription>
         </Alert>
       </div>
     );
@@ -140,25 +91,91 @@ export default function SchedulePage() {
     <div className="container mx-auto">
       <PageHeader
         title="Horario de Turnos"
-        description="Vea los horarios actuales y genere nuevos usando IA. Los turnos generados se pueden guardar."
+        description="Vea los horarios activos y genere nuevos usando el algoritmo. Los horarios generados y modificados se pueden guardar."
       />
       <Tabs defaultValue="view-schedule" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:w-1/2">
-          <TabsTrigger value="view-schedule">Ver Horario</TabsTrigger>
-          <TabsTrigger value="generate-shifts">Generar Turnos</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 md:w-1/2 mb-6">
+          <TabsTrigger value="view-schedule">Ver Horario Activo</TabsTrigger>
+          <TabsTrigger value="generate-shifts">Generar/Editar Horarios</TabsTrigger>
         </TabsList>
+        
         <TabsContent value="view-schedule" className="mt-6">
-          <ScheduleView 
-            shifts={shifts} 
-            employees={employees} 
-            services={services} 
-          />
+          <div className="mb-6 p-4 border rounded-lg bg-card shadow">
+            <h3 className="text-lg font-semibold mb-3 flex items-center">
+              <CalendarSearch className="mr-2 h-5 w-5 text-primary"/>
+              Seleccionar Horario para Visualizar
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Select value={selectedServiceIdView} onValueChange={setSelectedServiceIdView}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar Servicio" /></SelectTrigger>
+                <SelectContent>
+                  {services.map(service => (
+                    <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedMonthView} onValueChange={setSelectedMonthView}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar Mes" /></SelectTrigger>
+                <SelectContent>
+                  {scheduleMonths.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedYearView} onValueChange={setSelectedYearView}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar Año" /></SelectTrigger>
+                <SelectContent>
+                  {scheduleYears.map(y => (<SelectItem key={y} value={y}>{y}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {isLoadingViewableSchedule && (
+            <div className="flex justify-center items-center py-10">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <p className="ml-3 text-muted-foreground">Cargando horario...</p>
+            </div>
+          )}
+          {errorViewableSchedule && (
+             <Alert variant="destructive">
+               <AlertTriangle className="h-5 w-5 mr-2"/>
+               <AlertTitle>Error al Cargar Horario</AlertTitle>
+               <AlertDescription>{(errorViewableSchedule as Error).message || "No se pudo cargar el horario seleccionado."}</AlertDescription>
+             </Alert>
+          )}
+          {!isLoadingViewableSchedule && !errorViewableSchedule && selectedServiceIdView && (
+            viewableSchedule ? (
+              <InteractiveScheduleGrid
+                initialShifts={viewableSchedule.shifts}
+                allEmployees={employees}
+                targetService={selectedServiceForView}
+                month={selectedMonthView}
+                year={selectedYearView}
+                isReadOnly={true}
+              />
+            ) : (
+              <Alert>
+                <Info className="h-5 w-5 mr-2"/>
+                <AlertTitle>No se encontró un horario activo</AlertTitle>
+                <AlertDescription>
+                  No hay un horario activo para {selectedServiceForView?.name || 'el servicio seleccionado'} en {scheduleMonths.find(m => m.value === selectedMonthView)?.label || ''} / {selectedYearView}. 
+                  Puede generar uno en la pestaña "Generar/Editar Horarios".
+                </AlertDescription>
+              </Alert>
+            )
+          )}
+          {!isLoadingViewableSchedule && !errorViewableSchedule && !selectedServiceIdView && (
+             <Alert variant="default">
+                <Info className="h-5 w-5 mr-2"/>
+                <AlertTitle>Seleccione un Servicio</AlertTitle>
+                <AlertDescription>Por favor, elija un servicio, mes y año para ver el horario activo.</AlertDescription>
+             </Alert>
+          )}
         </TabsContent>
+
         <TabsContent value="generate-shifts" className="mt-6">
           <ShiftGeneratorForm 
-            onSaveShifts={handleSaveGeneratedShifts} 
-            allEmployees={employees} // Pasar el array completo
-            allServices={services}   // Pasar el array completo
+            allEmployees={employees} 
+            allServices={services}   
           />
         </TabsContent>
       </Tabs>

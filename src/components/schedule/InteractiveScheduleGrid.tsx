@@ -15,26 +15,22 @@ import { ChevronLeft } from 'lucide-react';
 import { SHIFT_OPTIONS, type GridShiftType, type ShiftOption } from '@/lib/constants/schedule-constants';
 
 
-// Helper para mapear un AIShift completo a un GridShiftType para visualización
 export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined): GridShiftType {
   if (!aiShift) return '';
 
   const note = aiShift.notes?.toUpperCase();
-  // Primero chequear notas específicas para D, LAO, LM, C
+
   if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO')) return 'D';
   if (note === 'C' || note === 'C (FRANCO COMP.)' || note?.includes('FRANCO COMP')) return 'C';
   if (note?.startsWith('LAO')) return 'LAO';
   if (note?.startsWith('LM')) return 'LM';
 
-  // Luego, coincidencia basada en la hora de inicio para M, T, N
   if (aiShift.startTime) {
     if (aiShift.startTime.startsWith('07:') || aiShift.startTime.startsWith('08:')) return 'M';
     if (aiShift.startTime.startsWith('14:') || aiShift.startTime.startsWith('15:')) return 'T';
     if (aiShift.startTime.startsWith('22:') || aiShift.startTime.startsWith('23:')) return 'N';
   }
   
-  // Si tiene horas pero no coincide con M, T, N por hora, y no es una nota especial,
-  // podríamos revisar si la nota incluye M, T, N (como fallback)
   if (aiShift.startTime && aiShift.endTime) {
     if (note?.includes('MAÑANA') || note?.includes('(M)')) return 'M';
     if (note?.includes('TARDE') || note?.includes('(T)')) return 'T';
@@ -49,10 +45,11 @@ interface InteractiveScheduleGridProps {
   initialShifts: AIShift[];
   allEmployees: Employee[];
   targetService: Service | undefined;
-  month: string; // "1" a "12"
-  year: string; // "2024", "2025", etc.
-  onShiftsChange: (updatedShifts: AIShift[]) => void;
-  onBackToConfig: () => void;
+  month: string; 
+  year: string; 
+  onShiftsChange?: (updatedShifts: AIShift[]) => void;
+  onBackToConfig?: () => void;
+  isReadOnly?: boolean;
 }
 
 export default function InteractiveScheduleGrid({
@@ -63,15 +60,26 @@ export default function InteractiveScheduleGrid({
   year,
   onShiftsChange,
   onBackToConfig,
+  isReadOnly = false,
 }: InteractiveScheduleGridProps) {
   const [editableShifts, setEditableShifts] = useState<AIShift[]>([...initialShifts]);
 
   useEffect(() => {
+    // Ensure editableShifts gets updated if initialShifts prop changes from parent
+    // This is important if the parent component re-fetches or re-generates shifts.
     setEditableShifts([...initialShifts]);
   }, [initialShifts]);
 
+
   const monthDate = useMemo(() => {
-    return parse(`${year}-${month}-01`, 'yyyy-M-dd', new Date());
+    // Ensure month is parsed correctly (e.g., "1" for January, "12" for December)
+    const monthIndex = parseInt(month, 10) -1;
+    if (isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+        // Handle invalid month, e.g., return current date or throw error
+        console.error("Invalid month provided to InteractiveScheduleGrid:", month);
+        return new Date(); // Fallback
+    }
+    return new Date(parseInt(year), monthIndex, 1);
   }, [month, year]);
 
   const daysInMonth = useMemo(() => getDaysInMonth(monthDate), [monthDate]);
@@ -82,21 +90,31 @@ export default function InteractiveScheduleGrid({
       const date = new Date(parseInt(year), parseInt(month) - 1, day);
       return {
         dayNumber: day,
-        shortName: format(date, 'eee', { locale: es }), // Usar 'eee' para abreviatura de 3 letras
+        shortName: format(date, 'eee', { locale: es }), 
       };
     });
   }, [daysInMonth, month, year]);
 
   const relevantEmployeeNames = useMemo(() => {
-    const namesFromShifts = new Set(editableShifts.map(s => s.employeeName));
+    const names = new Set<string>();
+    // Add names from the current set of shifts being displayed/edited
+    editableShifts.forEach(s => names.add(s.employeeName));
+    
+    // If a target service is specified, ensure all employees assigned to that service are included,
+    // even if they don't have shifts yet in the current `editableShifts`.
     if (targetService) {
         allEmployees.forEach(emp => {
             if (emp.serviceIds.includes(targetService.id)) {
-                namesFromShifts.add(emp.name);
+                names.add(emp.name);
             }
         });
+    } else if (editableShifts.length === 0 && allEmployees.length > 0) {
+        // If no target service and no initial shifts, but we have allEmployees,
+        // it implies we might be in a state where we want to show all employees (e.g. for manual creation on empty grid)
+        // However, without a targetService, it's hard to filter. This case might need refinement based on usage.
+        // For now, if targetService is undefined, only employees from initialShifts are guaranteed.
     }
-    return Array.from(namesFromShifts).sort((a,b) => a.localeCompare(b));
+    return Array.from(names).sort((a,b) => a.localeCompare(b));
   }, [editableShifts, allEmployees, targetService]);
 
 
@@ -106,9 +124,17 @@ export default function InteractiveScheduleGrid({
 
     editableShifts.forEach(shift => {
       if (!shift.date || !shift.employeeName) return; 
-      const shiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
-      if (isValid(shiftDate) && format(shiftDate, 'M') === month && format(shiftDate, 'yyyy') === year) {
-        const dayOfMonth = getDate(shiftDate);
+      // Ensure shift.date is valid before parsing
+      const parsedShiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
+      if (!isValid(parsedShiftDate)) return;
+
+      // Ensure month and year from props are valid before formatting them for comparison
+      const currentDisplayMonth = parseInt(month, 10);
+      const currentDisplayYear = parseInt(year, 10);
+      if (isNaN(currentDisplayMonth) || isNaN(currentDisplayYear)) return;
+
+      if (format(parsedShiftDate, 'M') === month && format(parsedShiftDate, 'yyyy') === year) {
+        const dayOfMonth = getDate(parsedShiftDate);
         if (!data[shift.employeeName]) {
           data[shift.employeeName] = {}; 
         }
@@ -119,6 +145,8 @@ export default function InteractiveScheduleGrid({
   }, [editableShifts, relevantEmployeeNames, month, year]);
 
   const handleShiftChange = (employeeName: string, day: number, selectedShiftValue: GridShiftType) => {
+    if (isReadOnly || !onShiftsChange) return;
+
     const newShifts = [...editableShifts];
     const shiftDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const existingShiftIndex = newShifts.findIndex(
@@ -141,8 +169,8 @@ export default function InteractiveScheduleGrid({
         startTime: selectedOption.startTime || '', 
         endTime: selectedOption.endTime || '',   
         notes: (selectedOption.value === 'D' || selectedOption.value === 'C' || selectedOption.value === 'LAO' || selectedOption.value === 'LM') 
-                ? selectedOption.label // Para D, C, LAO, LM usar la etiqueta como nota
-                : `Turno ${selectedOption.label}`, // Para M, T, N
+                ? selectedOption.label 
+                : `Turno ${selectedOption.label}`, 
       };
 
       if (existingShiftIndex !== -1) {
@@ -188,13 +216,15 @@ export default function InteractiveScheduleGrid({
     return (
          <Card className="mt-4">
             <CardHeader>
-                <CardTitle>Horario Generado</CardTitle>
+                <CardTitle>Horario</CardTitle>
             </CardHeader>
             <CardContent>
-                <p>No se han generado turnos o no hay un servicio específico seleccionado para mostrar. Vuelva a la configuración y genere un horario.</p>
-                 <Button onClick={onBackToConfig} variant="outline" className="mt-4">
-                    <ChevronLeft className="mr-2 h-4 w-4" /> Volver a Configuración
-                </Button>
+                <p>No se han cargado o generado turnos, o no hay un servicio específico seleccionado para mostrar.</p>
+                 {!isReadOnly && onBackToConfig && (
+                    <Button onClick={onBackToConfig} variant="outline" className="mt-4">
+                        <ChevronLeft className="mr-2 h-4 w-4" /> Volver a Configuración
+                    </Button>
+                 )}
             </CardContent>
          </Card>
     );
@@ -208,15 +238,24 @@ export default function InteractiveScheduleGrid({
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
             <CardTitle className="font-headline">
-                Horario Interactivo: {targetService?.name || "Turnos Generados"} - {monthName} {currentYearStr}
+                Horario: {targetService?.name || "Turnos"} - {monthName} {currentYearStr}
             </CardTitle>
-            <p className="text-sm text-muted-foreground">
-                Puede editar los turnos manualmente. Los cambios se reflejan para guardar. Use '-' para vaciar una celda.
-            </p>
+            {!isReadOnly && (
+              <p className="text-sm text-muted-foreground">
+                  Puede editar los turnos manualmente. Los cambios se reflejan para guardar. Use '-' para vaciar una celda.
+              </p>
+            )}
+             {isReadOnly && (
+              <p className="text-sm text-muted-foreground">
+                  Vista de solo lectura del horario activo.
+              </p>
+            )}
         </div>
-        <Button onClick={onBackToConfig} variant="outline">
-          <ChevronLeft className="mr-2 h-4 w-4" /> Volver a Configuración
-        </Button>
+        {!isReadOnly && onBackToConfig && (
+          <Button onClick={onBackToConfig} variant="outline">
+            <ChevronLeft className="mr-2 h-4 w-4" /> Volver a Configuración
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         {relevantEmployeeNames.length === 0 && (
@@ -248,6 +287,7 @@ export default function InteractiveScheduleGrid({
                         <Select
                           value={currentShiftType} 
                           onValueChange={(value) => handleShiftChange(employeeName, header.dayNumber, value as GridShiftType)}
+                          disabled={isReadOnly}
                         >
                           <SelectTrigger className="h-8 w-full text-xs px-2">
                             <SelectValue placeholder="-" />
