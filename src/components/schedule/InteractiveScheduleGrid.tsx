@@ -65,19 +65,15 @@ export default function InteractiveScheduleGrid({
   const [editableShifts, setEditableShifts] = useState<AIShift[]>([...initialShifts]);
 
   useEffect(() => {
-    // Ensure editableShifts gets updated if initialShifts prop changes from parent
-    // This is important if the parent component re-fetches or re-generates shifts.
     setEditableShifts([...initialShifts]);
   }, [initialShifts]);
 
 
   const monthDate = useMemo(() => {
-    // Ensure month is parsed correctly (e.g., "1" for January, "12" for December)
     const monthIndex = parseInt(month, 10) -1;
     if (isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) {
-        // Handle invalid month, e.g., return current date or throw error
         console.error("Invalid month provided to InteractiveScheduleGrid:", month);
-        return new Date(); // Fallback
+        return new Date(); 
     }
     return new Date(parseInt(year), monthIndex, 1);
   }, [month, year]);
@@ -97,22 +93,14 @@ export default function InteractiveScheduleGrid({
 
   const relevantEmployeeNames = useMemo(() => {
     const names = new Set<string>();
-    // Add names from the current set of shifts being displayed/edited
     editableShifts.forEach(s => names.add(s.employeeName));
     
-    // If a target service is specified, ensure all employees assigned to that service are included,
-    // even if they don't have shifts yet in the current `editableShifts`.
     if (targetService) {
         allEmployees.forEach(emp => {
             if (emp.serviceIds.includes(targetService.id)) {
                 names.add(emp.name);
             }
         });
-    } else if (editableShifts.length === 0 && allEmployees.length > 0) {
-        // If no target service and no initial shifts, but we have allEmployees,
-        // it implies we might be in a state where we want to show all employees (e.g. for manual creation on empty grid)
-        // However, without a targetService, it's hard to filter. This case might need refinement based on usage.
-        // For now, if targetService is undefined, only employees from initialShifts are guaranteed.
     }
     return Array.from(names).sort((a,b) => a.localeCompare(b));
   }, [editableShifts, allEmployees, targetService]);
@@ -124,11 +112,9 @@ export default function InteractiveScheduleGrid({
 
     editableShifts.forEach(shift => {
       if (!shift.date || !shift.employeeName) return; 
-      // Ensure shift.date is valid before parsing
       const parsedShiftDate = parse(shift.date, 'yyyy-MM-dd', new Date());
       if (!isValid(parsedShiftDate)) return;
 
-      // Ensure month and year from props are valid before formatting them for comparison
       const currentDisplayMonth = parseInt(month, 10);
       const currentDisplayYear = parseInt(year, 10);
       if (isNaN(currentDisplayMonth) || isNaN(currentDisplayYear)) return;
@@ -143,6 +129,27 @@ export default function InteractiveScheduleGrid({
     });
     return data;
   }, [editableShifts, relevantEmployeeNames, month, year]);
+
+  const employeeStats = useMemo(() => {
+    const stats: { [employeeName: string]: { totalD: number; totalWork: number; totalAssignments: number } } = {};
+    relevantEmployeeNames.forEach(name => {
+      stats[name] = { totalD: 0, totalWork: 0, totalAssignments: 0 };
+      for (let day = 1; day <= daysInMonth; day++) {
+        const shift = gridData[name]?.[day];
+        if (shift) {
+          stats[name].totalAssignments++;
+          const shiftType = getGridShiftTypeFromAIShift(shift);
+          if (shiftType === 'D') {
+            stats[name].totalD++;
+          } else if (['M', 'T', 'N'].includes(shiftType)) {
+            stats[name].totalWork++;
+          }
+        }
+      }
+    });
+    return stats;
+  }, [gridData, relevantEmployeeNames, daysInMonth]);
+
 
   const handleShiftChange = (employeeName: string, day: number, selectedShiftValue: GridShiftType) => {
     if (isReadOnly || !onShiftsChange) return;
@@ -179,8 +186,8 @@ export default function InteractiveScheduleGrid({
         newShifts.push(newOrUpdatedShift);
       }
     }
-    setEditableShifts(newShifts);
-    onShiftsChange(newShifts);
+    setEditableShifts(newShifts); // Update local state for immediate UI feedback
+    onShiftsChange(newShifts); // Propagate changes up
   };
 
   const dailyTotals = useMemo(() => {
@@ -232,6 +239,8 @@ export default function InteractiveScheduleGrid({
   
   const monthName = format(monthDate, 'MMMM', { locale: es });
   const currentYearStr = format(monthDate, 'yyyy');
+  const employeeColumnWidth = "180px";
+  const totalDColumnWidth = "80px";
 
   return (
     <Card className="mt-6 w-full">
@@ -266,7 +275,14 @@ export default function InteractiveScheduleGrid({
           <Table className="min-w-max">
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 bg-card z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">Empleado</TableHead>
+                <TableHead 
+                  className="sticky left-0 bg-card z-20 truncate"
+                  style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
+                >Empleado</TableHead>
+                <TableHead 
+                  className="sticky bg-card z-20 text-center"
+                  style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
+                >Total D</TableHead>
                 {dayHeaders.map(header => (
                   <TableHead key={header.dayNumber} className="text-center w-[70px] min-w-[70px]">
                     <div>{header.dayNumber}</div>
@@ -278,7 +294,17 @@ export default function InteractiveScheduleGrid({
             <TableBody>
               {relevantEmployeeNames.map(employeeName => (
                 <TableRow key={employeeName}>
-                  <TableCell className="sticky left-0 bg-card z-10 font-medium w-[180px] min-w-[180px] max-w-[180px] truncate" title={employeeName}>{employeeName}</TableCell>
+                  <TableCell 
+                    className="sticky left-0 bg-card z-10 font-medium truncate" 
+                    title={employeeName}
+                    style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
+                  >{employeeName}</TableCell>
+                  <TableCell 
+                    className="sticky bg-card z-10 font-medium text-center"
+                    style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
+                  >
+                    {employeeStats[employeeName]?.totalD || 0}
+                  </TableCell>
                   {dayHeaders.map(header => {
                     const shift = gridData[employeeName]?.[header.dayNumber];
                     const currentShiftType = getGridShiftTypeFromAIShift(shift);
@@ -306,21 +332,49 @@ export default function InteractiveScheduleGrid({
                 </TableRow>
               ))}
               <TableRow className="bg-muted/50 font-semibold">
-                <TableCell className="sticky left-0 bg-muted/50 z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">Total Mañana (M)</TableCell>
+                <TableCell 
+                  className="sticky left-0 bg-muted/50 z-10 truncate"
+                  style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
+                >Total Mañana (M)</TableCell>
+                 <TableCell 
+                    className="sticky bg-muted/50 z-10"
+                    style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
+                  ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-m-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].M}</TableCell>)}
               </TableRow>
               <TableRow className="bg-muted/50 font-semibold">
-                <TableCell className="sticky left-0 bg-muted/50 z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">Total Tarde (T)</TableCell>
+                <TableCell 
+                  className="sticky left-0 bg-muted/50 z-10 truncate"
+                   style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
+                >Total Tarde (T)</TableCell>
+                 <TableCell 
+                    className="sticky bg-muted/50 z-10"
+                    style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
+                  ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-t-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].T}</TableCell>)}
               </TableRow>
               {targetService?.enableNightShift && (
                 <TableRow className="bg-muted/50 font-semibold">
-                  <TableCell className="sticky left-0 bg-muted/50 z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">Total Noche (N)</TableCell>
+                  <TableCell 
+                    className="sticky left-0 bg-muted/50 z-10 truncate"
+                    style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
+                  >Total Noche (N)</TableCell>
+                   <TableCell 
+                    className="sticky bg-muted/50 z-10"
+                    style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
+                  ></TableCell>
                   {dayHeaders.map(header => <TableCell key={`total-n-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].N}</TableCell>)}
                 </TableRow>
               )}
               <TableRow className="bg-muted/50 font-bold text-base">
-                <TableCell className="sticky left-0 bg-muted/50 z-10 w-[180px] min-w-[180px] max-w-[180px] truncate">TOTAL PERSONAL</TableCell>
+                <TableCell 
+                  className="sticky left-0 bg-muted/50 z-10 truncate"
+                  style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
+                >TOTAL PERSONAL</TableCell>
+                 <TableCell 
+                    className="sticky bg-muted/50 z-10"
+                    style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
+                  ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-staff-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].totalStaff}</TableCell>)}
               </TableRow>
             </TableBody>
@@ -332,3 +386,4 @@ export default function InteractiveScheduleGrid({
     </Card>
   );
 }
+
