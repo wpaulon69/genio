@@ -10,12 +10,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, Archive } from 'lucide-react';
+import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, Archive, BadgeAlert, BadgeCheck, CircleAlert, CircleHelp } from 'lucide-react';
 import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-scheduler';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import type { Employee, Service, Holiday, MonthlySchedule } from '@/lib/types';
+import type { Employee, Service, Holiday, MonthlySchedule, ScheduleViolation } from '@/lib/types';
 import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate, startOfDay, endOfDay, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid';
@@ -23,6 +23,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getHolidays } from '@/lib/firebase/holidays';
 import { getActiveMonthlySchedule, saveNewActiveSchedule, updateExistingActiveSchedule, generateScheduleKey } from '@/lib/firebase/monthlySchedules';
 import { useToast } from '@/hooks/use-toast';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Badge } from '@/components/ui/badge';
 
 const shiftGenerationConfigSchema = z.object({
   serviceId: z.string().min(1, "Debe seleccionar un servicio."),
@@ -55,6 +57,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const [generatedResponseText, setGeneratedResponseText] = useState<string | null>(null);
   const [algorithmGeneratedShifts, setAlgorithmGeneratedShifts] = useState<AIShift[] | null>(null);
   const [editableShifts, setEditableShifts] = useState<AIShift[] | null>(null);
+  const [generatedScore, setGeneratedScore] = useState<number | null>(null);
+  const [generatedViolations, setGeneratedViolations] = useState<ScheduleViolation[] | null>(null);
   
   const [error, setError] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(false);
@@ -99,24 +103,25 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setAlgorithmGeneratedShifts(null);
         setEditableShifts(null);
         setGeneratedResponseText(null);
+        setGeneratedScore(null);
+        setGeneratedViolations(null);
         setShowGrid(false);
         setUserChoiceForExisting(null);
         setCurrentLoadedSchedule(null);
         setPreviousMonthSchedule(null);
         
         try {
-          // Load current month's schedule
           const existingSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
           setCurrentLoadedSchedule(existingSchedule);
+          setGeneratedScore(existingSchedule?.score ?? null);
+          setGeneratedViolations(existingSchedule?.violations ?? null);
 
-          // Load previous month's schedule
           const currentMonthDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
           const prevMonthDate = subMonths(currentMonthDate, 1);
           const prevMonthYearStr = format(prevMonthDate, 'yyyy');
-          const prevMonthMonthStr = format(prevMonthDate, 'M'); // 'M' for month 1-12
+          const prevMonthMonthStr = format(prevMonthDate, 'M');
           const prevSchedule = await getActiveMonthlySchedule(prevMonthYearStr, prevMonthMonthStr, selectedServiceId);
           setPreviousMonthSchedule(prevSchedule);
-
 
           if (existingSchedule) {
             setShowInitialChoiceDialog(true);
@@ -244,6 +249,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setGeneratedResponseText(null);
     setAlgorithmGeneratedShifts(null);
     setEditableShifts(null);
+    setGeneratedScore(null);
+    setGeneratedViolations(null);
     setError(null);
     setShowGrid(false); 
     try {
@@ -256,11 +263,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         previousMonthSchedule?.shifts || null
       );
       setGeneratedResponseText(result.responseText);
+      setGeneratedScore(result.score);
+      setGeneratedViolations(result.violations);
+
       if (result.generatedShifts && result.generatedShifts.length > 0) {
         setAlgorithmGeneratedShifts(result.generatedShifts);
         setEditableShifts(result.generatedShifts); 
       } else if (!result.responseText?.toLowerCase().includes("error") && (!result.generatedShifts || result.generatedShifts.length === 0)) {
-        setError("El algoritmo generó una respuesta pero no se encontraron turnos estructurados. Revise el texto de respuesta.");
+        setError("El algoritmo generó una respuesta pero no se encontraron turnos estructurados. Revise el texto de respuesta y el informe de violaciones.");
       } else if (result.responseText?.toLowerCase().includes("error") || (result.generatedShifts && result.generatedShifts.length === 0)) {
          setError(`Respuesta del algoritmo: ${result.responseText}`);
       }
@@ -284,8 +294,12 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
     try {
         let savedOrUpdatedSchedule: MonthlySchedule | null = null;
+        const scoreToSave = generatedScore ?? currentLoadedSchedule?.score ?? 0;
+        const violationsToSave = generatedViolations ?? currentLoadedSchedule?.violations ?? [];
+        const responseTextToSave = generatedResponseText ?? currentLoadedSchedule?.responseText ?? "Horario guardado.";
+
         if (action === 'update' && currentLoadedSchedule?.id && userChoiceForExisting === 'modify') {
-            await updateExistingActiveSchedule(currentLoadedSchedule.id, editableShifts, generatedResponseText || currentLoadedSchedule.responseText);
+            await updateExistingActiveSchedule(currentLoadedSchedule.id, editableShifts, responseTextToSave, scoreToSave, violationsToSave);
             toast({ title: "Horario Actualizado", description: "El horario activo ha sido actualizado." });
             const updatedSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
             savedOrUpdatedSchedule = updatedSchedule;
@@ -297,7 +311,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                 serviceId: selectedServiceId,
                 serviceName: selectedService.name,
                 shifts: editableShifts,
-                responseText: generatedResponseText || "Horario guardado.",
+                responseText: responseTextToSave,
+                score: scoreToSave,
+                violations: violationsToSave,
             };
             const newActive = await saveNewActiveSchedule(scheduleData, currentLoadedSchedule?.id);
             savedOrUpdatedSchedule = newActive;
@@ -305,9 +321,11 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         }
         
         setCurrentLoadedSchedule(savedOrUpdatedSchedule);
-        if(savedOrUpdatedSchedule?.shifts) {
-            setEditableShifts([...savedOrUpdatedSchedule.shifts]); 
-        }
+        if(savedOrUpdatedSchedule?.shifts) setEditableShifts([...savedOrUpdatedSchedule.shifts]);
+        setGeneratedScore(savedOrUpdatedSchedule?.score ?? null);
+        setGeneratedViolations(savedOrUpdatedSchedule?.violations ?? null);
+        setGeneratedResponseText(savedOrUpdatedSchedule?.responseText ?? null);
+
         queryClient.invalidateQueries({ queryKey: ['monthlySchedule', selectedYear, selectedMonth, selectedServiceId] });
         setShowGrid(true); 
     } catch (e) {
@@ -318,8 +336,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     } finally {
         setIsSaving(false);
     }
-};
-
+  };
 
   const handleSaveGeneratedShiftsClick = () => {
     if (!editableShifts || editableShifts.length === 0) {
@@ -338,9 +355,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setShowSaveDialog(true);
   };
 
-
   const handleBackToConfig = () => {
     setShowGrid(false);
+    // No limpiar generatedScore/Violations aquí, para que sigan visibles si vuelve de la grilla
   };
 
   const handleInitialChoice = (choice: 'modify' | 'generate_new') => {
@@ -349,16 +366,83 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     if (choice === 'modify' && currentLoadedSchedule) {
         setEditableShifts(currentLoadedSchedule.shifts ? [...currentLoadedSchedule.shifts] : []);
         setGeneratedResponseText(currentLoadedSchedule.responseText || "");
+        setGeneratedScore(currentLoadedSchedule.score ?? null);
+        setGeneratedViolations(currentLoadedSchedule.violations ?? null);
         setShowGrid(true);
     } else { 
         setEditableShifts(null);
         setAlgorithmGeneratedShifts(null);
         setGeneratedResponseText(null);
+        setGeneratedScore(null);
+        setGeneratedViolations(null);
         setShowGrid(false);
     }
   };
 
   const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingSchedule;
+
+  const renderScheduleEvaluation = () => {
+    if (isLoadingSchedule || (!currentLoadedSchedule && !algorithmGeneratedShifts && !generatedScore)) return null;
+
+    const scoreToShow = generatedScore ?? currentLoadedSchedule?.score;
+    const violationsToShow = generatedViolations ?? currentLoadedSchedule?.violations;
+
+    if (scoreToShow === null && (!violationsToShow || violationsToShow.length === 0)) return null;
+
+    return (
+      <Card className="mt-4 w-full border-dashed">
+        <CardHeader className="pb-2 pt-4">
+          <CardTitle className="text-lg flex items-center">
+            <BadgeCheck className="mr-2 h-5 w-5 text-primary" />
+            Evaluación del Horario
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {scoreToShow !== null && (
+            <p className="text-base font-semibold">
+              Puntuación del Horario: <Badge variant={scoreToShow >= 80 ? "default" : scoreToShow >= 60 ? "secondary" : "destructive"}>{scoreToShow.toFixed(0)} / 100</Badge>
+            </p>
+          )}
+          {violationsToShow && violationsToShow.length > 0 ? (
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="item-1">
+                <AccordionTrigger className="text-base">
+                  Informe de Reglas y Preferencias ({violationsToShow.length} {violationsToShow.length === 1 ? 'incidencia' : 'incidencias'})
+                </AccordionTrigger>
+                <AccordionContent>
+                  <ul className="space-y-2 pt-2 max-h-60 overflow-y-auto">
+                    {violationsToShow.map((v, index) => (
+                      <li key={index} className={`p-2 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700'}`}>
+                        <div className="flex items-start gap-2">
+                          {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 flex-shrink-0" />}
+                          <div>
+                            <span className="font-semibold">{v.severity === 'error' ? 'Error: ' : 'Advertencia: '}</span> {v.rule}
+                            <p className="text-xs opacity-90">
+                              {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
+                              {v.date && <><strong>Fecha:</strong> {v.date} </>}
+                              {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
+                            </p>
+                            <p className="text-sm mt-1">{v.details}</p>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          ) : (
+            <Alert variant="default">
+              <BadgeCheck className="h-4 w-4"/>
+              <AlertTitle>¡Excelente!</AlertTitle>
+              <AlertDescription>No se encontraron incumplimientos de reglas o preferencias en este horario.</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
 
   return (
     <Card className="w-full">
@@ -456,6 +540,10 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
           />
         )
       )}
+      
+      {/* Sección de Evaluación del Horario, siempre visible si hay datos, fuera del if/else de showGrid */}
+      {(showGrid || (algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0) || (currentLoadedSchedule && userChoiceForExisting === null && !showInitialChoiceDialog)) && renderScheduleEvaluation()}
+
 
       {error && (
         <Alert variant="destructive" className="mt-4 mx-6 mb-6">
@@ -552,3 +640,4 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
+
