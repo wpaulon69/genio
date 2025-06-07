@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -70,8 +71,6 @@ const SidebarProvider = React.forwardRef<
     const isMobile = useIsMobile()
     const [openMobile, setOpenMobile] = React.useState(false)
 
-    // This is the internal state of the sidebar.
-    // We use openProp and setOpenProp for control from outside the component.
     const [_open, _setOpen] = React.useState(defaultOpen)
     const open = openProp ?? _open
     const setOpen = React.useCallback(
@@ -82,21 +81,33 @@ const SidebarProvider = React.forwardRef<
         } else {
           _setOpen(openState)
         }
-
-        // This sets the cookie to keep the sidebar state.
         document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
       },
       [setOpenProp, open]
     )
 
-    // Helper to toggle the sidebar.
+    React.useEffect(() => {
+      // Attempt to read cookie for initial state - this part was missing for full cookie persistence
+      // This effect should run once on mount.
+      const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+        ?.split('=')[1];
+      if (cookieValue) {
+        const cookieOpenState = cookieValue === 'true';
+        if (openProp === undefined) { // Only set if not controlled
+          _setOpen(cookieOpenState);
+        }
+      }
+    }, [openProp]);
+
+
     const toggleSidebar = React.useCallback(() => {
       return isMobile
-        ? setOpenMobile((open) => !open)
-        : setOpen((open) => !open)
+        ? setOpenMobile((o) => !o) // Use functional update
+        : setOpen((o) => !o)      // Use functional update
     }, [isMobile, setOpen, setOpenMobile])
 
-    // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
         if (
@@ -112,8 +123,6 @@ const SidebarProvider = React.forwardRef<
       return () => window.removeEventListener("keydown", handleKeyDown)
     }, [toggleSidebar])
 
-    // We add a state so that we can do data-state="expanded" or "collapsed".
-    // This makes it easier to style the sidebar with Tailwind classes.
     const state = open ? "expanded" : "collapsed"
 
     const contextValue = React.useMemo<SidebarContext>(
@@ -176,25 +185,25 @@ const Sidebar = React.forwardRef<
     ref
   ) => {
     const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+    const [hasMounted, setHasMounted] = React.useState(false)
 
-    if (collapsible === "none") {
-      return (
-        <div
-          className={cn(
-            "flex h-full w-[--sidebar-width] flex-col bg-sidebar text-sidebar-foreground",
-            className
-          )}
-          ref={ref}
-          {...props}
-        >
-          {children}
-        </div>
-      )
+    React.useEffect(() => {
+      setHasMounted(true)
+    }, [])
+
+    if (!hasMounted) {
+      // Render nothing or a placeholder on the server and initial client render
+      // This helps prevent hydration mismatches for components that heavily rely on client-side info like `isMobile`
+      // For Sidebar itself, we might want to render a minimal placeholder structure or rely on CSS to hide if truly necessary
+      // Or, ensure its initial state (e.g. desktop) is consistent and then it transitions.
+      // Given Sidebar's complexity, it's better to let it render its default server path initially.
+      // The issue is more likely with specific children like SidebarRail.
     }
 
-    if (isMobile) {
+
+    if (isMobile && hasMounted) { // Only render Sheet on client when isMobile is true
       return (
-        <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
+        <Sheet open={openMobile} onOpenChange={setOpenMobile}>
           <SheetContent
             data-sidebar="sidebar"
             data-mobile="true"
@@ -211,17 +220,21 @@ const Sidebar = React.forwardRef<
         </Sheet>
       )
     }
-
+    
+    // Default to desktop rendering for server and initial client render if !hasMounted or !isMobile
+    // This structure should match what the server would render if isMobile is false.
     return (
       <div
         ref={ref}
-        className="group peer hidden md:block text-sidebar-foreground"
+        className={cn(
+          "group peer text-sidebar-foreground",
+          isMobile && hasMounted ? "hidden" : "hidden md:block" // Hide on mobile client-side, ensure desktop structure for SSR/initial
+        )}
         data-state={state}
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-variant={variant}
         data-side={side}
       >
-        {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
             "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
@@ -234,11 +247,11 @@ const Sidebar = React.forwardRef<
         />
         <div
           className={cn(
-            "duration-200 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
+            "duration-200 fixed inset-y-0 z-10 h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear",
+            isMobile && hasMounted ? "hidden" : "hidden md:flex", // ensure it's flex for desktop
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
-            // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
@@ -289,7 +302,17 @@ const SidebarRail = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<"button">
 >(({ className, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, isMobile } = useSidebar()
+  const [hasMounted, setHasMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setHasMounted(true)
+  }, [])
+
+  if (!hasMounted || isMobile) {
+    // Don't render on server, initial client, or if mobile (where it's controlled by Sheet)
+    return null
+  }
 
   return (
     <button
@@ -300,7 +323,7 @@ const SidebarRail = React.forwardRef<
       onClick={toggleSidebar}
       title="Toggle Sidebar"
       className={cn(
-        "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex",
+        "absolute inset-y-0 z-20 w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex", // sm:flex was there, ensuring it's flex
         "[[data-side=left]_&]:cursor-w-resize [[data-side=right]_&]:cursor-e-resize",
         "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
         "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full group-data-[collapsible=offcanvas]:hover:bg-sidebar",
@@ -761,3 +784,5 @@ export {
   SidebarTrigger,
   useSidebar,
 }
+
+    
