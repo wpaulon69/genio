@@ -201,7 +201,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             if (!assign.startDate) return false;
             const assignmentStartDate = parseISO(assign.startDate);
             const assignmentEndDate = assign.endDate ? parseISO(assign.endDate) : assignmentStartDate;
-            if (!isValid(assignmentStartDate) || !isValid(assignmentEndDate)) return false;
+            if (!isValid(assignmentStartDate) || (assign.endDate && !isValid(assignmentEndDate))) return false;
             
             const currentAssignmentInterval = { 
                 start: startOfDay(assignmentStartDate), 
@@ -357,7 +357,6 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const handleBackToConfig = () => {
     setShowGrid(false);
-    // No limpiar generatedScore/Violations aquí, para que sigan visibles si vuelve de la grilla
   };
 
   const handleInitialChoice = (choice: 'modify' | 'generate_new') => {
@@ -399,9 +398,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         </CardHeader>
         <CardContent className="space-y-3">
           {scoreToShow !== null && (
-            <p className="text-base font-semibold">
+            <div className="text-base font-semibold">
               Puntuación del Horario: <Badge variant={scoreToShow >= 80 ? "default" : scoreToShow >= 60 ? "secondary" : "destructive"}>{scoreToShow.toFixed(0)} / 100</Badge>
-            </p>
+            </div>
           )}
           {violationsToShow && violationsToShow.length > 0 ? (
             <Accordion type="single" collapsible className="w-full">
@@ -541,7 +540,6 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         )
       )}
       
-      {/* Sección de Evaluación del Horario, siempre visible si hay datos, fuera del if/else de showGrid */}
       {(showGrid || (algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0) || (currentLoadedSchedule && userChoiceForExisting === null && !showInitialChoiceDialog)) && renderScheduleEvaluation()}
 
 
