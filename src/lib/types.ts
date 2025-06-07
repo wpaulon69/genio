@@ -13,6 +13,7 @@ export interface ConsecutivenessRules {
   preferredConsecutiveWorkDays: number;
   maxConsecutiveDaysOff: number;
   preferredConsecutiveDaysOff: number;
+  minConsecutiveDaysOffRequiredBeforeWork?: number; // Nuevo: Mínimo descanso antes de volver a trabajar
 }
 
 export interface Service {
@@ -51,6 +52,17 @@ export interface Employee {
   fixedAssignments?: FixedAssignment[];
 }
 
+// AIShift se usa para la salida del generador de IA y la representación en la cuadrícula editable
+export interface AIShift {
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:MM (puede ser vacío para D, LAO, LM, C)
+  endTime: string; // HH:MM (puede ser vacío para D, LAO, LM, C)
+  employeeName: string;
+  serviceName: string;
+  notes?: string; // e.g., "Turno Mañana (M)", "D (Descanso)"
+}
+
+// Shift representa un turno guardado en la BD (podría ser diferente de AIShift si es necesario)
 export interface Shift {
   id: string;
   employeeId: string;
@@ -65,4 +77,30 @@ export interface Holiday {
   id: string;
   date: string; // YYYY-MM-DD
   name: string;
+}
+
+export interface ScheduleViolation {
+  employeeName?: string;
+  date?: string;
+  shiftType?: 'M' | 'T' | 'N' | 'General';
+  rule: string;
+  details: string;
+  severity: 'error' | 'warning';
+}
+
+export interface MonthlySchedule {
+  id: string;
+  scheduleKey: string; // YYYY-MM-ServiceID
+  year: string;
+  month: string;
+  serviceId: string;
+  serviceName: string;
+  shifts: AIShift[];
+  status: 'active' | 'inactive'; // 'active' es la versión actual, 'inactive' son versiones archivadas
+  version: number;
+  responseText?: string;
+  score?: number;
+  violations?: ScheduleViolation[];
+  createdAt: number; // Timestamp milliseconds
+  updatedAt: number; // Timestamp milliseconds
 }
