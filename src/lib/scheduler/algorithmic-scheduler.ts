@@ -271,7 +271,30 @@ export async function generateAlgorithmicSchedule(
     if (staffingNeeds.afternoon > 0) { violations.push({ date: currentDateStrYYYYMMDD, shiftType: 'T', rule: "Falta de Personal", details: `Faltan ${staffingNeeds.afternoon} empleado(s) para Tarde.`, severity: 'error' }); score -= staffingNeeds.afternoon * 5; }
     if (service.enableNightShift && staffingNeeds.night > 0) { violations.push({ date: currentDateStrYYYYMMDD, shiftType: 'N', rule: "Falta de Personal", details: `Faltan ${staffingNeeds.night} empleado(s) para Noche.`, severity: 'error' }); score -= staffingNeeds.night * 5; }
 
-    // 5. Assign rest days to remaining employees
+    // 5. Safeguard: Check if any employee with a fixed WORK shift for today was not processed. This indicates an issue.
+    employeesForService.forEach(emp => {
+        if (!dailyProcessedEmployees.has(emp.id)) {
+            const preferences = emp.preferences;
+            if (preferences?.fixedWeeklyShiftDays && preferences.fixedWeeklyShiftDays.includes(currentDayOfWeekName)) {
+                const fixedTiming = preferences.fixedWeeklyShiftTiming;
+                if (fixedTiming && fixedTiming !== NO_FIXED_TIMING_VALUE && fixedTiming !== REST_DAY_VALUE && fixedTiming.toUpperCase() !== 'D') {
+                    // This employee had a fixed WORK shift but wasn't processed earlier. This is an anomaly.
+                    violations.push({ 
+                        employeeName: emp.name, 
+                        date: currentDateStrYYYYMMDD, 
+                        shiftType: 'General', 
+                        rule: "Error Interno del Algoritmo: Turno fijo no procesado", 
+                        details: `El empleado ${emp.name} tiene un turno de trabajo fijo (${fixedTiming}) para hoy pero no fue procesado en la etapa de turnos fijos. Esto podría indicar un error de configuración o del algoritmo. No se le asignará descanso automático.`, 
+                        severity: 'error' 
+                    });
+                    score -= 20; 
+                    dailyProcessedEmployees.add(emp.id); // Mark as processed to avoid assigning 'D'
+                }
+            }
+        }
+    });
+
+    // 6. Assign rest days to remaining employees
     employeesForService.forEach(emp => {
       const state = employeeStates[emp.id];
       if (!dailyProcessedEmployees.has(emp.id)) { 
@@ -286,7 +309,7 @@ export async function generateAlgorithmicSchedule(
         const lastShiftTypeForState: EmployeeState['lastShiftType'] = isHolidayDay ? 'F' : 'D';
 
         generatedShifts.push({ date: currentDateStrYYYYMMDD, employeeName: emp.name, serviceName: service.name, startTime: '', endTime: '', notes: shiftNote });
-        dailyProcessedEmployees.add(emp.id);
+        dailyProcessedEmployees.add(emp.id); // This might be redundant now but safe
 
         state.consecutiveRestDays = isLastShiftRestType ? state.consecutiveRestDays + 1 : 1;
         state.consecutiveWorkDays = 0;
@@ -294,7 +317,7 @@ export async function generateAlgorithmicSchedule(
 
       } else if (dailyAssignedWorkShifts.has(emp.id)) { // Only for those who worked
         const maxWork = service.consecutivenessRules?.maxConsecutiveWorkDays || 7;
-        if (state.consecutiveWorkDays > maxWork) { // This check is a bit redundant if fixed shifts already check, but good for general work
+        if (state.consecutiveWorkDays > maxWork) { 
             violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: state.lastShiftType as 'M'|'T'|'N' || 'General', rule: "Exceso Días Trabajo Consecutivos", details: `Trabajó ${state.consecutiveWorkDays} días (máx: ${maxWork}).`, severity: 'error' }); score -= 10;
         }
       }
