@@ -25,6 +25,7 @@ import { getActiveMonthlySchedule, saveNewActiveSchedule, updateExistingActiveSc
 import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area'; // Added import
 
 const shiftGenerationConfigSchema = z.object({
   serviceId: z.string().min(1, "Debe seleccionar un servicio."),
@@ -113,7 +114,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         try {
           const existingSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
           setCurrentLoadedSchedule(existingSchedule);
-          setGeneratedScore(existingSchedule?.score ?? null); // Cargar score y violations
+          setGeneratedScore(existingSchedule?.score ?? null); 
           setGeneratedViolations(existingSchedule?.violations ?? null);
 
           const currentMonthDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
@@ -539,7 +540,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             targetService={selectedService}
             month={selectedMonth}
             year={selectedYear}
-            holidays={holidays} // Pasar feriados a la grilla
+            holidays={holidays} 
             onShiftsChange={(updatedShifts) => setEditableShifts(updatedShifts)}
             onBackToConfig={handleBackToConfig}
           />
@@ -644,3 +645,5 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
+
+    
