@@ -113,7 +113,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         try {
           const existingSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
           setCurrentLoadedSchedule(existingSchedule);
-          setGeneratedScore(existingSchedule?.score ?? null);
+          setGeneratedScore(existingSchedule?.score ?? null); // Cargar score y violations
           setGeneratedViolations(existingSchedule?.violations ?? null);
 
           const currentMonthDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
@@ -162,6 +162,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       if (selectedService.consecutivenessRules) {
         info += `- Consecutividad Trabajo: Máx=${selectedService.consecutivenessRules.maxConsecutiveWorkDays}, Pref=${selectedService.consecutivenessRules.preferredConsecutiveWorkDays}\n`;
         info += `- Consecutividad Descanso: Máx=${selectedService.consecutivenessRules.maxConsecutiveDaysOff}, Pref=${selectedService.consecutivenessRules.preferredConsecutiveDaysOff}\n`;
+        if (selectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork) {
+          info += `- Mín. Descansos Antes de Trabajar: ${selectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork}\n`;
+        }
       }
       if (selectedService.additionalNotes) {
         info += `- Notas Adicionales del Servicio: ${selectedService.additionalNotes}\n`;
@@ -381,7 +384,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingSchedule;
 
   const renderScheduleEvaluation = () => {
-    if (isLoadingSchedule || (!currentLoadedSchedule && !algorithmGeneratedShifts && !generatedScore)) return null;
+    if (isLoadingSchedule || (!currentLoadedSchedule && !algorithmGeneratedShifts && !generatedScore && (!generatedViolations || generatedViolations.length === 0))) return null;
 
     const scoreToShow = generatedScore ?? currentLoadedSchedule?.score;
     const violationsToShow = generatedViolations ?? currentLoadedSchedule?.violations;
@@ -405,33 +408,35 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
           {violationsToShow && violationsToShow.length > 0 ? (
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="item-1">
-                <AccordionTrigger className="text-base">
+                <AccordionTrigger className="text-base hover:no-underline">
                   Informe de Reglas y Preferencias ({violationsToShow.length} {violationsToShow.length === 1 ? 'incidencia' : 'incidencias'})
                 </AccordionTrigger>
                 <AccordionContent>
-                  <ul className="space-y-2 pt-2 max-h-60 overflow-y-auto">
-                    {violationsToShow.map((v, index) => (
-                      <li key={index} className={`p-2 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700'}`}>
-                        <div className="flex items-start gap-2">
-                          {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 flex-shrink-0" />}
-                          <div>
-                            <span className="font-semibold">{v.severity === 'error' ? 'Error: ' : 'Advertencia: '}</span> {v.rule}
-                            <p className="text-xs opacity-90">
-                              {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
-                              {v.date && <><strong>Fecha:</strong> {v.date} </>}
-                              {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
-                            </p>
-                            <p className="text-sm mt-1">{v.details}</p>
+                  <ScrollArea className="max-h-60 pr-3">
+                    <ul className="space-y-2 pt-2">
+                      {violationsToShow.map((v, index) => (
+                        <li key={index} className={`p-2 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
+                          <div className="flex items-start gap-2">
+                            {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
+                            <div>
+                              <span className="font-semibold">{v.severity === 'error' ? 'Error: ' : 'Advertencia: '}</span> {v.rule}
+                              <p className="text-xs opacity-90">
+                                {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
+                                {v.date && <><strong>Fecha:</strong> {v.date} </>}
+                                {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
+                              </p>
+                              <p className="text-sm mt-1">{v.details}</p>
+                            </div>
                           </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </ScrollArea>
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
           ) : (
-            <Alert variant="default">
+            <Alert variant="default" className="mt-2">
               <BadgeCheck className="h-4 w-4"/>
               <AlertTitle>¡Excelente!</AlertTitle>
               <AlertDescription>No se encontraron incumplimientos de reglas o preferencias en este horario.</AlertDescription>
@@ -534,13 +539,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             targetService={selectedService}
             month={selectedMonth}
             year={selectedYear}
+            holidays={holidays} // Pasar feriados a la grilla
             onShiftsChange={(updatedShifts) => setEditableShifts(updatedShifts)}
             onBackToConfig={handleBackToConfig}
           />
         )
       )}
       
-      {(showGrid || (algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0) || (currentLoadedSchedule && userChoiceForExisting === null && !showInitialChoiceDialog)) && renderScheduleEvaluation()}
+      {(showGrid || (algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0) || (currentLoadedSchedule && userChoiceForExisting === null && !showInitialChoiceDialog && !isLoadingSchedule)) && renderScheduleEvaluation()}
 
 
       {error && (
@@ -562,7 +568,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             </Button>
         </CardFooter>
       )}
-       {!showGrid && generatedResponseText && algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0 && (
+       {!showGrid && generatedResponseText && algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0 && !isLoadingSchedule && (
          <CardFooter className="flex flex-col items-stretch gap-4 pt-0">
             <Button onClick={() => setShowGrid(true)} variant="outline" className="w-full" disabled={isActionDisabled}>
                 <Eye className="mr-2 h-4 w-4" /> Ver y Editar Horario Generado ({algorithmGeneratedShifts.length} turnos)
@@ -578,13 +584,13 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
               Ya existe un horario activo para {currentLoadedSchedule?.serviceName || selectedService?.name} en {months.find(m=>m.value===selectedMonth)?.label || selectedMonth}/{selectedYear}. ¿Qué desea hacer?
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex flex-col gap-2">
-            <Button variant="outline" onClick={() => handleInitialChoice('modify')} disabled={isSaving || isGenerating}>
+          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => handleInitialChoice('modify')} disabled={isSaving || isGenerating} className="w-full sm:w-auto">
               <Edit className="mr-2 h-4 w-4" /> Modificar Horario Existente
             </Button>
-            <Button onClick={() => handleInitialChoice('generate_new')} disabled={isSaving || isGenerating}>
+            <Button onClick={() => handleInitialChoice('generate_new')} disabled={isSaving || isGenerating} className="w-full sm:w-auto">
               <FilePlus2 className="mr-2 h-4 w-4" /> Generar Nuevo Horario
-              <span className="text-xs ml-1 block">(El actual se archivará al guardar el nuevo)</span>
+              <span className="text-xs ml-1 block sm:inline">(El actual se archivará al guardar)</span>
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -611,22 +617,22 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                 </AlertDialogDescription>
             )}
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex flex-col gap-2">
-            <AlertDialogCancel onClick={() => setShowSaveDialog(false)} disabled={isSaving}>Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={() => setShowSaveDialog(false)} disabled={isSaving} className="w-full sm:w-auto">Cancelar</AlertDialogCancel>
             {saveActionType === 'update_or_new_version' && (
                 <>
-                    <Button variant="outline" onClick={() => handleConfirmSave('update')} disabled={isSaving}>
+                    <Button variant="outline" onClick={() => handleConfirmSave('update')} disabled={isSaving} className="w-full sm:w-auto">
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit className="mr-2 h-4 w-4" />}
                          Actualizar Existente
                     </Button>
-                    <AlertDialogAction onClick={() => handleConfirmSave('new_version')} disabled={isSaving}>
+                    <AlertDialogAction onClick={() => handleConfirmSave('new_version')} disabled={isSaving} className="w-full sm:w-auto">
                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Archive className="mr-2 h-4 w-4" />}
                         Guardar como Nueva Versión
                     </AlertDialogAction>
                 </>
             )}
              {(saveActionType === 'confirm_new_with_archive' || saveActionType === 'confirm_save_brand_new') && (
-                 <AlertDialogAction onClick={() => handleConfirmSave('new_version')} disabled={isSaving}>
+                 <AlertDialogAction onClick={() => handleConfirmSave('new_version')} disabled={isSaving} className="w-full sm:w-auto">
                     {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                      Confirmar y Guardar
                 </AlertDialogAction>
@@ -638,4 +644,3 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
-

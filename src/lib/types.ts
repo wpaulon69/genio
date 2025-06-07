@@ -13,7 +13,7 @@ export interface ConsecutivenessRules {
   preferredConsecutiveWorkDays: number;
   maxConsecutiveDaysOff: number;
   preferredConsecutiveDaysOff: number;
-  minConsecutiveDaysOffRequiredBeforeWork?: number; // Nuevo: Mínimo descanso antes de volver a trabajar
+  minConsecutiveDaysOffRequiredBeforeWork?: number;
 }
 
 export interface Service {
@@ -80,12 +80,12 @@ export interface Holiday {
 }
 
 export interface ScheduleViolation {
-  employeeName?: string;
-  date?: string;
-  shiftType?: 'M' | 'T' | 'N' | 'General';
-  rule: string;
-  details: string;
-  severity: 'error' | 'warning';
+  employeeName?: string; // Nombre del empleado si la violación es específica de uno
+  date?: string;         // Fecha de la violación (YYYY-MM-DD)
+  shiftType?: 'M' | 'T' | 'N' | 'General'; // Tipo de turno o General si aplica a todo el día/empleado
+  rule: string;         // Descripción corta de la regla incumplida (ej. "Falta de personal en Turno Mañana")
+  details: string;      // Detalles específicos de la violación
+  severity: 'error' | 'warning'; // 'error' para reglas duras, 'warning' para blandas/preferencias
 }
 
 export interface MonthlySchedule {
@@ -103,4 +103,16 @@ export interface MonthlySchedule {
   violations?: ScheduleViolation[];
   createdAt: number; // Timestamp milliseconds
   updatedAt: number; // Timestamp milliseconds
+}
+
+export interface InteractiveScheduleGridProps {
+  initialShifts: AIShift[];
+  allEmployees: Employee[];
+  targetService: Service | undefined;
+  month: string;
+  year: string;
+  holidays?: Holiday[]; // Añadido para resaltar feriados
+  onShiftsChange?: (updatedShifts: AIShift[]) => void;
+  onBackToConfig?: () => void;
+  isReadOnly?: boolean;
 }

@@ -3,16 +3,17 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
-import type { Employee, Service } from '@/lib/types';
+import type { Employee, Service, Holiday, InteractiveScheduleGridProps } from '@/lib/types'; // Holiday e InteractiveScheduleGridProps importadas
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { format, getDaysInMonth, getDate, parse, isValid } from 'date-fns';
+import { format, getDaysInMonth, getDate, parse, isValid, getDay as getDayOfWeek } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft } from 'lucide-react';
 import { SHIFT_OPTIONS, type GridShiftType, type ShiftOption } from '@/lib/constants/schedule-constants';
+import { cn } from '@/lib/utils';
 
 
 export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined): GridShiftType {
@@ -40,28 +41,17 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
   return ''; 
 }
 
-
-interface InteractiveScheduleGridProps {
-  initialShifts: AIShift[];
-  allEmployees: Employee[];
-  targetService: Service | undefined;
-  month: string; 
-  year: string; 
-  onShiftsChange?: (updatedShifts: AIShift[]) => void;
-  onBackToConfig?: () => void;
-  isReadOnly?: boolean;
-}
-
 export default function InteractiveScheduleGrid({
   initialShifts,
   allEmployees,
   targetService,
   month,
   year,
+  holidays = [], // Default a array vacío
   onShiftsChange,
   onBackToConfig,
   isReadOnly = false,
-}: InteractiveScheduleGridProps) {
+}: InteractiveScheduleGridProps) { // Usar la interfaz importada
   const [editableShifts, setEditableShifts] = useState<AIShift[]>([...initialShifts]);
 
   useEffect(() => {
@@ -81,15 +71,21 @@ export default function InteractiveScheduleGrid({
   const daysInMonth = useMemo(() => getDaysInMonth(monthDate), [monthDate]);
 
   const dayHeaders = useMemo(() => {
+    const holidayDates = new Set(holidays.map(h => h.date)); // YYYY-MM-DD
     return Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1;
       const date = new Date(parseInt(year), parseInt(month) - 1, day);
+      const dateStr = format(date, 'yyyy-MM-dd');
+      const dayOfWeek = getDayOfWeek(date); // 0 (Sun) to 6 (Sat)
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isHolidayDay = holidayDates.has(dateStr);
       return {
         dayNumber: day,
-        shortName: format(date, 'eee', { locale: es }), 
+        shortName: format(date, 'eee', { locale: es }),
+        isSpecialDay: isWeekend || isHolidayDay,
       };
     });
-  }, [daysInMonth, month, year]);
+  }, [daysInMonth, month, year, holidays]);
 
   const relevantEmployeeNames = useMemo(() => {
     const names = new Set<string>();
@@ -119,7 +115,8 @@ export default function InteractiveScheduleGrid({
       const currentDisplayYear = parseInt(year, 10);
       if (isNaN(currentDisplayMonth) || isNaN(currentDisplayYear)) return;
 
-      if (format(parsedShiftDate, 'M') === month && format(parsedShiftDate, 'yyyy') === year) {
+      // Validar que el turno pertenezca al mes y año que se está visualizando
+      if (parsedShiftDate.getFullYear() === currentDisplayYear && (parsedShiftDate.getMonth() + 1) === currentDisplayMonth) {
         const dayOfMonth = getDate(parsedShiftDate);
         if (!data[shift.employeeName]) {
           data[shift.employeeName] = {}; 
@@ -130,7 +127,7 @@ export default function InteractiveScheduleGrid({
     return data;
   }, [editableShifts, relevantEmployeeNames, month, year]);
 
-  const employeeStats = useMemo(() => {
+ const employeeStats = useMemo(() => {
     const stats: { [employeeName: string]: { totalD: number; totalWork: number; totalAssignments: number } } = {};
     relevantEmployeeNames.forEach(name => {
       stats[name] = { totalD: 0, totalWork: 0, totalAssignments: 0 };
@@ -186,8 +183,8 @@ export default function InteractiveScheduleGrid({
         newShifts.push(newOrUpdatedShift);
       }
     }
-    setEditableShifts(newShifts); // Update local state for immediate UI feedback
-    onShiftsChange(newShifts); // Propagate changes up
+    setEditableShifts(newShifts); 
+    onShiftsChange(newShifts); 
   };
 
   const dailyTotals = useMemo(() => {
@@ -240,7 +237,7 @@ export default function InteractiveScheduleGrid({
   const monthName = format(monthDate, 'MMMM', { locale: es });
   const currentYearStr = format(monthDate, 'yyyy');
   const employeeColumnWidth = "180px";
-  const totalDColumnWidth = "80px";
+  const totalDColumnWidth = "80px"; // Ancho para la columna "Total D"
 
   return (
     <Card className="mt-6 w-full">
@@ -284,9 +281,15 @@ export default function InteractiveScheduleGrid({
                   style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                 >Total D</TableHead>
                 {dayHeaders.map(header => (
-                  <TableHead key={header.dayNumber} className="text-center w-[70px] min-w-[70px]">
+                  <TableHead 
+                    key={header.dayNumber} 
+                    className={cn(
+                        "text-center w-[70px] min-w-[70px]",
+                        header.isSpecialDay && "bg-primary/10 text-primary-foreground"
+                    )}
+                    >
                     <div>{header.dayNumber}</div>
-                    <div className="text-xs text-muted-foreground">{header.shortName}</div>
+                    <div className={cn("text-xs", header.isSpecialDay ? "text-primary-foreground/80" : "text-muted-foreground")}>{header.shortName}</div>
                   </TableHead>
                 ))}
               </TableRow>
@@ -386,4 +389,3 @@ export default function InteractiveScheduleGrid({
     </Card>
   );
 }
-

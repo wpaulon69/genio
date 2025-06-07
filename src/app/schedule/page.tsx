@@ -5,12 +5,13 @@ import PageHeader from '@/components/common/page-header';
 import ShiftGeneratorForm from '@/components/schedule/shift-generator-form';
 import InteractiveScheduleGrid from '@/components/schedule/InteractiveScheduleGrid';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { Employee, Service, MonthlySchedule } from '@/lib/types';
+import type { Employee, Service, MonthlySchedule, Holiday } from '@/lib/types'; // Holiday importado
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEmployees } from '@/lib/firebase/employees';
 import { getServices } from '@/lib/firebase/services';
 import { getActiveMonthlySchedule } from '@/lib/firebase/monthlySchedules';
+import { getHolidays } from '@/lib/firebase/holidays'; // Importar getHolidays
 import { Loader2, CalendarSearch, AlertTriangle, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -37,6 +38,11 @@ export default function SchedulePage() {
     queryKey: ['services'],
     queryFn: getServices,
   });
+  const { data: holidays = [], isLoading: isLoadingHolidays, error: errorHolidays } = useQuery<Holiday[]>({
+    queryKey: ['holidays'],
+    queryFn: getHolidays,
+  });
+
 
   // Set default service for view once services are loaded
   useEffect(() => {
@@ -53,7 +59,7 @@ export default function SchedulePage() {
     queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView],
     queryFn: () => {
       if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) {
-        return Promise.resolve(null); // Or throw an error if selection is mandatory
+        return Promise.resolve(null); 
       }
       return getActiveMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
     },
@@ -64,8 +70,8 @@ export default function SchedulePage() {
     return services.find(s => s.id === selectedServiceIdView);
   }, [selectedServiceIdView, services]);
 
-  const isLoading = isLoadingEmployees || isLoadingServices;
-  const dataError = errorEmployees || errorServices;
+  const isLoading = isLoadingEmployees || isLoadingServices || isLoadingHolidays; // Incluir isLoadingHolidays
+  const dataError = errorEmployees || errorServices || errorHolidays; // Incluir errorHolidays
 
   if (isLoading) {
     return (
@@ -150,6 +156,7 @@ export default function SchedulePage() {
                 targetService={selectedServiceForView}
                 month={selectedMonthView}
                 year={selectedYearView}
+                holidays={holidays} // Pasar feriados
                 isReadOnly={true}
               />
             ) : (
@@ -176,6 +183,7 @@ export default function SchedulePage() {
           <ShiftGeneratorForm 
             allEmployees={employees} 
             allServices={services}   
+            // holidays ya se carga dentro de ShiftGeneratorForm
           />
         </TabsContent>
       </Tabs>
