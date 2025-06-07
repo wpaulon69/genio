@@ -47,11 +47,11 @@ export default function InteractiveScheduleGrid({
   targetService,
   month,
   year,
-  holidays = [], // Default a array vacío
+  holidays = [], 
   onShiftsChange,
   onBackToConfig,
   isReadOnly = false,
-}: InteractiveScheduleGridProps) { // Usar la interfaz importada
+}: InteractiveScheduleGridProps) { 
   const [editableShifts, setEditableShifts] = useState<AIShift[]>([...initialShifts]);
 
   useEffect(() => {
@@ -115,7 +115,6 @@ export default function InteractiveScheduleGrid({
       const currentDisplayYear = parseInt(year, 10);
       if (isNaN(currentDisplayMonth) || isNaN(currentDisplayYear)) return;
 
-      // Validar que el turno pertenezca al mes y año que se está visualizando
       if (parsedShiftDate.getFullYear() === currentDisplayYear && (parsedShiftDate.getMonth() + 1) === currentDisplayMonth) {
         const dayOfMonth = getDate(parsedShiftDate);
         if (!data[shift.employeeName]) {
@@ -237,7 +236,7 @@ export default function InteractiveScheduleGrid({
   const monthName = format(monthDate, 'MMMM', { locale: es });
   const currentYearStr = format(monthDate, 'yyyy');
   const employeeColumnWidth = "180px";
-  const totalDColumnWidth = "80px"; // Ancho para la columna "Total D"
+  const totalDColumnWidth = "80px"; 
 
   return (
     <Card className="mt-6 w-full">
@@ -285,11 +284,14 @@ export default function InteractiveScheduleGrid({
                     key={header.dayNumber} 
                     className={cn(
                         "text-center w-[70px] min-w-[70px]",
-                        header.isSpecialDay && "bg-primary/10 text-primary-foreground"
+                        header.isSpecialDay && "bg-pink-100 dark:bg-pink-900 text-pink-700 dark:text-pink-300"
                     )}
                     >
                     <div>{header.dayNumber}</div>
-                    <div className={cn("text-xs", header.isSpecialDay ? "text-primary-foreground/80" : "text-muted-foreground")}>{header.shortName}</div>
+                    <div className={cn(
+                        "text-xs", 
+                        header.isSpecialDay ? "text-pink-600 dark:text-pink-400" : "text-muted-foreground"
+                        )}>{header.shortName}</div>
                   </TableHead>
                 ))}
               </TableRow>
