@@ -125,6 +125,7 @@ export async function generateAlgorithmicSchedule(
     const currentDayOfWeekNum = getDay(currentDate);
     const currentDayOfWeekName = format(currentDate, 'eeee', { locale: es }).toLowerCase();
     const isHolidayDay = holidays.some(h => h.date === currentDateStrYYYYMMDD);
+    const isWeekendDay = currentDayOfWeekNum === 0 || currentDayOfWeekNum === 6; // 0 for Sunday, 6 for Saturday
     const useWeekendHolidayStaffing = isWeekendDay || isHolidayDay;
 
     let staffingNeeds = {
@@ -169,24 +170,23 @@ export async function generateAlgorithmicSchedule(
                 } else if (['mañana', 'tarde', 'noche'].includes(fixedTiming.toLowerCase())) {
                     const shiftCode = fixedTiming.toLowerCase().charAt(0).toUpperCase() as 'M' | 'T' | 'N';
                     if (shiftCode === 'N' && !service.enableNightShift) {
-                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Error de Configuración de Turno Fijo", details: `Turno fijo 'N' para ${emp.name} pero el servicio no tiene turno noche habilitado.`, severity: 'error' }); score -= 5;
+                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Error de Configuración de Turno Fijo", details: `Turno fijo 'N' para ${emp.name} pero el servicio no tiene turno noche habilitado. No se asignó.`, severity: 'error' }); score -= 5;
                         return; 
                     }
                     
                     const {startTime, endTime, notesSuffix} = getShiftDetails(shiftCode);
                     
-                    const wouldViolateMaxWork = state.consecutiveWorkDays + 1 > maxWorkDays;
                     const wasRestingFixed = state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined;
-                    const wouldViolateMinRest = wasRestingFixed && state.consecutiveRestDays < minRestDaysRequired;
-
-                    if (wouldViolateMaxWork) {
-                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola máx. días de trabajo (${state.consecutiveWorkDays + 1}/${maxWorkDays}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10;
+                    
+                    let forcedViolation = false;
+                    if (state.consecutiveWorkDays + 1 > maxWorkDays) {
+                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola máx. días de trabajo (${state.consecutiveWorkDays + 1}/${maxWorkDays}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10; forcedViolation = true;
                     }
-                    if (wouldViolateMinRest) {
-                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola mín. días de descanso (${state.consecutiveRestDays}/${minRestDaysRequired}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10;
+                    if (wasRestingFixed && state.consecutiveRestDays < minRestDaysRequired) {
+                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola mín. días de descanso (${state.consecutiveRestDays}/${minRestDaysRequired}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10; forcedViolation = true;
                     }
 
-                    generatedShifts.push({ date: currentDateStrYYYYMMDD, employeeName: emp.name, serviceName: service.name, startTime, endTime, notes: `Turno Fijo ${notesSuffix}` });
+                    generatedShifts.push({ date: currentDateStrYYYYMMDD, employeeName: emp.name, serviceName: service.name, startTime, endTime, notes: `Turno Fijo ${notesSuffix}${forcedViolation ? ' (Forzado por Regla)' : ''}` });
                     dailyAssignedWorkShifts.add(emp.id); dailyProcessedEmployees.add(emp.id); state.shiftsThisMonth++;
                     state.consecutiveWorkDays = (state.lastShiftType === 'M' || state.lastShiftType === 'T' || state.lastShiftType === 'N') ? state.consecutiveWorkDays + 1 : 1;
                     state.consecutiveRestDays = 0; state.lastShiftType = shiftCode;
@@ -312,3 +312,4 @@ export async function generateAlgorithmicSchedule(
 
   return { generatedShifts, responseText: responseSummary, violations, score: finalScore };
 }
+
