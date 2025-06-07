@@ -50,6 +50,7 @@ const getShiftDetails = (shiftCode: 'M' | 'T' | 'N'): { startTime: string; endTi
 }
 
 const normalizeDayName = (dayName: string): string => {
+  if (!dayName) return '';
   return dayName
     .normalize("NFD") // Decompose combined graphemes into base characters and diacritics
     .replace(/[\u0300-\u036f]/g, "") // Remove diacritics
@@ -161,6 +162,7 @@ export async function generateAlgorithmicSchedule(
         if (dailyProcessedEmployees.has(emp.id)) return; 
         const state = employeeStates[emp.id]; 
         const preferences = emp.preferences;
+
         if (preferences?.fixedWeeklyShiftDays && preferences.fixedWeeklyShiftDays.includes(currentDayOfWeekName)) {
             const fixedTiming = preferences.fixedWeeklyShiftTiming;
             if (fixedTiming && fixedTiming !== NO_FIXED_TIMING_VALUE) {
@@ -168,7 +170,7 @@ export async function generateAlgorithmicSchedule(
                 const minRestDaysRequired = service.consecutivenessRules?.minConsecutiveDaysOffRequiredBeforeWork || 1;
 
                 if (fixedTiming === REST_DAY_VALUE || fixedTiming.toUpperCase() === 'D') {
-                    const shiftNote = isHolidayDay ? 'F (Feriado - Fijo Semanal)' : 'D (Fijo Semanal)';
+                    const shiftNote = isHolidayDay ? 'F (Feriado - Descanso Fijo)' : 'D (Fijo Semanal)';
                     const lastShiftTypeForState: EmployeeState['lastShiftType'] = isHolidayDay ? 'F' : 'D';
                     generatedShifts.push({ date: currentDateStrYYYYMMDD, employeeName: emp.name, serviceName: service.name, startTime: '', endTime: '', notes: shiftNote });
                     dailyProcessedEmployees.add(emp.id);
@@ -176,28 +178,47 @@ export async function generateAlgorithmicSchedule(
                     state.consecutiveWorkDays = 0; state.lastShiftType = lastShiftTypeForState;
                 } else if (['mañana', 'tarde', 'noche'].includes(fixedTiming.toLowerCase())) {
                     const shiftCode = fixedTiming.toLowerCase().charAt(0).toUpperCase() as 'M' | 'T' | 'N';
+                    
                     if (shiftCode === 'N' && !service.enableNightShift) {
                         violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Error de Configuración de Turno Fijo", details: `Turno fijo 'N' para ${emp.name} pero el servicio no tiene turno noche habilitado. No se asignó.`, severity: 'error' }); score -= 5;
                         return; 
                     }
                     
-                    const {startTime, endTime, notesSuffix} = getShiftDetails(shiftCode);
-                    
-                    const wasRestingFixed = state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined;
-                    
-                    let forcedViolation = false;
-                    if (state.consecutiveWorkDays + 1 > maxWorkDays) {
-                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola máx. días de trabajo (${state.consecutiveWorkDays + 1}/${maxWorkDays}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10; forcedViolation = true;
-                    }
-                    if (wasRestingFixed && state.consecutiveRestDays < minRestDaysRequired) {
-                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola mín. días de descanso (${state.consecutiveRestDays}/${minRestDaysRequired}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10; forcedViolation = true;
-                    }
+                    if (isHolidayDay && !isWeekendDay) { // Fixed work day (Mon-Fri) that falls on a holiday
+                        generatedShifts.push({
+                            date: currentDateStrYYYYMMDD,
+                            employeeName: emp.name,
+                            serviceName: service.name,
+                            startTime: '', // Employee is off
+                            endTime: '',
+                            notes: `F (Feriado - Cubría ${shiftCode})`
+                        });
+                        dailyProcessedEmployees.add(emp.id);
+                        // Treat this 'F' as a rest day for consecutiveness
+                        state.consecutiveRestDays = (state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined)
+                            ? state.consecutiveRestDays + 1
+                            : 1;
+                        state.consecutiveWorkDays = 0;
+                        state.lastShiftType = 'F';
+                        // Do NOT decrement staffingNeeds for shiftCode, as this employee is not working their usual shift.
+                        // The staffing for the holiday will be handled by the general staffingNeeds logic.
+                    } else { // Normal fixed work day (not a holiday, or it's a weekend fixed shift)
+                        const {startTime, endTime, notesSuffix} = getShiftDetails(shiftCode);
+                        const wasRestingFixed = state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined;
+                        let forcedViolation = false;
+                        if (state.consecutiveWorkDays + 1 > maxWorkDays) {
+                            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola máx. días de trabajo (${state.consecutiveWorkDays + 1}/${maxWorkDays}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10; forcedViolation = true;
+                        }
+                        if (wasRestingFixed && state.consecutiveRestDays < minRestDaysRequired) {
+                            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola mín. días de descanso (${state.consecutiveRestDays}/${minRestDaysRequired}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10; forcedViolation = true;
+                        }
 
-                    generatedShifts.push({ date: currentDateStrYYYYMMDD, employeeName: emp.name, serviceName: service.name, startTime, endTime, notes: `Turno Fijo ${notesSuffix}${forcedViolation ? ' (Forzado por Regla)' : ''}` });
-                    dailyAssignedWorkShifts.add(emp.id); dailyProcessedEmployees.add(emp.id); state.shiftsThisMonth++;
-                    state.consecutiveWorkDays = (state.lastShiftType === 'M' || state.lastShiftType === 'T' || state.lastShiftType === 'N') ? state.consecutiveWorkDays + 1 : 1;
-                    state.consecutiveRestDays = 0; state.lastShiftType = shiftCode;
-                    if (shiftCode === 'M') staffingNeeds.morning--; else if (shiftCode === 'T') staffingNeeds.afternoon--; else if (shiftCode === 'N') staffingNeeds.night--;
+                        generatedShifts.push({ date: currentDateStrYYYYMMDD, employeeName: emp.name, serviceName: service.name, startTime, endTime, notes: `Turno Fijo ${notesSuffix}${forcedViolation ? ' (Forzado por Regla)' : ''}` });
+                        dailyAssignedWorkShifts.add(emp.id); dailyProcessedEmployees.add(emp.id); state.shiftsThisMonth++;
+                        state.consecutiveWorkDays = (state.lastShiftType === 'M' || state.lastShiftType === 'T' || state.lastShiftType === 'N') ? state.consecutiveWorkDays + 1 : 1;
+                        state.consecutiveRestDays = 0; state.lastShiftType = shiftCode;
+                        if (shiftCode === 'M') staffingNeeds.morning--; else if (shiftCode === 'T') staffingNeeds.afternoon--; else if (shiftCode === 'N') staffingNeeds.night--;
+                    }
                 }
             }
         }
@@ -281,26 +302,33 @@ export async function generateAlgorithmicSchedule(
     // 5. Safeguard: Check if any employee with a fixed WORK shift for today was not processed.
     // This typically indicates an issue with the preference setup or a prior logic step.
     employeesForService.forEach(emp => {
-        if (!dailyProcessedEmployees.has(emp.id)) { // Not processed by LAO/LM or fixed shifts
+        if (!dailyProcessedEmployees.has(emp.id)) { 
             const preferences = emp.preferences;
             if (preferences?.fixedWeeklyShiftDays && preferences.fixedWeeklyShiftDays.includes(currentDayOfWeekName)) {
                 const fixedTiming = preferences.fixedWeeklyShiftTiming;
-                // Check if it's a WORK shift (M, T, N), not a fixed rest day ('D' or 'rest_day')
                 if (fixedTiming && fixedTiming !== NO_FIXED_TIMING_VALUE && fixedTiming !== REST_DAY_VALUE && fixedTiming.toUpperCase() !== 'D') {
-                    violations.push({ 
-                        employeeName: emp.name, 
-                        date: currentDateStrYYYYMMDD, 
-                        shiftType: 'General', 
-                        rule: "Error Interno del Algoritmo: Turno fijo no procesado", 
-                        details: `El empleado ${emp.name} tiene un turno de trabajo fijo (${fixedTiming}) para hoy pero no fue procesado en la etapa de turnos fijos. Esto podría indicar un error de configuración o del algoritmo. No se le asignará descanso automático. Revise sus preferencias.`, 
-                        severity: 'error' 
-                    });
-                    score -= 20; 
-                    dailyProcessedEmployees.add(emp.id); // Mark as processed to avoid assigning 'D' in the next step
+                    // This employee had a fixed WORK shift but wasn't processed in step 2. This is an anomaly.
+                    // It could happen if the fixed shift was for 'N' and night shifts aren't enabled, or if it was a holiday overwrite that was missed.
+                    // We'll log a critical error and mark them as processed to avoid assigning 'D'
+                    const isFixedWorkShiftOnHolidayNotProcessed = isHolidayDay && !isWeekendDay && (['mañana', 'tarde', 'noche'].includes(fixedTiming.toLowerCase()));
+
+                    if (!isFixedWorkShiftOnHolidayNotProcessed) { // Only log error if it wasn't a holiday overwrite case already handled
+                        violations.push({ 
+                            employeeName: emp.name, 
+                            date: currentDateStrYYYYMMDD, 
+                            shiftType: 'General', 
+                            rule: "Error Interno del Algoritmo: Turno fijo de trabajo no procesado", 
+                            details: `El empleado ${emp.name} tiene un turno de trabajo fijo (${fixedTiming}) para hoy (${currentDayOfWeekName}) pero no fue procesado en la etapa de turnos fijos. Esto podría indicar un error de configuración o del algoritmo. No se le asignará descanso automático. Revise sus preferencias.`, 
+                            severity: 'error' 
+                        });
+                        score -= 20; 
+                    }
+                    dailyProcessedEmployees.add(emp.id); // Mark as processed to avoid assigning 'D' if it was a real error
                 }
             }
         }
     });
+
 
     // 6. Assign rest days ('D' or 'F') to remaining employees
     employeesForService.forEach(emp => {
@@ -345,4 +373,3 @@ export async function generateAlgorithmicSchedule(
 }
 
     
-  
