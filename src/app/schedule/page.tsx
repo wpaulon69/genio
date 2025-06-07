@@ -7,7 +7,7 @@ import InteractiveScheduleGrid from '@/components/schedule/InteractiveScheduleGr
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Employee, Service, MonthlySchedule, Holiday } from '@/lib/types'; // Holiday importado
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { getEmployees } from '@/lib/firebase/employees';
 import { getServices } from '@/lib/firebase/services';
 import { getActiveMonthlySchedule } from '@/lib/firebase/monthlySchedules';
@@ -16,6 +16,7 @@ import { Loader2, CalendarSearch, AlertTriangle, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { es } from 'date-fns/locale';
 
 const currentYear = new Date().getFullYear();
@@ -106,34 +107,41 @@ export default function SchedulePage() {
         </TabsList>
         
         <TabsContent value="view-schedule" className="mt-6">
-          <div className="mb-6 p-4 border rounded-lg bg-card shadow">
-            <h3 className="text-lg font-semibold mb-3 flex items-center">
-              <CalendarSearch className="mr-2 h-5 w-5 text-primary"/>
-              Seleccionar Horario para Visualizar
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Select value={selectedServiceIdView} onValueChange={setSelectedServiceIdView}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar Servicio" /></SelectTrigger>
-                <SelectContent>
-                  {services.map(service => (
-                    <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedMonthView} onValueChange={setSelectedMonthView}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar Mes" /></SelectTrigger>
-                <SelectContent>
-                  {scheduleMonths.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedYearView} onValueChange={setSelectedYearView}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar Año" /></SelectTrigger>
-                <SelectContent>
-                  {scheduleYears.map(y => (<SelectItem key={y} value={y}>{y}</SelectItem>))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow duration-300">
+            <CardHeader>
+              <CardTitle className="flex items-center text-xl font-headline">
+                <CalendarSearch className="mr-3 h-6 w-6 text-primary"/>
+                Visualizar Horario Activo
+              </CardTitle>
+              <CardDescription>
+                Seleccione el servicio, mes y año para cargar el horario guardado.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Select value={selectedServiceIdView} onValueChange={setSelectedServiceIdView}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar Servicio" /></SelectTrigger>
+                  <SelectContent>
+                    {services.map(service => (
+                      <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedMonthView} onValueChange={setSelectedMonthView}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar Mes" /></SelectTrigger>
+                  <SelectContent>
+                    {scheduleMonths.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedYearView} onValueChange={setSelectedYearView}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar Año" /></SelectTrigger>
+                  <SelectContent>
+                    {scheduleYears.map(y => (<SelectItem key={y} value={y}>{y}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
 
           {isLoadingViewableSchedule && (
             <div className="flex justify-center items-center py-10">
@@ -164,7 +172,7 @@ export default function SchedulePage() {
                 <Info className="h-5 w-5 mr-2"/>
                 <AlertTitle>No se encontró un horario activo</AlertTitle>
                 <AlertDescription>
-                  No hay un horario activo para {selectedServiceForView?.name || 'el servicio seleccionado'} en {scheduleMonths.find(m => m.value === selectedMonthView)?.label || ''} / {selectedYearView}. 
+                  No hay un horario activo para {selectedServiceForView?.name || 'el servicio seleccionado'} en {scheduleMonths.find(m => m.value === selectedMonthView)?.label || ''} {selectedYearView}.
                   Puede generar uno en la pestaña "Generar/Editar Horarios".
                 </AlertDescription>
               </Alert>
