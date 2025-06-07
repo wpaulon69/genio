@@ -1,7 +1,7 @@
 
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from './config';
-import type { Employee, EmployeePreferences, FixedAssignment } from '@/lib/types';
+import type { Employee, EmployeePreferences, FixedAssignment, WorkPattern } from '@/lib/types';
 import { cleanDataForFirestore } from '@/lib/utils';
 
 const EMPLOYEES_COLLECTION = 'employees';
@@ -11,6 +11,7 @@ const defaultPreferences: EmployeePreferences = {
   prefersWeekendWork: false,
   fixedWeeklyShiftDays: [],
   fixedWeeklyShiftTiming: null,
+  workPattern: 'standardRotation', // Default work pattern
 };
 
 // Helper to convert Firestore doc to Employee type
@@ -23,6 +24,7 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee 
     prefersWeekendWork: preferencesData.prefersWeekendWork === undefined ? defaultPreferences.prefersWeekendWork : preferencesData.prefersWeekendWork,
     fixedWeeklyShiftDays: preferencesData.fixedWeeklyShiftDays || defaultPreferences.fixedWeeklyShiftDays,
     fixedWeeklyShiftTiming: preferencesData.fixedWeeklyShiftTiming === undefined ? defaultPreferences.fixedWeeklyShiftTiming : preferencesData.fixedWeeklyShiftTiming,
+    workPattern: preferencesData.workPattern === undefined ? defaultPreferences.workPattern : preferencesData.workPattern,
   };
 
   const fixedAssignmentsData = data.fixedAssignments || [];
@@ -30,7 +32,7 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee 
     type: assign.type,
     startDate: assign.startDate, // Assume dates are stored as YYYY-MM-DD strings
     endDate: assign.endDate, // Will be undefined if not in Firestore
-    description: assign.description === undefined ? '' : assign.description, // Default to empty string if not present or explicitly null
+    description: assign.description === undefined ? '' : assign.description,
   }));
 
   return {
@@ -52,11 +54,9 @@ const cleanFixedAssignmentForFirestore = (assignment: FixedAssignment): Partial<
     type: assignment.type,
     startDate: assignment.startDate,
   };
-  // Only include endDate if it's a non-empty string
   if (assignment.endDate && typeof assignment.endDate === 'string' && assignment.endDate.trim() !== "") {
     cleanedAssignment.endDate = assignment.endDate;
   }
-  // Include description if it's defined (empty string is allowed and means "no description")
   if (assignment.description !== undefined) {
     cleanedAssignment.description = assignment.description;
   }
@@ -80,6 +80,7 @@ export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<E
       prefersWeekendWork: employeeData.preferences.prefersWeekendWork ?? defaultPreferences.prefersWeekendWork,
       fixedWeeklyShiftDays: employeeData.preferences.fixedWeeklyShiftDays || defaultPreferences.fixedWeeklyShiftDays,
       fixedWeeklyShiftTiming: employeeData.preferences.fixedWeeklyShiftTiming === undefined ? defaultPreferences.fixedWeeklyShiftTiming : employeeData.preferences.fixedWeeklyShiftTiming,
+      workPattern: (employeeData.preferences.workPattern === 'standardRotation' ? null : employeeData.preferences.workPattern) ?? defaultPreferences.workPattern,
     };
   } else {
     preferencesToSave = { ...defaultPreferences };
@@ -96,12 +97,11 @@ export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<E
   const cleanedData = cleanDataForFirestore(dataToSave);
   const docRef = await addDoc(employeesCol, cleanedData);
 
-  // Construct the returned employee object based on what was actually saved/cleaned
   const savedEmployeeData = { ...cleanedData } as Omit<Employee, 'id'>;
-  if (!savedEmployeeData.preferences) { // Ensure preferences object exists
+  if (!savedEmployeeData.preferences) {
     savedEmployeeData.preferences = { ...defaultPreferences };
   }
-  if (!savedEmployeeData.fixedAssignments) { // Ensure fixedAssignments array exists
+  if (!savedEmployeeData.fixedAssignments) {
     savedEmployeeData.fixedAssignments = [];
   }
 
@@ -114,17 +114,16 @@ export const updateEmployee = async (employeeId: string, employeeData: Partial<O
   let dataToUpdate: Partial<Omit<Employee, 'id'>> = { ...employeeData };
 
   if (employeeData.hasOwnProperty('preferences')) {
-    if (employeeData.preferences) {
-      dataToUpdate.preferences = {
-        eligibleForDayOffAfterDuty: employeeData.preferences.eligibleForDayOffAfterDuty ?? defaultPreferences.eligibleForDayOffAfterDuty,
-        prefersWeekendWork: employeeData.preferences.prefersWeekendWork ?? defaultPreferences.prefersWeekendWork,
-        fixedWeeklyShiftDays: employeeData.preferences.fixedWeeklyShiftDays || defaultPreferences.fixedWeeklyShiftDays,
-        fixedWeeklyShiftTiming: employeeData.preferences.fixedWeeklyShiftTiming === undefined ? defaultPreferences.fixedWeeklyShiftTiming : employeeData.preferences.fixedWeeklyShiftTiming,
-      };
-    } else {
-      dataToUpdate.preferences = { ...defaultPreferences };
-    }
+    const newPrefs = employeeData.preferences || {};
+    dataToUpdate.preferences = {
+        eligibleForDayOffAfterDuty: newPrefs.eligibleForDayOffAfterDuty ?? defaultPreferences.eligibleForDayOffAfterDuty,
+        prefersWeekendWork: newPrefs.prefersWeekendWork ?? defaultPreferences.prefersWeekendWork,
+        fixedWeeklyShiftDays: newPrefs.fixedWeeklyShiftDays || defaultPreferences.fixedWeeklyShiftDays,
+        fixedWeeklyShiftTiming: newPrefs.fixedWeeklyShiftTiming === undefined ? defaultPreferences.fixedWeeklyShiftTiming : newPrefs.fixedWeeklyShiftTiming,
+        workPattern: (newPrefs.workPattern === 'standardRotation' ? null : newPrefs.workPattern) ?? defaultPreferences.workPattern,
+    };
   }
+
 
   if (employeeData.hasOwnProperty('fixedAssignments')) {
     dataToUpdate.fixedAssignments = (employeeData.fixedAssignments || []).map(cleanFixedAssignmentForFirestore);

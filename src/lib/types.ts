@@ -16,21 +16,14 @@ export interface ConsecutivenessRules {
   minConsecutiveDaysOffRequiredBeforeWork?: number;
 }
 
-export interface Service {
-  id: string;
-  name: string;
-  description: string;
-  enableNightShift: boolean;
-  staffingNeeds: StaffingNeeds;
-  consecutivenessRules?: ConsecutivenessRules;
-  additionalNotes?: string;
-}
+export type WorkPattern = 'standardRotation' | 'mondayToFridayMorning' | 'mondayToFridayAfternoon' | null;
 
 export interface EmployeePreferences {
   eligibleForDayOffAfterDuty?: boolean;
   prefersWeekendWork?: boolean;
   fixedWeeklyShiftDays?: string[]; // e.g., ["lunes", "martes", ..., "domingo"]
   fixedWeeklyShiftTiming: string | null; // e.g., "mañana", "tarde", "noche", "rest_day", or custom like "08:00-16:00", or null
+  workPattern?: WorkPattern; // Nuevo campo para el patrón de trabajo
 }
 
 export interface FixedAssignment {
@@ -111,7 +104,7 @@ export interface InteractiveScheduleGridProps {
   targetService: Service | undefined;
   month: string;
   year: string;
-  holidays?: Holiday[]; // Añadido para resaltar feriados
+  holidays?: Holiday[];
   onShiftsChange?: (updatedShifts: AIShift[]) => void;
   onBackToConfig?: () => void;
   isReadOnly?: boolean;

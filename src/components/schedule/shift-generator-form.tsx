@@ -25,7 +25,7 @@ import { getActiveMonthlySchedule, saveNewActiveSchedule, updateExistingActiveSc
 import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area'; // Added import
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const shiftGenerationConfigSchema = z.object({
   serviceId: z.string().min(1, "Debe seleccionar un servicio."),
@@ -195,9 +195,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         employeesInService.forEach(emp => {
           info += `\n- ${emp.name} (Roles: ${emp.roles.join(', ') || 'N/A'})\n`;
           if (emp.preferences) {
+            const workPatternLabel = 
+                emp.preferences.workPattern === 'mondayToFridayMorning' ? 'L-V Mañana Fijo' :
+                emp.preferences.workPattern === 'mondayToFridayAfternoon' ? 'L-V Tarde Fijo' :
+                'Rotación Estándar';
+            info += `  - Patrón General: ${workPatternLabel}\n`;
             info += `  - Prefiere FDS: ${emp.preferences.prefersWeekendWork ? 'Sí' : 'No'}\n`;
             info += `  - Elegible D/D: ${emp.preferences.eligibleForDayOffAfterDuty ? 'Sí' : 'No'}\n`;
-            if (emp.preferences.fixedWeeklyShiftDays && emp.preferences.fixedWeeklyShiftDays.length > 0) {
+            if ((!emp.preferences.workPattern || emp.preferences.workPattern === 'standardRotation') && emp.preferences.fixedWeeklyShiftDays && emp.preferences.fixedWeeklyShiftDays.length > 0) {
               info += `  - Turno Fijo Semanal: Días=[${emp.preferences.fixedWeeklyShiftDays.join(', ')}], Horario=${emp.preferences.fixedWeeklyShiftTiming || 'No especificado'}\n`;
             }
           }
@@ -371,7 +376,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setGeneratedResponseText(currentLoadedSchedule.responseText || "");
         setGeneratedScore(currentLoadedSchedule.score ?? null);
         setGeneratedViolations(currentLoadedSchedule.violations ?? null);
-        setShowGrid(true);
+setShowGrid(true);
     } else { 
         setEditableShifts(null);
         setAlgorithmGeneratedShifts(null);
@@ -645,5 +650,3 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
-
-    

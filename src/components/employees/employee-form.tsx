@@ -4,7 +4,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, Controller, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
-import type { Employee, Service, EmployeePreferences, FixedAssignment as FixedAssignmentType } from '@/lib/types';
+import type { Employee, Service, EmployeePreferences, FixedAssignment as FixedAssignmentType, WorkPattern } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -33,11 +33,14 @@ type FormFixedAssignment = Omit<FixedAssignmentType, 'startDate' | 'endDate' | '
   description?: string;
 };
 
+const workPatternSchema = z.enum(['standardRotation', 'mondayToFridayMorning', 'mondayToFridayAfternoon']).nullable().optional();
+
 const preferencesSchema = z.object({
   eligibleForDayOffAfterDuty: z.boolean().optional(),
   prefersWeekendWork: z.boolean().optional(),
   fixedWeeklyShiftDays: z.array(z.string()).optional(),
   fixedWeeklyShiftTiming: z.string().nullable().optional(),
+  workPattern: workPatternSchema,
 });
 
 const fixedAssignmentSchema = z.object({
@@ -105,14 +108,20 @@ const shiftTimings = [
 ];
 
 const assignmentTypes = [
-  // { value: '', label: "Seleccione tipo..." }, // Placeholder removed, handled by SelectValue
   { value: 'D', label: "D - Descanso" },
   { value: 'LAO', label: "LAO - Licencia Anual Ordinaria" },
   { value: 'LM', label: "LM - Licencia Médica" },
 ];
 
+const workPatternOptions: { value: WorkPattern | 'standardRotation'; label: string }[] = [
+    { value: 'standardRotation', label: "Rotación Estándar / Preferencias Diarias" },
+    { value: 'mondayToFridayMorning', label: "L-V: Solo Mañana (Descansa S, D, Feriados L-V)" },
+    { value: 'mondayToFridayAfternoon', label: "L-V: Solo Tarde (Descansa S, D, Feriados L-V)" },
+];
+
+
 const formDefaultPreferences: EmployeePreferences = {
-  eligibleForDayOffAfterDuty: false, prefersWeekendWork: false, fixedWeeklyShiftDays: [], fixedWeeklyShiftTiming: null,
+  eligibleForDayOffAfterDuty: false, prefersWeekendWork: false, fixedWeeklyShiftDays: [], fixedWeeklyShiftTiming: null, workPattern: 'standardRotation',
 };
 
 export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, availableServices, isLoading }: EmployeeFormProps) {
@@ -133,6 +142,8 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
     name: "fixedAssignments",
   });
 
+  const watchedWorkPattern = form.watch('preferences.workPattern');
+
   useEffect(() => {
     if (isOpen) {
       setCurrentStep(1);
@@ -141,7 +152,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
         const assignmentsForForm: FormFixedAssignment[] = (employee.fixedAssignments || []).map((assign, index) => ({
           ...assign,
           id: `initial-${index}-${Date.now()}`,
-          type: assign.type || '', // Ensure type is '' if undefined for form binding
+          type: assign.type || '',
           startDate: assign.startDate && isValidDate(parseISO(assign.startDate)) ? parseISO(assign.startDate) : undefined,
           endDate: assign.endDate && isValidDate(parseISO(assign.endDate)) ? parseISO(assign.endDate) : undefined,
         }));
@@ -156,6 +167,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
             prefersWeekendWork: employee.preferences?.prefersWeekendWork ?? formDefaultPreferences.prefersWeekendWork,
             fixedWeeklyShiftDays: employee.preferences?.fixedWeeklyShiftDays || formDefaultPreferences.fixedWeeklyShiftDays,
             fixedWeeklyShiftTiming: (currentFixedTiming && shiftTimings.some(st => st.value === currentFixedTiming)) ? currentFixedTiming : NO_FIXED_TIMING_VALUE,
+            workPattern: employee.preferences?.workPattern || formDefaultPreferences.workPattern,
           },
           availability: employee.availability || '',
           constraints: employee.constraints || '',
@@ -172,14 +184,11 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
   }, [employee, form, isOpen]);
 
   const handleSubmit = (data: EmployeeFormInput) => {
-    // Filter out assignments that don't have a valid type selected
-    // The Zod schema will now ensure that 'type' is one of 'D', 'LAO', 'LM' if the assignment is to be submitted.
-    // Assignments added to the UI but not fully filled out (e.g., type not selected) will fail validation.
     const processedAssignments = (data.fixedAssignments || [])
-      .map(({ id, ...rest }) => ({ // Remove client-side id
+      .map(({ id, ...rest }) => ({
         ...rest,
-        type: rest.type as 'D' | 'LAO' | 'LM', // Zod ensures this if validation passes
-        startDate: rest.startDate ? format(rest.startDate, 'yyyy-MM-dd') : '', // Should be guaranteed by Zod
+        type: rest.type as 'D' | 'LAO' | 'LM',
+        startDate: rest.startDate ? format(rest.startDate, 'yyyy-MM-dd') : '',
         endDate: rest.endDate ? format(rest.endDate, 'yyyy-MM-dd') : undefined,
     }));
 
@@ -189,8 +198,9 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
       preferences: data.preferences ? {
         ...data.preferences,
         fixedWeeklyShiftTiming: data.preferences.fixedWeeklyShiftTiming === NO_FIXED_TIMING_VALUE ? null : data.preferences.fixedWeeklyShiftTiming,
-        fixedWeeklyShiftDays: data.preferences.fixedWeeklyShiftDays || []
-      } : { ...formDefaultPreferences, fixedWeeklyShiftTiming: null },
+        fixedWeeklyShiftDays: data.preferences.fixedWeeklyShiftDays || [],
+        workPattern: data.preferences.workPattern === 'standardRotation' ? null : data.preferences.workPattern,
+      } : { ...formDefaultPreferences, fixedWeeklyShiftTiming: null, workPattern: null },
       fixedAssignments: processedAssignments as FixedAssignmentType[],
     };
 
@@ -211,6 +221,9 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
   const handlePreviousStep = () => setCurrentStep(currentStep - 1);
 
   const watchFixedAssignmentType = (index: number) => form.watch(`fixedAssignments.${index}.type`);
+  
+  const showDailyFixedPreferences = watchedWorkPattern === 'standardRotation' || !watchedWorkPattern;
+
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isLoading) onClose(); }}>
@@ -218,7 +231,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
         <DialogHeader>
           <DialogTitle>{employee ? 'Editar Empleado' : 'Añadir Nuevo Empleado'} - Paso {currentStep} de 2</DialogTitle>
           <DialogDescription>
-            {currentStep === 1 ? 'Complete la información básica y servicios.' : 'Defina preferencias, turno fijo y asignaciones.'}
+            {currentStep === 1 ? 'Complete la información básica y servicios.' : 'Defina patrón de trabajo, preferencias, turno fijo y asignaciones.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -255,6 +268,20 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
 
                 {currentStep === 2 && (
                   <>
+                    <h3 className="text-md font-semibold">Patrón de Trabajo General</h3>
+                     <FormField control={form.control} name="preferences.workPattern" render={({ field }) => (
+                        <FormItem><FormLabel>Tipo de Patrón de Trabajo</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || 'standardRotation'} disabled={isLoading}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar patrón..." /></SelectTrigger></FormControl>
+                            <SelectContent>{workPatternOptions.map(opt => (<SelectItem key={opt.value || 'standard'} value={opt.value || 'standardRotation'}>{opt.label}</SelectItem>))}</SelectContent>
+                          </Select>
+                          <FormMessage />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Si elige un patrón "Lunes a Viernes", este tendrá prioridad sobre las preferencias de turno fijo diario.
+                          </p>
+                        </FormItem>)} />
+
+                    <Separator className="my-4" />
                     <h3 className="text-md font-semibold">Preferencias Adicionales</h3>
                     <FormField control={form.control} name="preferences.eligibleForDayOffAfterDuty" render={({ field }) => (
                       <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
@@ -267,27 +294,35 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
                         <FormLabel className="font-normal">Prefiere Trabajar Fines de Semana</FormLabel>
                       </FormItem>)} />
 
-                    <Separator className="my-4" />
-                    <h3 className="text-md font-semibold">Turno Fijo Semanal (Opcional)</h3>
-                    <FormItem><FormLabel>Días de la Semana</FormLabel>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {daysOfWeek.map((day) => (
-                        <FormField key={day.id} control={form.control} name="preferences.fixedWeeklyShiftDays"
-                          render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-2 space-y-0 p-2 border rounded-md hover:bg-muted/50">
-                              <FormControl><Checkbox checked={Array.isArray(field.value) && field.value?.includes(day.id)} onCheckedChange={(checked) => field.onChange(checked ? [...(Array.isArray(field.value) ? field.value : []), day.id] : (Array.isArray(field.value) ? field.value : []).filter(v => v !== day.id))} disabled={isLoading}/></FormControl>
-                              <FormLabel className="font-normal text-sm">{day.label}</FormLabel>
-                            </FormItem>)} />))}
-                      </div><FormMessage />
-                    </FormItem>
-                    <FormField control={form.control} name="preferences.fixedWeeklyShiftTiming" render={({ field }) => (
-                        <FormItem><FormLabel>Horario del Turno Fijo</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || NO_FIXED_TIMING_VALUE} disabled={isLoading}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar horario" /></SelectTrigger></FormControl>
-                            <SelectContent>{shiftTimings.map(t => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent>
-                          </Select><FormMessage />
-                        </FormItem>)} />
-                    <Button type="button" variant="outline" size="sm" onClick={handleClearFixedShift} disabled={isLoading}>Limpiar Turno Fijo</Button>
+                    {showDailyFixedPreferences && (
+                        <>
+                            <Separator className="my-4" />
+                            <h3 className="text-md font-semibold">Turno Fijo Semanal (Opcional)</h3>
+                            <p className="text-xs text-muted-foreground mb-2">
+                                Solo aplica si el "Patrón de Trabajo General" es "Rotación Estándar".
+                            </p>
+                            <FormItem><FormLabel>Días de la Semana</FormLabel>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {daysOfWeek.map((day) => (
+                                <FormField key={day.id} control={form.control} name="preferences.fixedWeeklyShiftDays"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center space-x-2 space-y-0 p-2 border rounded-md hover:bg-muted/50">
+                                    <FormControl><Checkbox checked={Array.isArray(field.value) && field.value?.includes(day.id)} onCheckedChange={(checked) => field.onChange(checked ? [...(Array.isArray(field.value) ? field.value : []), day.id] : (Array.isArray(field.value) ? field.value : []).filter(v => v !== day.id))} disabled={isLoading}/></FormControl>
+                                    <FormLabel className="font-normal text-sm">{day.label}</FormLabel>
+                                    </FormItem>)} />))}
+                            </div><FormMessage />
+                            </FormItem>
+                            <FormField control={form.control} name="preferences.fixedWeeklyShiftTiming" render={({ field }) => (
+                                <FormItem><FormLabel>Horario del Turno Fijo</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || NO_FIXED_TIMING_VALUE} disabled={isLoading}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar horario" /></SelectTrigger></FormControl>
+                                    <SelectContent>{shiftTimings.map(t => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}</SelectContent>
+                                </Select><FormMessage />
+                                </FormItem>)} />
+                            <Button type="button" variant="outline" size="sm" onClick={handleClearFixedShift} disabled={isLoading}>Limpiar Turno Fijo</Button>
+                        </>
+                    )}
+
 
                     <Separator className="my-4" />
                     <h3 className="text-md font-semibold">Asignaciones Fijas (Descansos, Licencias)</h3>
@@ -360,5 +395,3 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
     </Dialog>
   );
 }
-
-    
