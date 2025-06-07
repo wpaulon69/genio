@@ -21,10 +21,12 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
 
   const note = aiShift.notes?.toUpperCase();
 
+  if (note?.startsWith('F') || note?.includes('FERIADO')) return 'F';
   if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO')) return 'D';
   if (note === 'C' || note === 'C (FRANCO COMP.)' || note?.includes('FRANCO COMP')) return 'C';
   if (note?.startsWith('LAO')) return 'LAO';
   if (note?.startsWith('LM')) return 'LM';
+
 
   if (aiShift.startTime) {
     if (aiShift.startTime.startsWith('07:') || aiShift.startTime.startsWith('08:')) return 'M';
@@ -135,7 +137,7 @@ export default function InteractiveScheduleGrid({
         if (shift) {
           stats[name].totalAssignments++;
           const shiftType = getGridShiftTypeFromAIShift(shift);
-          if (shiftType === 'D') {
+          if (shiftType === 'D') { // Solo cuenta 'D' para totalD
             stats[name].totalD++;
           } else if (['M', 'T', 'N'].includes(shiftType)) {
             stats[name].totalWork++;
@@ -171,7 +173,7 @@ export default function InteractiveScheduleGrid({
         serviceName: serviceName,
         startTime: selectedOption.startTime || '', 
         endTime: selectedOption.endTime || '',   
-        notes: (selectedOption.value === 'D' || selectedOption.value === 'C' || selectedOption.value === 'LAO' || selectedOption.value === 'LM') 
+        notes: (selectedOption.value === 'D' || selectedOption.value === 'C' || selectedOption.value === 'LAO' || selectedOption.value === 'LM' || selectedOption.value === 'F') 
                 ? selectedOption.label 
                 : `Turno ${selectedOption.label}`, 
       };
@@ -187,9 +189,9 @@ export default function InteractiveScheduleGrid({
   };
 
   const dailyTotals = useMemo(() => {
-    const totals: { [day: number]: { M: number; T: number; N: number; D: number; C: number; LAO: number; LM: number; totalStaff: number } } = {};
+    const totals: { [day: number]: { M: number; T: number; N: number; D: number; C: number; LAO: number; LM: number; F: number; totalStaff: number } } = {};
     dayHeaders.forEach(header => {
-      totals[header.dayNumber] = { M: 0, T: 0, N: 0, D:0, C:0, LAO:0, LM:0, totalStaff: 0 };
+      totals[header.dayNumber] = { M: 0, T: 0, N: 0, D:0, C:0, LAO:0, LM:0, F:0, totalStaff: 0 };
     });
 
     relevantEmployeeNames.forEach(employeeName => {
@@ -204,6 +206,8 @@ export default function InteractiveScheduleGrid({
           else if (shiftType === 'C') totals[header.dayNumber].C++;
           else if (shiftType === 'LAO') totals[header.dayNumber].LAO++;
           else if (shiftType === 'LM') totals[header.dayNumber].LM++;
+          else if (shiftType === 'F') totals[header.dayNumber].F++;
+
 
           if (['M', 'T', 'N'].includes(shiftType)) {
             totals[header.dayNumber].totalStaff++;

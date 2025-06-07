@@ -1,5 +1,5 @@
 
-export type GridShiftType = 'M' | 'T' | 'N' | 'D' | 'LAO' | 'LM' | 'C' | '';
+export type GridShiftType = 'M' | 'T' | 'N' | 'D' | 'LAO' | 'LM' | 'C' | 'F' | ''; // Añadir 'F'
 
 export interface ShiftOption {
   value: GridShiftType;
@@ -17,4 +17,5 @@ export const SHIFT_OPTIONS: ShiftOption[] = [
   { value: 'C', label: 'Franco Comp. (C)' },
   { value: 'LAO', label: 'LAO' },
   { value: 'LM', label: 'LM' },
+  { value: 'F', label: 'Feriado (F)' }, // Nueva opción
 ];
