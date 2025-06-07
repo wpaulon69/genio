@@ -1,3 +1,4 @@
+
 "use client";
 
 import type React from 'react';
@@ -5,11 +6,12 @@ import {
   SidebarProvider,
   Sidebar,
   SidebarHeader,
-  SidebarMain,
+  SidebarContent, // Changed from SidebarMain
   SidebarFooter,
   SidebarInset,
   SidebarTrigger,
-} from '@/components/ui/sidebar'; // Assuming SidebarMain and SidebarFooter are part of your sidebar component or you adapt
+  SidebarRail, // Added SidebarRail import
+} from '@/components/ui/sidebar'; 
 import SidebarNav from './sidebar-nav';
 import { Button } from '@/components/ui/button';
 import { LogOut, Settings, UserCircle } from 'lucide-react';
@@ -17,16 +19,13 @@ import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-// Adapting Sidebar component names based on what's typically available or needed.
-// Assuming SidebarMain is SidebarContent and SidebarFooter is used as is.
-import { SidebarContent } from '@/components/ui/sidebar';
-
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider defaultOpen>
       <div className="flex min-h-screen">
         <Sidebar variant="sidebar" collapsible="icon" className="border-r">
+          <SidebarRail /> {/* Added SidebarRail component here */}
           <SidebarHeader className="p-4 flex items-center justify-between">
             <Link href="/" className="font-headline text-2xl font-semibold text-primary group-data-[collapsible=icon]:hidden">
               ShiftFlow
