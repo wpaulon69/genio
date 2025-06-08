@@ -144,3 +144,13 @@ export interface EmployeeComparisonReportOutput {
   serviceNameLabel?: string;
 }
 
+// Tipos para el informe de calidad de horario
+export interface ScheduleQualityReportOutput {
+  reportType: 'scheduleQuality';
+  scheduleKey: string;
+  serviceName: string;
+  dateLabel: string; // e.g., "Enero 2024"
+  score: number | null | undefined;
+  violations: ScheduleViolation[] | null | undefined;
+  scoreBreakdown: ScoreBreakdown | null | undefined;
+}

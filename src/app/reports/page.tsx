@@ -8,14 +8,13 @@ import ReportDisplay from '@/components/reports/report-display';
 import { summarizeShiftReport, type SummarizeShiftReportInput } from '@/ai/flows/summarize-shift-report';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertTriangle } from 'lucide-react';
-import type { Service, Employee, MonthlySchedule, EmployeeReportMetrics, EmployeeComparisonReportOutput, Holiday } from '@/lib/types';
+import type { Service, Employee, MonthlySchedule, EmployeeReportMetrics, EmployeeComparisonReportOutput, Holiday, ScheduleQualityReportOutput } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { getServices } from '@/lib/firebase/services';
 import { getEmployees } from '@/lib/firebase/employees';
-import { getSchedulesInDateRange } from '@/lib/firebase/monthlySchedules';
-import { getGridShiftTypeFromAIShift } from '@/components/schedule/InteractiveScheduleGrid'; // Importar función
-import { parseISO, getDay } from 'date-fns';
-import { format } from 'date-fns'; // Para formatear etiquetas de fecha
+import { getActiveMonthlySchedule, getSchedulesInDateRange, generateScheduleKey } from '@/lib/firebase/monthlySchedules';
+import { getGridShiftTypeFromAIShift } from '@/components/schedule/InteractiveScheduleGrid';
+import { parseISO, getDay, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getHolidays } from '@/lib/firebase/holidays';
 
@@ -31,7 +30,8 @@ const ALL_SERVICES_VALUE_CONST = "__ALL_SERVICES_COMPARISON__";
 export default function ReportsPage() {
   const [reportSummary, setReportSummary] = useState<string | null>(null);
   const [employeeComparisonOutput, setEmployeeComparisonOutput] = useState<EmployeeComparisonReportOutput | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false); // Un solo estado de carga
+  const [scheduleQualityOutput, setScheduleQualityOutput] = useState<ScheduleQualityReportOutput | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
 
   const { data: services = [], isLoading: isLoadingServices, error: errorServices } = useQuery<Service[]>({
@@ -50,11 +50,12 @@ export default function ReportsPage() {
   });
 
 
-  const handleGenerateReport = async (filters: any) => { // filters viene de RHF, así que es 'any' por ahora
+  const handleGenerateReport = async (filters: any) => {
     setIsProcessing(true);
     setProcessingError(null);
     setReportSummary(null);
     setEmployeeComparisonOutput(null);
+    setScheduleQualityOutput(null);
 
     if (filters.reportType === 'shiftSummary') {
       try {
@@ -74,17 +75,12 @@ export default function ReportsPage() {
           return;
         }
 
-        let schedulesInRange: MonthlySchedule[] = [];
-        // Si serviceIdForComparison es el valor "todos" o undefined, pasamos undefined a la función,
-        // para que busque en todos los servicios.
         const targetServiceId = (serviceIdForComparison === ALL_SERVICES_VALUE_CONST || !serviceIdForComparison)
           ? undefined
           : serviceIdForComparison;
 
-        schedulesInRange = await getSchedulesInDateRange(yearFrom, monthFrom, yearTo, monthTo, targetServiceId);
-
+        const schedulesInRange = await getSchedulesInDateRange(yearFrom, monthFrom, yearTo, monthTo, targetServiceId);
         const metricsByEmployee: Record<string, EmployeeReportMetrics> = {};
-        // const employeeMap = new Map(employees.map(e => [e.id, e.name])); // No se usa directamente
 
         schedulesInRange.forEach(schedule => {
           schedule.shifts.forEach(shift => {
@@ -98,17 +94,16 @@ export default function ReportsPage() {
               metricsByEmployee[employee.id] = {
                 employeeId: employee.id, employeeName: employee.name,
                 totalAssignedDays: 0, workDays: 0, weekendWorkDays: 0, holidayWorkDays: 0,
-                weekendRestDays: 0, // Nueva métrica
-                restDays: 0, ptoDays: 0, sickLeaveDays: 0, compOffDays: 0, holidaysOff: 0,
+                weekendRestDays: 0, restDays: 0, ptoDays: 0, sickLeaveDays: 0, compOffDays: 0, holidaysOff: 0,
                 shiftsM: 0, shiftsT: 0, shiftsN: 0,
-                workToRestRatio: '', // Nueva métrica
+                workToRestRatio: '',
               };
             }
             const metrics = metricsByEmployee[employee.id];
             metrics.totalAssignedDays++;
 
             const shiftDate = parseISO(shift.date);
-            const dayOfWeek = getDay(shiftDate); // 0 (Sun) - 6 (Sat)
+            const dayOfWeek = getDay(shiftDate);
             const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
             const isCurrentHoliday = holidays.some(h => h.date === shift.date);
             const shiftType = getGridShiftTypeFromAIShift(shift);
@@ -135,18 +130,16 @@ export default function ReportsPage() {
               metrics.compOffDays++;
             } else if (shiftType === 'F') {
               metrics.holidaysOff++;
-              if (isWeekend) metrics.weekendRestDays++; // Contar feriados en fin de semana como descanso de fin de semana
+              if (isWeekend) metrics.weekendRestDays++;
             }
           });
         });
 
-        // Calcular workToRestRatio y ordenar
         const reportDataArray = Object.values(metricsByEmployee).map(metrics => {
           const totalOffDays = metrics.restDays + metrics.ptoDays + metrics.sickLeaveDays + metrics.compOffDays + metrics.holidaysOff;
           metrics.workToRestRatio = `${metrics.workDays} W : ${totalOffDays} L`;
           return metrics;
         }).sort((a,b) => a.employeeName.localeCompare(b.employeeName));
-
 
         const dateFromLabel = `${reportMonths.find(m => m.value === monthFrom)?.label} ${yearFrom}`;
         const dateToLabel = `${reportMonths.find(m => m.value === monthTo)?.label} ${yearTo}`;
@@ -167,6 +160,34 @@ export default function ReportsPage() {
       } catch (e) {
         console.error("Error generando el informe comparativo:", e);
         setProcessingError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante la generación del informe comparativo.");
+      }
+    } else if (filters.reportType === 'scheduleQuality') {
+      try {
+        const { serviceIdForScheduleQuality, monthForScheduleQuality, yearForScheduleQuality } = filters;
+        if (!serviceIdForScheduleQuality || !monthForScheduleQuality || !yearForScheduleQuality) {
+          setProcessingError("Faltan parámetros de servicio, mes o año para el informe de calidad de horario.");
+          setIsProcessing(false);
+          return;
+        }
+        const activeSchedule = await getActiveMonthlySchedule(yearForScheduleQuality, monthForScheduleQuality, serviceIdForScheduleQuality);
+        if (activeSchedule) {
+          const service = services.find(s => s.id === serviceIdForScheduleQuality);
+          const monthLabel = reportMonths.find(m => m.value === monthForScheduleQuality)?.label || monthForScheduleQuality;
+          setScheduleQualityOutput({
+            reportType: 'scheduleQuality',
+            scheduleKey: activeSchedule.scheduleKey,
+            serviceName: service?.name || 'Servicio Desconocido',
+            dateLabel: `${monthLabel} ${yearForScheduleQuality}`,
+            score: activeSchedule.score,
+            violations: activeSchedule.violations,
+            scoreBreakdown: activeSchedule.scoreBreakdown,
+          });
+        } else {
+          setProcessingError(`No se encontró un horario activo para el servicio y fecha seleccionados.`);
+        }
+      } catch (e) {
+        console.error("Error generando el informe de calidad de horario:", e);
+        setProcessingError(e instanceof Error ? e.message : "Ocurrió un error desconocido durante la generación del informe de calidad.");
       }
     } else {
       setProcessingError(`El tipo de informe "${filters.reportType}" aún no está implementado.`);
@@ -197,7 +218,7 @@ export default function ReportsPage() {
               onGenerateReport={handleGenerateReport} 
               isLoading={isProcessing}
               services={services}
-              employees={employees}
+              employees={employees} // Pasamos employees aunque no se use directamente para este nuevo filtro
             />
           )}
         </div>
@@ -217,9 +238,13 @@ export default function ReportsPage() {
             </Alert>
           )}
           
-          <ReportDisplay summary={reportSummary} employeeComparisonOutput={employeeComparisonOutput} />
+          <ReportDisplay 
+            summary={reportSummary} 
+            employeeComparisonOutput={employeeComparisonOutput}
+            scheduleQualityOutput={scheduleQualityOutput}
+          />
 
-          {!isProcessing && !processingError && !reportSummary && !employeeComparisonOutput && (
+          {!isProcessing && !processingError && !reportSummary && !employeeComparisonOutput && !scheduleQualityOutput && (
              <Alert>
               <AlertTitle>Ningún Informe Generado</AlertTitle>
               <AlertDescription>Seleccione el tipo de informe y los parámetros, luego haga clic en "Generar Informe".</AlertDescription>
@@ -230,4 +255,3 @@ export default function ReportsPage() {
     </div>
   );
 }
-

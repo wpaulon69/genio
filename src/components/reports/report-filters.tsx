@@ -7,19 +7,16 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { CalendarIcon, BarChartBig, Loader2, Users } from 'lucide-react';
-import { format, addMonths } from 'date-fns'; // addMonths importado
+import { BarChartBig, Loader2, Users, CheckCircle } from 'lucide-react';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { DateRange } from 'react-day-picker';
 import type { Service, Employee } from '@/lib/types';
 
 const currentReportYear = new Date().getFullYear();
-const reportYears = Array.from({ length: 10 }, (_, i) => (currentReportYear - 7 + i).toString()); // Ampliado rango a 7 años atrás
+const reportYears = Array.from({ length: 10 }, (_, i) => (currentReportYear - 7 + i).toString());
 const reportMonths = Array.from({ length: 12 }, (_, i) => ({
   value: (i + 1).toString(),
   label: format(new Date(2000, i), 'MMMM', { locale: es }),
@@ -27,21 +24,18 @@ const reportMonths = Array.from({ length: 12 }, (_, i) => ({
 
 const ALL_SERVICES_VALUE = "__ALL_SERVICES_COMPARISON__";
 
-
 const reportFilterSchema = z.object({
-  reportType: z.string().min(1, "El tipo de informe es obligatorio"),
-  // Para AI summary
+  reportType: z.enum(["shiftSummary", "employeeComparison", "scheduleQuality"]),
   reportText: z.string().optional(),
-  // Para Employee Utilization (actualmente deshabilitado)
-  serviceIdOld: z.string().optional(),
-  employeeIdOld: z.string().optional(),
-  dateRangeOld: z.custom<DateRange | undefined>().optional(),
-  // Para Employee Comparison
   monthFrom: z.string().optional(),
   yearFrom: z.string().optional(),
   monthTo: z.string().optional(),
   yearTo: z.string().optional(),
   serviceIdForComparison: z.string().optional(),
+  // Fields for scheduleQuality report
+  serviceIdForScheduleQuality: z.string().optional(),
+  monthForScheduleQuality: z.string().optional(),
+  yearForScheduleQuality: z.string().optional(),
 })
 .refine(data => {
   if (data.reportType === 'shiftSummary' && (!data.reportText || data.reportText.trim().length < 20)) {
@@ -66,19 +60,23 @@ const reportFilterSchema = z.object({
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "La fecha 'Desde' no puede ser posterior a la fecha 'Hasta'.", path: ["monthFrom"] });
       }
     }
+  } else if (data.reportType === 'scheduleQuality') {
+    if (!data.serviceIdForScheduleQuality) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Servicio es obligatorio.", path: ["serviceIdForScheduleQuality"] });
+    if (!data.monthForScheduleQuality) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Mes es obligatorio.", path: ["monthForScheduleQuality"] });
+    if (!data.yearForScheduleQuality) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Año es obligatorio.", path: ["yearForScheduleQuality"] });
   }
 });
 
 type ReportFilterFormData = z.infer<typeof reportFilterSchema>;
 
 interface ReportFiltersProps {
-  onGenerateReport: (filters: ReportFilterFormData) => void; // Pasar el objeto completo
+  onGenerateReport: (filters: ReportFilterFormData) => void;
   isLoading: boolean;
   services: Service[];
-  employees: Employee[];
+  employees: Employee[]; // employees might not be needed here if not used for scheduleQuality filters
 }
 
-export default function ReportFilters({ onGenerateReport, isLoading, services, employees }: ReportFiltersProps) {
+export default function ReportFilters({ onGenerateReport, isLoading, services }: ReportFiltersProps) {
   const form = useForm<ReportFilterFormData>({
     resolver: zodResolver(reportFilterSchema),
     defaultValues: {
@@ -92,11 +90,14 @@ Servicio de Cardiología:
 - Dra. Alice cubrió todas las consultas de cardiología, 45 horas en total.
 - Técnico Brown asistió en 15 procedimientos, trabajó 32 horas.
 General: Los niveles de personal fueron adecuados pero se incurrió en algunas horas extras en Emergencias. El informe de equipo de la Enfermera Johnson necesita seguimiento. Considere la capacitación cruzada del Técnico Brown para tareas básicas de ER.`,
-      monthFrom: (new Date().getMonth()).toString(), // Mes anterior por defecto
+      monthFrom: (new Date().getMonth()).toString(),
       yearFrom: new Date().getFullYear().toString(),
       monthTo: (new Date().getMonth() + 1).toString(),
       yearTo: new Date().getFullYear().toString(),
       serviceIdForComparison: ALL_SERVICES_VALUE,
+      serviceIdForScheduleQuality: services.length > 0 ? services[0].id : '',
+      monthForScheduleQuality: (new Date().getMonth() + 1).toString(),
+      yearForScheduleQuality: new Date().getFullYear().toString(),
     },
   });
 
@@ -130,8 +131,9 @@ General: Los niveles de personal fueron adecuados pero se incurrió en algunas h
                     <SelectContent>
                       <SelectItem value="shiftSummary">Resumen de Informe de Turno con IA</SelectItem>
                       <SelectItem value="employeeComparison">Análisis Comparativo de Empleados</SelectItem>
-                      <SelectItem value="employeeUtilization" disabled>Utilización de Empleados (próximamente)</SelectItem>
-                      <SelectItem value="serviceUtilization" disabled>Utilización de Servicios (próximamente)</SelectItem>
+                      <SelectItem value="scheduleQuality">Análisis de Calidad de Horario</SelectItem>
+                      {/* <SelectItem value="employeeUtilization" disabled>Utilización de Empleados (próximamente)</SelectItem> */}
+                      {/* <SelectItem value="serviceUtilization" disabled>Utilización de Servicios (próximamente)</SelectItem> */}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -211,87 +213,42 @@ General: Los niveles de personal fueron adecuados pero se incurrió en algunas h
                 />
               </>
             )}
-
-
-            {(reportType === 'employeeUtilization' || reportType === 'serviceUtilization') && (
+            
+            {reportType === 'scheduleQuality' && (
               <>
-                <FormField
-                  control={form.control}
-                  name="serviceIdOld"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Servicio (Opcional)</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Todos los Servicios" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="">Todos los Servicios</SelectItem>
-                          {services.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="employeeIdOld"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Empleado (Opcional)</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Todos los Empleados" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                           <SelectItem value="">Todos los Empleados</SelectItem>
-                           {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-                <Controller
-                    control={form.control}
-                    name="dateRangeOld"
-                    render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                        <FormLabel>Rango de Fechas (Opcional)</FormLabel>
-                        <Popover>
-                        <PopoverTrigger asChild>
-                            <FormControl>
-                            <Button variant="outline" className="justify-start text-left font-normal">
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {field.value?.from ? (
-                                field.value.to ? (
-                                    <>{format(field.value.from, "LLL dd, y", { locale: es })} - {format(field.value.to, "LLL dd, y", { locale: es })}</>
-                                ) : (
-                                    format(field.value.from, "LLL dd, y", { locale: es })
-                                )
-                                ) : (
-                                <span>Elija un rango de fechas</span>
-                                )}
-                            </Button>
-                            </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                            initialFocus
-                            mode="range"
-                            defaultMonth={field.value?.from}
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            numberOfMonths={2}
-                            locale={es}
-                            />
-                        </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
+                <FormField control={form.control} name="serviceIdForScheduleQuality" render={({ field }) => (
+                  <FormItem> <FormLabel>Servicio</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar Servicio" /></SelectTrigger></FormControl>
+                      <SelectContent>{services.map(s => (<SelectItem key={`sq-${s.id}`} value={s.id}>{s.name}</SelectItem>))}</SelectContent>
+                    </Select><FormMessage />
+                  </FormItem>)} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="monthForScheduleQuality" render={({ field }) => (
+                    <FormItem> <FormLabel>Mes</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger></FormControl>
+                        <SelectContent>{reportMonths.map(m => (<SelectItem key={`sq-${m.value}`} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>)} />
+                  <FormField control={form.control} name="yearForScheduleQuality" render={({ field }) => (
+                    <FormItem> <FormLabel>Año</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Año" /></SelectTrigger></FormControl>
+                        <SelectContent>{reportYears.map(y => (<SelectItem key={`sq-${y}`} value={y}>{y}</SelectItem>))}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>)} />
+                </div>
               </>
             )}
+
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (reportType === 'employeeComparison' ? <Users className="mr-2 h-4 w-4" /> : <BarChartBig className="mr-2 h-4 w-4" />)}
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 
+                (reportType === 'employeeComparison' ? <Users className="mr-2 h-4 w-4" /> : 
+                (reportType === 'scheduleQuality' ? <CheckCircle className="mr-2 h-4 w-4" /> : 
+                <BarChartBig className="mr-2 h-4 w-4" />))}
               Generar Informe
             </Button>
           </CardFooter>
@@ -300,4 +257,3 @@ General: Los niveles de personal fueron adecuados pero se incurrió en algunas h
     </Card>
   );
 }
-
