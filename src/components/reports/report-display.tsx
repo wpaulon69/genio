@@ -3,9 +3,13 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Brain, Users, BarChartHorizontalBig } from 'lucide-react';
+import { Brain, Users, BarChartHorizontalBig, LineChart, PieChartIcon } from 'lucide-react';
 import type { EmployeeComparisonReportOutput } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent, type ChartConfig } from '@/components/ui/chart';
 
 interface ReportDisplayProps {
   summary?: string | null;
@@ -15,60 +19,189 @@ interface ReportDisplayProps {
 export default function ReportDisplay({ summary, employeeComparisonOutput }: ReportDisplayProps) {
   if (employeeComparisonOutput) {
     const { data, dateRangeLabel, serviceNameLabel } = employeeComparisonOutput;
+
+    const workDaysChartConfig = {
+      workDays: { label: "Días Trabajados", color: "hsl(var(--chart-1))" },
+    } satisfies ChartConfig;
+
+    const shiftTypesChartConfig = {
+      shiftsM: { label: "Mañana", color: "hsl(var(--chart-2))" },
+      shiftsT: { label: "Tarde", color: "hsl(var(--chart-3))" },
+      shiftsN: { label: "Noche", color: "hsl(var(--chart-4))" },
+    } satisfies ChartConfig;
+    
+    const leaveTypesChartConfig = {
+      restDays: { label: "Descanso (D)", color: "hsl(var(--chart-1))" },
+      ptoDays: { label: "LAO", color: "hsl(var(--chart-2))" },
+      sickLeaveDays: { label: "LM", color: "hsl(var(--chart-3))" },
+      compOffDays: { label: "Franco Comp. (C)", color: "hsl(var(--chart-4))" },
+      holidaysOff: { label: "Feriado Libre (F)", color: "hsl(var(--chart-5))" },
+    } satisfies ChartConfig;
+
+
     return (
       <Card className="h-full">
         <CardHeader>
           <CardTitle className="font-headline flex items-center">
-            <Users className="mr-2 h-6 w-6 text-primary" />
-            Análisis Comparativo de Empleados
+            <LineChart className="mr-2 h-6 w-6 text-primary" />
+            Resultados del Análisis Comparativo
           </CardTitle>
           <CardDescription>
-            Periodo: {dateRangeLabel}. 
-            {serviceNameLabel && ` Servicio: ${serviceNameLabel || 'N/A'}`}
+            Periodo: {dateRangeLabel}.
+            {serviceNameLabel && ` Servicio: ${serviceNameLabel}`}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-8">
           {data.length > 0 ? (
-            <ScrollArea className="h-[60vh] w-full"> {/* Ajusta la altura según sea necesario */}
-              <Table>
-                <TableHeader className="sticky top-0 bg-card z-10">
-                  <TableRow>
-                    <TableHead className="min-w-[150px]">Empleado</TableHead>
-                    <TableHead className="text-center">Días Trab.</TableHead>
-                    <TableHead className="text-center">FDS Trab.</TableHead>
-                    <TableHead className="text-center">Fer. Trab.</TableHead>
-                    <TableHead className="text-center">M</TableHead>
-                    <TableHead className="text-center">T</TableHead>
-                    <TableHead className="text-center">N</TableHead>
-                    <TableHead className="text-center">D</TableHead>
-                    <TableHead className="text-center">LAO</TableHead>
-                    <TableHead className="text-center">LM</TableHead>
-                    <TableHead className="text-center">C</TableHead>
-                    <TableHead className="text-center">Fer. Libre</TableHead>
-                    <TableHead className="text-center">Total Asig.</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.map((empMetrics) => (
-                    <TableRow key={empMetrics.employeeId}>
-                      <TableCell className="font-medium">{empMetrics.employeeName}</TableCell>
-                      <TableCell className="text-center">{empMetrics.workDays}</TableCell>
-                      <TableCell className="text-center">{empMetrics.weekendWorkDays}</TableCell>
-                      <TableCell className="text-center">{empMetrics.holidayWorkDays}</TableCell>
-                      <TableCell className="text-center">{empMetrics.shiftsM}</TableCell>
-                      <TableCell className="text-center">{empMetrics.shiftsT}</TableCell>
-                      <TableCell className="text-center">{empMetrics.shiftsN}</TableCell>
-                      <TableCell className="text-center">{empMetrics.restDays}</TableCell>
-                      <TableCell className="text-center">{empMetrics.ptoDays}</TableCell>
-                      <TableCell className="text-center">{empMetrics.sickLeaveDays}</TableCell>
-                      <TableCell className="text-center">{empMetrics.compOffDays}</TableCell>
-                      <TableCell className="text-center">{empMetrics.holidaysOff}</TableCell>
-                      <TableCell className="text-center">{empMetrics.totalAssignedDays}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollArea>
+            <>
+              <div>
+                <h3 className="text-lg font-semibold mb-2 flex items-center">
+                  <BarChartHorizontalBig className="mr-2 h-5 w-5 text-muted-foreground" />
+                  Total Días Trabajados por Empleado
+                </h3>
+                <ChartContainer config={workDaysChartConfig} className="min-h-[250px] w-full aspect-auto">
+                  <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 20, right: 20, top: 5, bottom: 5 }}>
+                    <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                    <YAxis
+                      dataKey="employeeName"
+                      type="category"
+                      tickLine={false}
+                      tickMargin={5}
+                      axisLine={false}
+                      tickFormatter={(value) => value.length > 20 ? value.slice(0, 18) + '...' : value}
+                      className="text-xs fill-muted-foreground"
+                      interval={0}
+                    />
+                    <XAxis dataKey="workDays" type="number" hide />
+                    <Tooltip
+                      cursor={{ fill: 'hsl(var(--muted)/0.5)' }}
+                      content={<ChartTooltipContent indicator="dot" hideLabel />}
+                    />
+                    <Bar dataKey="workDays" layout="vertical" radius={4} barSize={15}>
+                      {data.map((entry, index) => (
+                        <Cell key={`cell-wd-${index}`} fill={workDaysChartConfig.workDays.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ChartContainer>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="text-lg font-semibold mb-2 flex items-center">
+                  <PieChartIcon className="mr-2 h-5 w-5 text-muted-foreground" />
+                  Distribución de Tipos de Turno (M, T, N)
+                </h3>
+                <ChartContainer config={shiftTypesChartConfig} className="min-h-[250px] w-full aspect-auto">
+                  <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 20, right: 20, top: 5, bottom: 20 }} barCategoryGap="20%">
+                    <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                    <YAxis
+                      dataKey="employeeName"
+                      type="category"
+                      tickLine={false}
+                      tickMargin={5}
+                      axisLine={false}
+                      tickFormatter={(value) => value.length > 20 ? value.slice(0, 18) + '...' : value}
+                      className="text-xs fill-muted-foreground"
+                      interval={0}
+                    />
+                    <XAxis type="number" hide />
+                    <Tooltip
+                      cursor={{ fill: 'hsl(var(--muted)/0.5)' }}
+                      content={<ChartTooltipContent indicator="dot" />}
+                    />
+                    <Legend content={<ChartLegendContent nameKey="name" />} verticalAlign="bottom" wrapperStyle={{paddingTop: '10px'}} />
+                    <Bar dataKey="shiftsM" name="Mañana" stackId="shifts" fill="var(--color-shiftsM)" radius={3} barSize={15}/>
+                    <Bar dataKey="shiftsT" name="Tarde" stackId="shifts" fill="var(--color-shiftsT)" radius={3} barSize={15}/>
+                    <Bar dataKey="shiftsN" name="Noche" stackId="shifts" fill="var(--color-shiftsN)" radius={3} barSize={15}/>
+                  </BarChart>
+                </ChartContainer>
+              </div>
+              
+              <Separator />
+               <div>
+                <h3 className="text-lg font-semibold mb-2 flex items-center">
+                  <PieChartIcon className="mr-2 h-5 w-5 text-muted-foreground" />
+                  Distribución de Días No Trabajados
+                </h3>
+                <ChartContainer config={leaveTypesChartConfig} className="min-h-[250px] w-full aspect-auto">
+                  <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 20, right: 20, top: 5, bottom: 20 }} barCategoryGap="20%">
+                    <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                    <YAxis
+                      dataKey="employeeName"
+                      type="category"
+                      tickLine={false}
+                      tickMargin={5}
+                      axisLine={false}
+                      tickFormatter={(value) => value.length > 20 ? value.slice(0, 18) + '...' : value}
+                      className="text-xs fill-muted-foreground"
+                      interval={0}
+                    />
+                    <XAxis type="number" hide />
+                    <Tooltip
+                      cursor={{ fill: 'hsl(var(--muted)/0.5)' }}
+                      content={<ChartTooltipContent indicator="dot" />}
+                    />
+                    <Legend content={<ChartLegendContent nameKey="name" />} verticalAlign="bottom" wrapperStyle={{paddingTop: '10px'}} />
+                    <Bar dataKey="restDays" name="Descanso (D)" stackId="leaves" fill="var(--color-restDays)" radius={3} barSize={15}/>
+                    <Bar dataKey="ptoDays" name="LAO" stackId="leaves" fill="var(--color-ptoDays)" radius={3} barSize={15}/>
+                    <Bar dataKey="sickLeaveDays" name="LM" stackId="leaves" fill="var(--color-sickLeaveDays)" radius={3} barSize={15}/>
+                    <Bar dataKey="compOffDays" name="Franco Comp. (C)" stackId="leaves" fill="var(--color-compOffDays)" radius={3} barSize={15}/>
+                    <Bar dataKey="holidaysOff" name="Feriado Libre (F)" stackId="leaves" fill="var(--color-holidaysOff)" radius={3} barSize={15}/>
+                  </BarChart>
+                </ChartContainer>
+              </div>
+
+
+              <Separator />
+
+              <div>
+                <h3 className="text-lg font-semibold mb-2 mt-6">
+                  Datos Detallados
+                </h3>
+                <ScrollArea className="h-[60vh] w-full">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-card z-10">
+                      <TableRow>
+                        <TableHead className="min-w-[150px] font-semibold">Empleado</TableHead>
+                        <TableHead className="text-center">Total Asig.</TableHead>
+                        <TableHead className="text-center text-green-600">D.Trab.</TableHead>
+                        <TableHead className="text-center text-green-600">FDS Trab.</TableHead>
+                        <TableHead className="text-center text-green-600">Fer. Trab.</TableHead>
+                        <TableHead className="text-center text-blue-600">M</TableHead>
+                        <TableHead className="text-center text-blue-600">T</TableHead>
+                        <TableHead className="text-center text-blue-600">N</TableHead>
+                        <TableHead className="text-center text-orange-600">D</TableHead>
+                        <TableHead className="text-center text-purple-600">LAO</TableHead>
+                        <TableHead className="text-center text-purple-600">LM</TableHead>
+                        <TableHead className="text-center text-purple-600">C</TableHead>
+                        <TableHead className="text-center text-purple-600">F</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.map((empMetrics) => (
+                        <TableRow key={empMetrics.employeeId}>
+                          <TableCell className="font-medium">{empMetrics.employeeName}</TableCell>
+                          <TableCell className="text-center">{empMetrics.totalAssignedDays}</TableCell>
+                          <TableCell className="text-center font-semibold text-green-700">{empMetrics.workDays}</TableCell>
+                          <TableCell className="text-center">{empMetrics.weekendWorkDays}</TableCell>
+                          <TableCell className="text-center">{empMetrics.holidayWorkDays}</TableCell>
+                          <TableCell className="text-center">{empMetrics.shiftsM}</TableCell>
+                          <TableCell className="text-center">{empMetrics.shiftsT}</TableCell>
+                          <TableCell className="text-center">{empMetrics.shiftsN}</TableCell>
+                          <TableCell className="text-center">{empMetrics.restDays}</TableCell>
+                          <TableCell className="text-center">{empMetrics.ptoDays}</TableCell>
+                          <TableCell className="text-center">{empMetrics.sickLeaveDays}</TableCell>
+                          <TableCell className="text-center">{empMetrics.compOffDays}</TableCell>
+                          <TableCell className="text-center">{empMetrics.holidaysOff}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
+            </>
           ) : (
             <p className="text-muted-foreground">No se encontraron datos de empleados para el rango y servicio seleccionados.</p>
           )}
@@ -98,8 +231,8 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
       </Card>
     );
   }
-  
-  // Si no hay summary ni employeeComparisonOutput, no se muestra nada o un placeholder
-  // Este caso es manejado por la página de Informes que muestra "Ningún Informe Generado"
-  return null; 
+
+  return null;
 }
+
+    
