@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { Employee, Service, EmployeePreferences, FixedAssignment as FixedAssignmentType, WorkPattern } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'; // FormProvider removed from import
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -77,14 +77,20 @@ const employeeSchemaStep1 = z.object({
   roles: z.string().min(1, "Los roles son obligatorios (separados por coma)"),
 });
 
+// Schema for Step 2 (Preferences) - Zod validation primarily at the end
 const employeeSchemaStep2 = z.object({
   preferences: preferencesSchema.optional(),
+});
+
+// Schema for Step 3 (Assignments & Details) - Zod validation primarily at the end
+const employeeSchemaStep3 = z.object({
   availability: z.string().optional(),
   constraints: z.string().optional(),
   fixedAssignments: z.array(fixedAssignmentSchema).optional(),
 });
 
-const employeeFormValidationSchema = employeeSchemaStep1.merge(employeeSchemaStep2);
+
+const employeeFormValidationSchema = employeeSchemaStep1.merge(employeeSchemaStep2).merge(employeeSchemaStep3);
 
 type EmployeeFormInput = z.infer<typeof employeeFormValidationSchema>;
 
@@ -126,6 +132,7 @@ const formDefaultPreferences: EmployeePreferences = {
 
 export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, availableServices, isLoading }: EmployeeFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 3;
 
   const form = useForm<EmployeeFormInput>({
     resolver: zodResolver(employeeFormValidationSchema),
@@ -213,12 +220,23 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
   };
 
   const handleNextStep = async () => {
-    const step1Fields: (keyof EmployeeFormInput)[] = ['name', 'contact', 'roles', 'serviceIds'];
-    const isValid = await form.trigger(step1Fields);
-    if (isValid) setCurrentStep(currentStep + 1);
+    let isValid = true;
+    if (currentStep === 1) {
+      const step1Fields: (keyof EmployeeFormInput)[] = ['name', 'contact', 'roles', 'serviceIds'];
+      isValid = await form.trigger(step1Fields);
+    }
+    // No specific validation needed for step 2 before proceeding to step 3 as fields are optional.
+    // Final validation happens on submit.
+    if (isValid && currentStep < totalSteps) {
+      setCurrentStep(currentStep + 1);
+    }
   };
 
-  const handlePreviousStep = () => setCurrentStep(currentStep - 1);
+  const handlePreviousStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
 
   const watchFixedAssignmentType = (index: number) => form.watch(`fixedAssignments.${index}.type`);
   
@@ -229,12 +247,14 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isLoading) onClose(); }}>
       <DialogContent className="sm:max-w-3xl md:max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle>{employee ? 'Editar Empleado' : 'Añadir Nuevo Empleado'} - Paso {currentStep} de 2</DialogTitle>
+          <DialogTitle>{employee ? 'Editar Empleado' : 'Añadir Nuevo Empleado'} - Paso {currentStep} de {totalSteps}</DialogTitle>
           <DialogDescription>
-            {currentStep === 1 ? 'Complete la información básica y servicios.' : 'Defina patrón de trabajo, preferencias, turno fijo y asignaciones.'}
+            {currentStep === 1 && 'Complete la información básica y servicios.'}
+            {currentStep === 2 && 'Defina el patrón de trabajo general y preferencias adicionales.'}
+            {currentStep === 3 && 'Defina turno fijo semanal (si aplica), asignaciones fijas y otros detalles.'}
           </DialogDescription>
         </DialogHeader>
-        <Form {...form}> {/* Changed FormProvider to Form */}
+        <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-grow min-h-0 gap-4">
             <ScrollArea className="flex-grow min-h-0"> 
               <div className="space-y-4 p-1 pr-5">
@@ -293,7 +313,11 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
                         <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isLoading} /></FormControl>
                         <FormLabel className="font-normal">Prefiere Trabajar Fines de Semana</FormLabel>
                       </FormItem>)} />
+                  </>
+                )}
 
+                {currentStep === 3 && (
+                  <>
                     {showDailyFixedPreferences && (
                         <>
                             <Separator className="my-4" />
@@ -385,13 +409,15 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
               <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancelar</Button>
               <div className="flex gap-2">
                 {currentStep > 1 && (<Button type="button" variant="outline" onClick={handlePreviousStep} disabled={isLoading}>Anterior</Button>)}
-                {currentStep < 2 && (<Button type="button" onClick={handleNextStep} disabled={isLoading}>Siguiente</Button>)}
-                {currentStep === 2 && (<Button type="submit" disabled={isLoading}>{isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{employee ? 'Guardar Cambios' : 'Crear Empleado'}</Button>)}
+                {currentStep < totalSteps && (<Button type="button" onClick={handleNextStep} disabled={isLoading}>Siguiente</Button>)}
+                {currentStep === totalSteps && (<Button type="submit" disabled={isLoading}>{isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{employee ? 'Guardar Cambios' : 'Crear Empleado'}</Button>)}
               </div>
             </DialogFooter>
           </form>
-        </Form> {/* Changed FormProvider to Form */}
+        </Form>
       </DialogContent>
     </Dialog>
   );
 }
+
+    
