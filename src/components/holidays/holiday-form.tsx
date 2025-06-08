@@ -36,25 +36,36 @@ export default function HolidayForm({ isOpen, onClose, onSubmit, holiday, isLoad
     resolver: zodResolver(holidayFormSchema),
     defaultValues: {
       name: '',
-      date: undefined,
+      date: new Date(), // Initialize with today, will be updated by useEffect
     },
   });
 
   useEffect(() => {
     if (isOpen) {
-      if (holiday) {
+      if (holiday) { // Editing existing holiday
         form.reset({
           name: holiday.name,
           date: holiday.date && isValidDate(parseISO(holiday.date)) ? parseISO(holiday.date) : new Date(),
         });
-      } else {
-        form.reset({
-          name: '',
-          date: new Date(), // Default to today or relevant date
-        });
+      } else { // Adding a new holiday
+        // Only reset if the form hasn't been touched yet for this 'isOpen' cycle, or if name is empty
+        // This prevents overriding a date selected by the user for a new holiday
+        if (!form.formState.isDirty || form.getValues('name') === '') {
+            form.reset({
+                name: '',
+                date: new Date(),
+            });
+        } else {
+            // If form is dirty (e.g., user picked a date), just ensure name is reset if it was empty
+            // but keep the potentially user-selected date.
+             form.reset({
+                name: form.getValues('name'), // Keep current name if any
+                date: form.getValues('date') // Keep current date
+            });
+        }
       }
     }
-  }, [holiday, form, isOpen]);
+  }, [holiday, isOpen, form]); // form added as dependency for getValues and formState
 
   const handleFormSubmit = (data: HolidayFormData) => {
     const formattedDate = format(data.date, 'yyyy-MM-dd');
