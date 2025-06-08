@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Brain, Users, BarChartHorizontalBig, LineChart, PieChartIcon, CheckCircle, ShieldCheck, HeartHandshake, BadgeCheck, CircleAlert, CircleHelp, CalendarDays } from 'lucide-react';
+import { Brain, Users, BarChartHorizontalBig, LineChart, PieChartIcon, CheckCircle, ShieldCheck, HeartHandshake, BadgeCheck, CircleAlert, CircleHelp, CalendarDays, Info } from 'lucide-react';
 import type { EmployeeComparisonReportOutput, EmployeeReportMetrics, ScheduleQualityReportOutput, ScheduleViolation } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -26,8 +26,12 @@ export default function ReportDisplay({ summary, employeeComparisonOutput, sched
   if (scheduleQualityOutput) {
     const { serviceName, dateLabel, score, violations, scoreBreakdown } = scheduleQualityOutput;
     const scoreValue = score ?? 0;
-    const serviceRulesScore = scoreBreakdown?.serviceRules ?? 0;
-    const employeeWellbeingScore = scoreBreakdown?.employeeWellbeing ?? 0;
+    
+    // Prepare scores for breakdown, default to 0 if not available but allow conditional rendering later
+    const serviceRulesScore = scoreBreakdown?.serviceRules;
+    const employeeWellbeingScore = scoreBreakdown?.employeeWellbeing;
+
+    const isBreakdownAvailable = typeof serviceRulesScore === 'number' && typeof employeeWellbeingScore === 'number';
 
     return (
       <Card className="h-full">
@@ -56,36 +60,48 @@ export default function ReportDisplay({ summary, employeeComparisonOutput, sched
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center">
-                  <ShieldCheck className="mr-2 h-5 w-5 text-blue-600"/>
-                  Cumplimiento Reglas Servicio
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 pt-2">
-                <Progress value={serviceRulesScore} className="h-3" indicatorClassName={
-                    serviceRulesScore >= 80 ? 'bg-blue-600' : serviceRulesScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                }/>
-                <p className="text-right text-sm font-medium">{serviceRulesScore.toFixed(0)} / 100</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center">
-                  <HeartHandshake className="mr-2 h-5 w-5 text-pink-600"/>
-                   Bienestar del Personal
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 pt-2">
-                 <Progress value={employeeWellbeingScore} className="h-3" indicatorClassName={
-                     employeeWellbeingScore >= 80 ? 'bg-pink-600' : employeeWellbeingScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                 } />
-                <p className="text-right text-sm font-medium">{employeeWellbeingScore.toFixed(0)} / 100</p>
-              </CardContent>
-            </Card>
-          </div>
+          {isBreakdownAvailable ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center">
+                    <ShieldCheck className="mr-2 h-5 w-5 text-blue-600"/>
+                    Cumplimiento Reglas Servicio
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 pt-2">
+                  <Progress value={serviceRulesScore} className="h-3" indicatorClassName={
+                      serviceRulesScore! >= 80 ? 'bg-blue-600' : serviceRulesScore! >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                  }/>
+                  <p className="text-right text-sm font-medium">{serviceRulesScore!.toFixed(0)} / 100</p>
+                </CardContent>
+              </Card>
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center">
+                    <HeartHandshake className="mr-2 h-5 w-5 text-pink-600"/>
+                     Bienestar del Personal
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 pt-2">
+                   <Progress value={employeeWellbeingScore} className="h-3" indicatorClassName={
+                       employeeWellbeingScore! >= 80 ? 'bg-pink-600' : employeeWellbeingScore! >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                   } />
+                  <p className="text-right text-sm font-medium">{employeeWellbeingScore!.toFixed(0)} / 100</p>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            (score !== null && score !== undefined) && (
+                 <Alert variant="default" className="mt-4">
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>Desglose de Puntuación No Disponible</AlertTitle>
+                    <AlertDescription>
+                        El desglose detallado de la puntuación (Reglas del Servicio, Bienestar del Personal) no está disponible para este horario.
+                    </AlertDescription>
+                </Alert>
+            )
+          )}
           
           {violations && violations.length > 0 ? (
             <Card className="shadow-sm">
