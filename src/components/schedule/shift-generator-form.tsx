@@ -10,22 +10,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, Archive, BadgeAlert, BadgeCheck, CircleAlert, CircleHelp, UploadCloud, ShieldCheck, HeartHandshake } from 'lucide-react';
+import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, Archive, UploadCloud } from 'lucide-react';
 import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-scheduler';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import type { Employee, Service, Holiday, MonthlySchedule, ScheduleViolation, ScoreBreakdown } from '@/lib/types';
-import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate, startOfDay, endOfDay, subMonths } from 'date-fns';
+import type { Employee, Service, Holiday, MonthlySchedule } from '@/lib/types';
+import { format, isValid, parseISO, getYear as getYearFromDate, getMonth as getMonthFromDate, startOfMonth, endOfMonth, isWithinInterval, startOfDay, endOfDay, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid';
+import ScheduleEvaluationDisplay from './schedule-evaluation-display'; // Importar el nuevo componente
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getHolidays } from '@/lib/firebase/holidays';
 import { getActiveMonthlySchedule, saveNewActiveSchedule, updateExistingActiveSchedule, generateScheduleKey } from '@/lib/firebase/monthlySchedules';
 import { useToast } from '@/hooks/use-toast';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 const shiftGenerationConfigSchema = z.object({
   serviceId: z.string().min(1, "Debe seleccionar un servicio."),
@@ -59,8 +57,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const [algorithmGeneratedShifts, setAlgorithmGeneratedShifts] = useState<AIShift[] | null>(null);
   const [editableShifts, setEditableShifts] = useState<AIShift[] | null>(null);
   const [generatedScore, setGeneratedScore] = useState<number | null>(null);
-  const [generatedViolations, setGeneratedViolations] = useState<ScheduleViolation[] | null>(null);
-  const [generatedScoreBreakdown, setGeneratedScoreBreakdown] = useState<ScoreBreakdown | null>(null);
+  const [generatedViolations, setGeneratedViolations] = useState<MonthlySchedule['violations'] | null>(null);
+  const [generatedScoreBreakdown, setGeneratedScoreBreakdown] = useState<MonthlySchedule['scoreBreakdown'] | null>(null);
   
   const [error, setError] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(false);
@@ -426,91 +424,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingConfig;
   const canGenerate = configLoaded && (userChoiceForExisting === 'generate_new' || !currentLoadedSchedule) && !isFormSelectionChanged();
 
-  const renderScheduleEvaluation = () => {
-    const scoreToDisplay = generatedScore ?? currentLoadedSchedule?.score;
-    const violationsToDisplay = generatedViolations ?? currentLoadedSchedule?.violations;
-    const breakdownToDisplay = generatedScoreBreakdown ?? currentLoadedSchedule?.scoreBreakdown;
-
-    if (scoreToDisplay === null && (!violationsToDisplay || violationsToDisplay.length === 0) && !breakdownToDisplay) {
-        return null;
-    }
-    
-    return (
-      <Card className="mt-4 w-full border-dashed">
-        <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-lg flex items-center">
-            <BadgeCheck className="mr-2 h-5 w-5 text-primary" />
-            Evaluación del Horario
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {scoreToDisplay !== null && (
-            <div className="text-base font-semibold">
-              Puntuación General del Horario: <Badge variant={scoreToDisplay >= 80 ? "default" : scoreToDisplay >= 60 ? "secondary" : "destructive"}>{scoreToDisplay.toFixed(0)} / 100</Badge>
-            </div>
-          )}
-          {breakdownToDisplay && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm mt-1 mb-3">
-                <div className="flex items-center">
-                    <ShieldCheck className="mr-2 h-5 w-5 text-blue-600"/>
-                    <span>Cumplimiento Reglas Servicio:</span>
-                    <Badge variant={breakdownToDisplay.serviceRules >= 80 ? "default" : breakdownToDisplay.serviceRules >= 60 ? "secondary" : "destructive"} className="ml-2">{breakdownToDisplay.serviceRules.toFixed(0)} / 100</Badge>
-                </div>
-                <div className="flex items-center">
-                    <HeartHandshake className="mr-2 h-5 w-5 text-green-600"/>
-                    <span>Bienestar del Personal:</span>
-                    <Badge variant={breakdownToDisplay.employeeWellbeing >= 80 ? "default" : breakdownToDisplay.employeeWellbeing >= 60 ? "secondary" : "destructive"} className="ml-2">{breakdownToDisplay.employeeWellbeing.toFixed(0)} / 100</Badge>
-                </div>
-            </div>
-          )}
-          {violationsToDisplay && violationsToDisplay.length > 0 ? (
-            <Accordion type="single" collapsible className="w-full">
-              <AccordionItem value="item-1">
-                <AccordionTrigger className="text-base hover:no-underline">
-                  Informe de Reglas y Preferencias ({violationsToDisplay.length} {violationsToDisplay.length === 1 ? 'incidencia' : 'incidencias'})
-                </AccordionTrigger>
-                <AccordionContent>
-                  <ScrollArea className="max-h-60">
-                    <ul className="space-y-2 pt-2 pr-4">
-                      {violationsToDisplay.map((v, index) => (
-                        <li key={index} className={`p-2 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
-                          <div className="flex items-start gap-2">
-                            {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
-                            <div>
-                              <span className="font-semibold">
-                                {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
-                                {v.category === 'serviceRule' && <Badge variant="outline" className="mr-1 border-blue-500 text-blue-700">Regla</Badge>}
-                                {v.category === 'employeeWellbeing' && <Badge variant="outline" className="mr-1 border-green-500 text-green-700">Bienestar</Badge>}
-                                {v.rule}
-                              </span>
-                              <p className="text-xs opacity-90">
-                                {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
-                                {v.date && <><strong>Fecha:</strong> {v.date} </>}
-                                {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
-                              </p>
-                              <p className="text-sm mt-1">{v.details}</p>
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </ScrollArea>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          ) : (
-            scoreToDisplay !== null && ( // Solo mostrar "Excelente" si hay un puntaje (indicando que se evaluó)
-                <Alert variant="default" className="mt-2">
-                <BadgeCheck className="h-4 w-4"/>
-                <AlertTitle>¡Excelente!</AlertTitle>
-                <AlertDescription>No se encontraron incumplimientos de reglas o preferencias en este horario.</AlertDescription>
-                </Alert>
-            )
-          )}
-        </CardContent>
-      </Card>
-    );
-  };
+  const scoreForEvaluation = showGrid && editableShifts ? (generatedScore ?? currentLoadedSchedule?.score) : (algorithmGeneratedShifts ? generatedScore : currentLoadedSchedule?.score);
+  const violationsForEvaluation = showGrid && editableShifts ? (generatedViolations ?? currentLoadedSchedule?.violations) : (algorithmGeneratedShifts ? generatedViolations : currentLoadedSchedule?.violations);
+  const breakdownForEvaluation = showGrid && editableShifts ? (generatedScoreBreakdown ?? currentLoadedSchedule?.scoreBreakdown) : (algorithmGeneratedShifts ? generatedScoreBreakdown : currentLoadedSchedule?.scoreBreakdown);
 
 
   return (
@@ -618,7 +534,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         )
       )}
       
-      {(showGrid || (algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0) || (currentLoadedSchedule && userChoiceForExisting === null && !showInitialChoiceDialog && !isLoadingConfig && configLoaded)) && renderScheduleEvaluation()}
+      {((showGrid && editableShifts) || (algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0) || (currentLoadedSchedule && userChoiceForExisting === null && !showInitialChoiceDialog && !isLoadingConfig && configLoaded)) && (
+         <ScheduleEvaluationDisplay
+            score={scoreForEvaluation}
+            violations={violationsForEvaluation}
+            scoreBreakdown={breakdownForEvaluation}
+            context="generator"
+          />
+      )}
 
 
       {error && (
@@ -716,4 +639,3 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
-

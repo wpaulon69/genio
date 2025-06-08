@@ -4,17 +4,19 @@
 import PageHeader from '@/components/common/page-header';
 import ShiftGeneratorForm from '@/components/schedule/shift-generator-form';
 import InteractiveScheduleGrid from '@/components/schedule/InteractiveScheduleGrid';
+import ScheduleEvaluationDisplay from '@/components/schedule/schedule-evaluation-display'; // Importar nuevo componente
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { Employee, Service, MonthlySchedule, Holiday } from '@/lib/types'; // Holiday importado
+import type { Employee, Service, MonthlySchedule, Holiday } from '@/lib/types';
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query'; // Importar useQueryClient
 import { getEmployees } from '@/lib/firebase/employees';
 import { getServices } from '@/lib/firebase/services';
 import { getActiveMonthlySchedule } from '@/lib/firebase/monthlySchedules';
-import { getHolidays } from '@/lib/firebase/holidays'; // Importar getHolidays
-import { Loader2, CalendarSearch, AlertTriangle, Info } from 'lucide-react';
+import { getHolidays } from '@/lib/firebase/holidays';
+import { Loader2, CalendarSearch, AlertTriangle, Info, UploadCloud } from 'lucide-react'; // Importar UploadCloud
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button'; // Importar Button
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { es } from 'date-fns/locale';
@@ -27,6 +29,7 @@ const scheduleMonths = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 export default function SchedulePage() {
+  const queryClient = useQueryClient(); // Inicializar queryClient
   const [selectedYearView, setSelectedYearView] = useState<string>(currentYear.toString());
   const [selectedMonthView, setSelectedMonthView] = useState<string>((new Date().getMonth() + 1).toString());
   const [selectedServiceIdView, setSelectedServiceIdView] = useState<string | undefined>(undefined);
@@ -45,7 +48,6 @@ export default function SchedulePage() {
   });
 
 
-  // Set default service for view once services are loaded
   useEffect(() => {
     if (services.length > 0 && !selectedServiceIdView) {
       setSelectedServiceIdView(services[0].id);
@@ -55,7 +57,8 @@ export default function SchedulePage() {
   const { 
     data: viewableSchedule, 
     isLoading: isLoadingViewableSchedule, 
-    error: errorViewableSchedule 
+    error: errorViewableSchedule,
+    refetch: refetchViewableSchedule, // Obtener función de refetch
   } = useQuery<MonthlySchedule | null>({
     queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView],
     queryFn: () => {
@@ -71,8 +74,20 @@ export default function SchedulePage() {
     return services.find(s => s.id === selectedServiceIdView);
   }, [selectedServiceIdView, services]);
 
-  const isLoading = isLoadingEmployees || isLoadingServices || isLoadingHolidays; // Incluir isLoadingHolidays
-  const dataError = errorEmployees || errorServices || errorHolidays; // Incluir errorHolidays
+  const isLoading = isLoadingEmployees || isLoadingServices || isLoadingHolidays;
+  const dataError = errorEmployees || errorServices || errorHolidays;
+
+  const handleLoadRefreshSchedule = () => {
+    if (selectedServiceIdView && selectedYearView && selectedMonthView) {
+        // Invalidar y refetch la query del horario activo
+        queryClient.invalidateQueries({ 
+            queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView] 
+        });
+        // Opcionalmente, llamar a refetch directamente si se prefiere un control más inmediato
+        // refetchViewableSchedule(); 
+    }
+  };
+
 
   if (isLoading) {
     return (
@@ -117,7 +132,7 @@ export default function SchedulePage() {
                 Seleccione el servicio, mes y año para cargar el horario guardado.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Select value={selectedServiceIdView} onValueChange={setSelectedServiceIdView}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar Servicio" /></SelectTrigger>
@@ -140,6 +155,14 @@ export default function SchedulePage() {
                   </SelectContent>
                 </Select>
               </div>
+              <Button 
+                onClick={handleLoadRefreshSchedule} 
+                disabled={!selectedServiceIdView || isLoadingViewableSchedule}
+                className="w-full md:w-auto mt-2"
+              >
+                {isLoadingViewableSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UploadCloud className="mr-2 h-4 w-4" />}
+                Cargar/Refrescar Horario
+              </Button>
             </CardContent>
           </Card>
 
@@ -158,15 +181,23 @@ export default function SchedulePage() {
           )}
           {!isLoadingViewableSchedule && !errorViewableSchedule && selectedServiceIdView && (
             viewableSchedule ? (
-              <InteractiveScheduleGrid
-                initialShifts={viewableSchedule.shifts}
-                allEmployees={employees}
-                targetService={selectedServiceForView}
-                month={selectedMonthView}
-                year={selectedYearView}
-                holidays={holidays} // Pasar feriados
-                isReadOnly={true}
-              />
+              <>
+                <InteractiveScheduleGrid
+                  initialShifts={viewableSchedule.shifts}
+                  allEmployees={employees}
+                  targetService={selectedServiceForView}
+                  month={selectedMonthView}
+                  year={selectedYearView}
+                  holidays={holidays}
+                  isReadOnly={true}
+                />
+                <ScheduleEvaluationDisplay 
+                  score={viewableSchedule.score}
+                  violations={viewableSchedule.violations}
+                  scoreBreakdown={viewableSchedule.scoreBreakdown}
+                  context="viewer"
+                />
+              </>
             ) : (
               <Alert>
                 <Info className="h-5 w-5 mr-2"/>
@@ -191,7 +222,6 @@ export default function SchedulePage() {
           <ShiftGeneratorForm 
             allEmployees={employees} 
             allServices={services}   
-            // holidays ya se carga dentro de ShiftGeneratorForm
           />
         </TabsContent>
       </Tabs>
