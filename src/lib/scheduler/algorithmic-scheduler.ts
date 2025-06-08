@@ -424,3 +424,4 @@ export async function generateAlgorithmicSchedule(
 
   return { generatedShifts, responseText: responseSummary, violations, score: finalScore, scoreBreakdown };
 }
+
