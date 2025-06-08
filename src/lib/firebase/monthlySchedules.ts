@@ -18,6 +18,8 @@ import {
 import { db } from './config';
 import type { MonthlySchedule, AIShift } from '@/lib/types';
 import { cleanDataForFirestore } from '@/lib/utils';
+import { format, addMonths } from 'date-fns';
+
 
 const MONTHLY_SCHEDULES_COLLECTION = 'monthlySchedules';
 
@@ -38,6 +40,8 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): MonthlySc
         status: data.status,
         version: data.version,
         responseText: data.responseText,
+        score: data.score, // Incluir score y violations
+        violations: data.violations,
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (typeof data.createdAt === 'number' ? data.createdAt : 0),
         updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toMillis() : (typeof data.updatedAt === 'number' ? data.updatedAt : 0),
     } as MonthlySchedule;
@@ -73,6 +77,59 @@ export const getActiveMonthlySchedule = async (
   }
 };
 
+
+export const getSchedulesInDateRange = async (
+  yearFrom: string,
+  monthFrom: string,
+  yearTo: string,
+  monthTo: string,
+  serviceId?: string // Hacer serviceId opcional
+): Promise<MonthlySchedule[]> => {
+  const allSchedules: MonthlySchedule[] = [];
+  const startDate = new Date(parseInt(yearFrom), parseInt(monthFrom) - 1, 1);
+  const endDate = new Date(parseInt(yearTo), parseInt(monthTo) - 1, 1);
+  let currentDate = startDate;
+
+  const schedulesCol = collection(db, MONTHLY_SCHEDULES_COLLECTION);
+
+  while (currentDate <= endDate) {
+    const currentYearStr = format(currentDate, 'yyyy');
+    const currentMonthStr = format(currentDate, 'M'); // Mes sin padding para coincidir con cómo se guarda
+
+    let q;
+    if (serviceId && serviceId !== "__ALL_SERVICES_COMPARISON__") { // Asumiendo que este es el valor para "todos" en el filtro
+      const scheduleKey = generateScheduleKey(currentYearStr, currentMonthStr, serviceId);
+      q = query(
+        schedulesCol,
+        where('scheduleKey', '==', scheduleKey),
+        where('status', '==', 'active'), // Por ahora, solo activos. Podría cambiarse para análisis histórico.
+        limit(1)
+      );
+    } else {
+      // Si no hay serviceId específico, buscar todos los activos para ese mes/año
+      q = query(
+        schedulesCol,
+        where('year', '==', currentYearStr),
+        where('month', '==', currentMonthStr),
+        where('status', '==', 'active')
+      );
+    }
+
+    try {
+      const snapshot = await getDocs(q);
+      snapshot.forEach(doc => {
+        allSchedules.push(fromFirestore(doc));
+      });
+    } catch (error) {
+      console.error("Error fetching schedules in date range for", { currentYearStr, currentMonthStr, serviceId, error });
+      // Considerar si se debe lanzar el error o continuar
+    }
+    currentDate = addMonths(currentDate, 1);
+  }
+  return allSchedules;
+};
+
+
 export const saveNewActiveSchedule = async (
   scheduleData: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'>,
   previousActiveScheduleIdToArchive?: string
@@ -99,7 +156,6 @@ export const saveNewActiveSchedule = async (
         const prevScheduleDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, previousActiveScheduleIdToArchive);
         batch.update(prevScheduleDocRef, { status: 'inactive', updatedAt: serverTimestamp() });
     } else {
-      // Fallback: if no specific ID is given, try to archive any schedule with the same key and active status
       const activeQuery = query(
           schedulesCol,
           where('scheduleKey', '==', scheduleData.scheduleKey),
@@ -107,7 +163,7 @@ export const saveNewActiveSchedule = async (
       );
       const activeSnapshot = await getDocs(activeQuery);
       activeSnapshot.forEach(docSnapshot => {
-          if (docSnapshot.id !== previousActiveScheduleIdToArchive) { // Ensure we don't try to double-archive
+          if (docSnapshot.id !== previousActiveScheduleIdToArchive) {
             batch.update(docSnapshot.ref, { status: 'inactive', updatedAt: serverTimestamp() });
           }
       });
@@ -127,7 +183,6 @@ export const saveNewActiveSchedule = async (
     
     await batch.commit();
 
-    // For returning, create client-side timestamps immediately
     const nowMillis = Date.now();
     const newScheduleForReturn: MonthlySchedule = {
       id: newDocRef.id,
@@ -148,18 +203,20 @@ export const saveNewActiveSchedule = async (
 export const updateExistingActiveSchedule = async (
   scheduleId: string,
   shifts: AIShift[],
-  responseText?: string
+  responseText?: string,
+  score?: number,
+  violations?: ScheduleViolation[]
 ): Promise<void> => {
   const scheduleDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, scheduleId);
   
   const updateData: Partial<Omit<MonthlySchedule, 'id' | 'scheduleKey' | 'year' | 'month' | 'serviceId' | 'serviceName' | 'status' | 'version' | 'createdAt'>> = {
     shifts,
-    updatedAt: serverTimestamp() as any,
+    updatedAt: serverTimestamp() as any, // Asegurar que any se maneje bien si cleanDataForFirestore lo requiere
   };
 
-  if (responseText !== undefined) {
-    updateData.responseText = responseText;
-  }
+  if (responseText !== undefined) updateData.responseText = responseText;
+  if (score !== undefined) updateData.score = score;
+  if (violations !== undefined) updateData.violations = violations;
   
   try {
     await updateDoc(scheduleDocRef, cleanDataForFirestore(updateData));
@@ -168,3 +225,4 @@ export const updateExistingActiveSchedule = async (
     throw new Error(`Failed to update schedule ${scheduleId}: ${(error as Error).message}`);
   }
 };
+

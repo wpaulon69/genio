@@ -109,3 +109,28 @@ export interface InteractiveScheduleGridProps {
   onBackToConfig?: () => void;
   isReadOnly?: boolean;
 }
+
+// Tipos para el nuevo informe comparativo de empleados
+export interface EmployeeReportMetrics {
+  employeeId: string;
+  employeeName: string;
+  totalAssignedDays: number;
+  workDays: number; // M, T, N
+  weekendWorkDays: number; // M, T, N en Sábado o Domingo (que no sea feriado)
+  holidayWorkDays: number; // M, T, N en día feriado
+  restDays: number; // D
+  ptoDays: number; // LAO
+  sickLeaveDays: number; // LM
+  compOffDays: number; // C
+  holidaysOff: number; // F (Feriado asignado como día libre)
+  shiftsM: number;
+  shiftsT: number;
+  shiftsN: number;
+}
+
+export interface EmployeeComparisonReportOutput {
+  reportType: 'employeeComparison';
+  data: EmployeeReportMetrics[];
+  dateRangeLabel: string;
+  serviceNameLabel?: string;
+}
