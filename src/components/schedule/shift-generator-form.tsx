@@ -470,8 +470,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                   Informe de Reglas y Preferencias ({violationsToDisplay.length} {violationsToDisplay.length === 1 ? 'incidencia' : 'incidencias'})
                 </AccordionTrigger>
                 <AccordionContent>
-                  <ScrollArea className="max-h-60 pr-3">
-                    <ul className="space-y-2 pt-2">
+                  <ScrollArea className="max-h-60">
+                    <ul className="space-y-2 pt-2 pr-4">
                       {violationsToDisplay.map((v, index) => (
                         <li key={index} className={`p-2 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
                           <div className="flex items-start gap-2">
@@ -716,3 +716,4 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
+
