@@ -227,7 +227,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isLoading) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-3xl md:max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>{employee ? 'Editar Empleado' : 'Añadir Nuevo Empleado'} - Paso {currentStep} de 2</DialogTitle>
           <DialogDescription>
@@ -236,7 +236,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-3">
-            <ScrollArea className="max-h-[65vh] pr-4 -mr-2 py-2">
+            <ScrollArea className="max-h-[calc(85vh-220px)] pr-4 -mr-2 py-2"> {/* Ajuste aquí */}
               <div className="space-y-4">
                 {currentStep === 1 && (
                   <>
@@ -395,3 +395,5 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
     </Dialog>
   );
 }
+
+    
