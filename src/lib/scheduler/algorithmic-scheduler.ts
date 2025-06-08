@@ -131,9 +131,9 @@ export async function generateAlgorithmicSchedule(
     const currentDayOfWeekNum = getDay(currentDate); // 0 (Sun) to 6 (Sat)
     const unnormalizedDayOfWeekName = format(currentDate, 'eeee', { locale: es });
     const currentDayOfWeekName = normalizeDayName(unnormalizedDayOfWeekName);
+    const isWeekendDay = currentDayOfWeekNum === 0 || currentDayOfWeekNum === 6;
 
     const isHolidayDay = holidays.some(h => h.date === currentDateStrYYYYMMDD);
-    const isWeekendDay = currentDayOfWeekNum === 0 || currentDayOfWeekNum === 6;
     const useWeekendHolidayStaffing = isWeekendDay || isHolidayDay;
 
     let staffingNeeds = {
@@ -148,7 +148,7 @@ export async function generateAlgorithmicSchedule(
     for (const emp of employeesForService) {
         const state = employeeStates[emp.id];
         const workPattern = emp.preferences?.workPattern;
-        const isCurrentDayAWeekday = !isWeekendDay; // Mon-Fri
+        const isCurrentDayAWeekday = !isWeekendDay;
 
         if (workPattern === 'mondayToFridayMorning' || workPattern === 'mondayToFridayAfternoon') {
             const shiftCodeToAssign: 'M' | 'T' = workPattern === 'mondayToFridayMorning' ? 'M' : 'T';
@@ -174,7 +174,6 @@ export async function generateAlgorithmicSchedule(
         }
     }
 
-
     // 1. Process Fixed Absences (LAO/LM)
     employeesForService.forEach(emp => {
       if (dailyProcessedEmployees.has(emp.id)) return;
@@ -191,8 +190,9 @@ export async function generateAlgorithmicSchedule(
     // 2. Process Fixed Weekly Shifts (M, T, N, D) for employees on 'standardRotation'
     employeesForService.forEach(emp => {
         if (dailyProcessedEmployees.has(emp.id)) return; 
+        
         const workPattern = emp.preferences?.workPattern;
-        if (workPattern && workPattern !== 'standardRotation') return; // Skip if already handled by a fixed L-V pattern
+        if (workPattern && workPattern !== 'standardRotation') return; 
 
         const state = employeeStates[emp.id]; 
         const preferences = emp.preferences;
@@ -252,6 +252,7 @@ export async function generateAlgorithmicSchedule(
       const maxWorkDays = service.consecutivenessRules?.maxConsecutiveWorkDays || 7;
       const minRestDaysRequired = service.consecutivenessRules?.minConsecutiveDaysOffRequiredBeforeWork || 1;
       const preferredRestDays = service.consecutivenessRules?.preferredConsecutiveDaysOff || minRestDaysRequired;
+      const preferredWorkDays = service.consecutivenessRules?.preferredConsecutiveWorkDays || maxWorkDays;
 
       const availableForWork = employeesForService
         .filter(emp => !dailyProcessedEmployees.has(emp.id) && !dailyAssignedWorkShifts.has(emp.id))
@@ -270,8 +271,17 @@ export async function generateAlgorithmicSchedule(
             const aMetPreferredRest = aWasResting ? stateA.consecutiveRestDays >= preferredRestDays : false;
             const bMetPreferredRest = bWasResting ? stateB.consecutiveRestDays >= preferredRestDays : false;
 
+            // Prioritize those who met preferred rest
             if (aMetPreferredRest && !bMetPreferredRest) return -1; 
             if (!aMetPreferredRest && bMetPreferredRest) return 1;  
+            
+            // If both (or neither) met preferred rest, then consider who is continuing a preferred work block
+            const aIsContinuingPreferredWorkBlock = !aWasResting && stateA.consecutiveWorkDays < preferredWorkDays;
+            const bIsContinuingPreferredWorkBlock = !bWasResting && stateB.consecutiveWorkDays < preferredWorkDays;
+
+            if (aIsContinuingPreferredWorkBlock && !bIsContinuingPreferredWorkBlock) return -1;
+            if (!aIsContinuingPreferredWorkBlock && bIsContinuingPreferredWorkBlock) return 1;
+
 
             if (stateA.shiftsThisMonth !== stateB.shiftsThisMonth) return stateA.shiftsThisMonth - stateB.shiftsThisMonth;
 
@@ -280,13 +290,17 @@ export async function generateAlgorithmicSchedule(
                 if (prefersA && !prefersB) return -1; if (!prefersA && prefersB) return 1;
             }
             
+            // If starting a new block (both were resting)
             if (aWasResting && bWasResting) {
-                 if (stateA.consecutiveRestDays > stateB.consecutiveRestDays) return -1; 
+                 if (stateA.consecutiveRestDays > stateB.consecutiveRestDays) return -1; // More rest is better for starting new block
                  if (stateA.consecutiveRestDays < stateB.consecutiveRestDays) return 1;  
-            } else if (aWasResting && !bWasResting) return -1; 
+            } else if (aWasResting && !bWasResting) return -1; // Prioritize those who were resting to start work
             else if (!aWasResting && bWasResting) return 1; 
 
-            if (stateA.consecutiveWorkDays !== stateB.consecutiveWorkDays) return stateA.consecutiveWorkDays - stateB.consecutiveWorkDays;
+            // If both were working, prioritize fewer consecutive work days
+            if (!aWasResting && !bWasResting && stateA.consecutiveWorkDays !== stateB.consecutiveWorkDays) {
+                return stateA.consecutiveWorkDays - stateB.consecutiveWorkDays;
+            }
 
             return Math.random() - 0.5; 
         });
@@ -297,10 +311,10 @@ export async function generateAlgorithmicSchedule(
         const wasResting = state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined;
         
         if (wasResting && state.consecutiveRestDays < preferredRestDays && service.consecutivenessRules?.preferredConsecutiveDaysOff) {
-            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftType, rule: "Descanso Preferido No Cumplido", details: `Inicia trabajo con ${state.consecutiveRestDays} días de descanso (preferido: ${preferredRestDays}).`, severity: 'warning' }); score -= 2;
+            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftType, rule: "Bloque de Descanso Preferido Interrumpido", details: `Inicia trabajo con ${state.consecutiveRestDays} días de descanso (preferido: ${preferredRestDays}).`, severity: 'warning' }); score -= 1;
         }
-        if (state.consecutiveWorkDays +1 > (service.consecutivenessRules?.preferredConsecutiveWorkDays || maxWorkDays) && state.consecutiveWorkDays < maxWorkDays) {
-             violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftType, rule: "Trabajo Preferido Excedido", details: `Trabajará ${state.consecutiveWorkDays + 1} días (preferido: ${service.consecutivenessRules?.preferredConsecutiveWorkDays || maxWorkDays}).`, severity: 'warning' }); score -=1;
+        if (!wasResting && state.consecutiveWorkDays +1 > preferredWorkDays && state.consecutiveWorkDays < maxWorkDays) { // Check if work day exceeds preferred but not max
+             violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftType, rule: "Bloque de Trabajo Preferido Excedido", details: `Trabajará ${state.consecutiveWorkDays + 1} días (preferido: ${preferredWorkDays}).`, severity: 'warning' }); score -=1;
         }
 
         generatedShifts.push({ date: currentDateStrYYYYMMDD, employeeName: emp.name, serviceName: service.name, startTime: startTime, endTime: endTime, notes: `${notesDetail} ${notesSuffix}` });
@@ -327,37 +341,28 @@ export async function generateAlgorithmicSchedule(
             const workPattern = preferences?.workPattern;
             const isCurrentDayAWeekday = !isWeekendDay;
 
-            // Check for unprocessed workPattern
             if ((workPattern === 'mondayToFridayMorning' || workPattern === 'mondayToFridayAfternoon') && isCurrentDayAWeekday && !isHolidayDay) {
                  violations.push({ 
-                    employeeName: emp.name, 
-                    date: currentDateStrYYYYMMDD, 
-                    shiftType: 'General', 
-                    rule: "Error Interno: Patrón de Trabajo Fijo no procesado", 
-                    details: `El empleado ${emp.name} tiene un patrón de trabajo fijo L-V (${workPattern}) para hoy pero no fue procesado. No se le asignará descanso automático. Revise la lógica del algoritmo.`, 
+                    employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', 
+                    rule: "Error Interno del Algoritmo", 
+                    details: `El empleado ${emp.name} tiene un patrón de trabajo fijo L-V (${workPattern}) para hoy pero no fue procesado. Se evita asignación de descanso. Revise la lógica.`, 
                     severity: 'error' 
                 });
-                score -= 20; 
-                dailyProcessedEmployees.add(emp.id); // Avoid D assignment
-                return; // Skip further checks for this employee today
+                score -= 20; dailyProcessedEmployees.add(emp.id); return;
             }
             
-            // Check for unprocessed daily fixed WORK shifts (only if standardRotation)
             if ((!workPattern || workPattern === 'standardRotation') && preferences?.fixedWeeklyShiftDays && preferences.fixedWeeklyShiftDays.includes(currentDayOfWeekName)) {
                 const fixedTiming = preferences.fixedWeeklyShiftTiming;
                 if (fixedTiming && fixedTiming !== NO_FIXED_TIMING_VALUE && fixedTiming !== REST_DAY_VALUE && fixedTiming.toUpperCase() !== 'D') {
-                    const isFixedWorkShiftOnHolidayNotProcessed = isHolidayDay && !isWeekendDay && (['mañana', 'tarde', 'noche'].includes(fixedTiming.toLowerCase()));
-                    if (!isFixedWorkShiftOnHolidayNotProcessed) { 
+                    const isFixedWorkShiftOnHolidayThatWasHandledAsF = isHolidayDay && !isWeekendDay && (['mañana', 'tarde', 'noche'].includes(fixedTiming.toLowerCase()));
+                    if (!isFixedWorkShiftOnHolidayThatWasHandledAsF) { 
                         violations.push({ 
-                            employeeName: emp.name, 
-                            date: currentDateStrYYYYMMDD, 
-                            shiftType: 'General', 
-                            rule: "Error Interno: Turno fijo de trabajo no procesado", 
-                            details: `El empleado ${emp.name} tiene un turno de trabajo fijo (${fixedTiming}) para hoy (${currentDayOfWeekName}) pero no fue procesado en la etapa de turnos fijos. No se le asignará descanso automático. Revise sus preferencias y la lógica del algoritmo.`, 
+                            employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', 
+                            rule: "Error Interno del Algoritmo", 
+                            details: `El empleado ${emp.name} tiene un turno de trabajo fijo (${fixedTiming}) para hoy (${currentDayOfWeekName}) pero no fue procesado. Se evita asignación de descanso. Revise sus preferencias y la lógica.`, 
                             severity: 'error' 
                         });
-                        score -= 20; 
-                        dailyProcessedEmployees.add(emp.id); // Avoid D assignment
+                        score -= 20; dailyProcessedEmployees.add(emp.id);
                     }
                 }
             }
@@ -370,8 +375,14 @@ export async function generateAlgorithmicSchedule(
       const state = employeeStates[emp.id];
       if (!dailyProcessedEmployees.has(emp.id)) { 
         const maxRestDays = service.consecutivenessRules?.maxConsecutiveDaysOff || 7;
-        const isLastShiftRestType = state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined;
+        const preferredWorkDays = service.consecutivenessRules?.preferredConsecutiveWorkDays || (service.consecutivenessRules?.maxConsecutiveWorkDays || 7);
+        const isLastShiftWorkType = (state.lastShiftType === 'M' || state.lastShiftType === 'T' || state.lastShiftType === 'N');
 
+        if (isLastShiftWorkType && state.consecutiveWorkDays < preferredWorkDays) {
+            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', rule: "Bloque de Trabajo Preferido Interrumpido", details: `Descansa después de ${state.consecutiveWorkDays} días de trabajo (preferido: ${preferredWorkDays}).`, severity: 'warning' }); score -= 1;
+        }
+        
+        const isLastShiftRestType = state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined;
         if (isLastShiftRestType && state.consecutiveRestDays >= maxRestDays) {
              violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', rule: "Exceso Descansos Consecutivos (Forzado a Trabajo)", details: `Excedió máx. descansos (${state.consecutiveRestDays}/${maxRestDays}), pero no se pudo asignar trabajo. Se asigna descanso/feriado.`, severity: 'warning' }); score -= 1;
         }
@@ -406,3 +417,4 @@ export async function generateAlgorithmicSchedule(
 
   return { generatedShifts, responseText: responseSummary, violations, score: finalScore };
 }
+
