@@ -4,11 +4,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Brain, Users, BarChartHorizontalBig, LineChart, PieChartIcon } from 'lucide-react';
-import type { EmployeeComparisonReportOutput } from '@/lib/types';
+import type { EmployeeComparisonReportOutput, EmployeeReportMetrics } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent, type ChartConfig } from '@/components/ui/chart';
 
 interface ReportDisplayProps {
@@ -59,8 +59,14 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                   <BarChartHorizontalBig className="mr-2 h-5 w-5 text-muted-foreground" />
                   Total Días Trabajados por Empleado
                 </h3>
-                <ChartContainer config={workDaysChartConfig} className="min-h-[250px] w-full aspect-auto">
-                  <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 20, right: 20, top: 5, bottom: 5 }}>
+                <ChartContainer config={workDaysChartConfig} className="min-h-[250px] w-full">
+                  <BarChart 
+                    accessibilityLayer 
+                    data={data} 
+                    layout="vertical" 
+                    margin={{ left: 20, right: 20, top: 5, bottom: 5 }}
+                    barSize={data.length > 10 ? 15 : 20} // Adjust bar size based on data length
+                  >
                     <CartesianGrid horizontal={false} strokeDasharray="3 3" />
                     <YAxis
                       dataKey="employeeName"
@@ -68,20 +74,17 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                       tickLine={false}
                       tickMargin={5}
                       axisLine={false}
-                      tickFormatter={(value) => value.length > 20 ? value.slice(0, 18) + '...' : value}
+                      tickFormatter={(value: string) => value.length > 20 ? value.slice(0, 18) + '...' : value}
                       className="text-xs fill-muted-foreground"
                       interval={0}
+                      width={120} // Give Y-axis enough width for names
                     />
                     <XAxis dataKey="workDays" type="number" hide />
                     <Tooltip
                       cursor={{ fill: 'hsl(var(--muted)/0.5)' }}
                       content={<ChartTooltipContent indicator="dot" hideLabel />}
                     />
-                    <Bar dataKey="workDays" layout="vertical" radius={4} barSize={15}>
-                      {data.map((entry, index) => (
-                        <Cell key={`cell-wd-${index}`} fill={workDaysChartConfig.workDays.color} />
-                      ))}
-                    </Bar>
+                    <Bar dataKey="workDays" layout="vertical" radius={4} fill="var(--color-workDays)" />
                   </BarChart>
                 </ChartContainer>
               </div>
@@ -93,8 +96,15 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                   <PieChartIcon className="mr-2 h-5 w-5 text-muted-foreground" />
                   Distribución de Tipos de Turno (M, T, N)
                 </h3>
-                <ChartContainer config={shiftTypesChartConfig} className="min-h-[250px] w-full aspect-auto">
-                  <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 20, right: 20, top: 5, bottom: 20 }} barCategoryGap="20%">
+                <ChartContainer config={shiftTypesChartConfig} className="min-h-[250px] w-full">
+                  <BarChart 
+                    accessibilityLayer 
+                    data={data} 
+                    layout="vertical" 
+                    margin={{ left: 20, right: 20, top: 5, bottom: 20 }} 
+                    barCategoryGap="20%"
+                    barSize={data.length > 10 ? 15 : 20}
+                  >
                     <CartesianGrid horizontal={false} strokeDasharray="3 3" />
                     <YAxis
                       dataKey="employeeName"
@@ -102,9 +112,10 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                       tickLine={false}
                       tickMargin={5}
                       axisLine={false}
-                      tickFormatter={(value) => value.length > 20 ? value.slice(0, 18) + '...' : value}
+                      tickFormatter={(value: string) => value.length > 20 ? value.slice(0, 18) + '...' : value}
                       className="text-xs fill-muted-foreground"
                       interval={0}
+                      width={120}
                     />
                     <XAxis type="number" hide />
                     <Tooltip
@@ -112,9 +123,9 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                       content={<ChartTooltipContent indicator="dot" />}
                     />
                     <Legend content={<ChartLegendContent nameKey="name" />} verticalAlign="bottom" wrapperStyle={{paddingTop: '10px'}} />
-                    <Bar dataKey="shiftsM" name="Mañana" stackId="shifts" fill="var(--color-shiftsM)" radius={3} barSize={15}/>
-                    <Bar dataKey="shiftsT" name="Tarde" stackId="shifts" fill="var(--color-shiftsT)" radius={3} barSize={15}/>
-                    <Bar dataKey="shiftsN" name="Noche" stackId="shifts" fill="var(--color-shiftsN)" radius={3} barSize={15}/>
+                    <Bar dataKey="shiftsM" name="Mañana" stackId="shifts" fill="var(--color-shiftsM)" radius={3}/>
+                    <Bar dataKey="shiftsT" name="Tarde" stackId="shifts" fill="var(--color-shiftsT)" radius={3}/>
+                    <Bar dataKey="shiftsN" name="Noche" stackId="shifts" fill="var(--color-shiftsN)" radius={3}/>
                   </BarChart>
                 </ChartContainer>
               </div>
@@ -125,8 +136,15 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                   <PieChartIcon className="mr-2 h-5 w-5 text-muted-foreground" />
                   Distribución de Días No Trabajados
                 </h3>
-                <ChartContainer config={leaveTypesChartConfig} className="min-h-[250px] w-full aspect-auto">
-                  <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 20, right: 20, top: 5, bottom: 20 }} barCategoryGap="20%">
+                <ChartContainer config={leaveTypesChartConfig} className="min-h-[250px] w-full">
+                  <BarChart 
+                    accessibilityLayer 
+                    data={data} 
+                    layout="vertical" 
+                    margin={{ left: 20, right: 20, top: 5, bottom: 20 }} 
+                    barCategoryGap="20%"
+                    barSize={data.length > 10 ? 15 : 20}
+                  >
                     <CartesianGrid horizontal={false} strokeDasharray="3 3" />
                     <YAxis
                       dataKey="employeeName"
@@ -134,9 +152,10 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                       tickLine={false}
                       tickMargin={5}
                       axisLine={false}
-                      tickFormatter={(value) => value.length > 20 ? value.slice(0, 18) + '...' : value}
+                      tickFormatter={(value: string) => value.length > 20 ? value.slice(0, 18) + '...' : value}
                       className="text-xs fill-muted-foreground"
                       interval={0}
+                      width={120}
                     />
                     <XAxis type="number" hide />
                     <Tooltip
@@ -144,15 +163,14 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                       content={<ChartTooltipContent indicator="dot" />}
                     />
                     <Legend content={<ChartLegendContent nameKey="name" />} verticalAlign="bottom" wrapperStyle={{paddingTop: '10px'}} />
-                    <Bar dataKey="restDays" name="Descanso (D)" stackId="leaves" fill="var(--color-restDays)" radius={3} barSize={15}/>
-                    <Bar dataKey="ptoDays" name="LAO" stackId="leaves" fill="var(--color-ptoDays)" radius={3} barSize={15}/>
-                    <Bar dataKey="sickLeaveDays" name="LM" stackId="leaves" fill="var(--color-sickLeaveDays)" radius={3} barSize={15}/>
-                    <Bar dataKey="compOffDays" name="Franco Comp. (C)" stackId="leaves" fill="var(--color-compOffDays)" radius={3} barSize={15}/>
-                    <Bar dataKey="holidaysOff" name="Feriado Libre (F)" stackId="leaves" fill="var(--color-holidaysOff)" radius={3} barSize={15}/>
+                    <Bar dataKey="restDays" name="Descanso (D)" stackId="leaves" fill="var(--color-restDays)" radius={3}/>
+                    <Bar dataKey="ptoDays" name="LAO" stackId="leaves" fill="var(--color-ptoDays)" radius={3}/>
+                    <Bar dataKey="sickLeaveDays" name="LM" stackId="leaves" fill="var(--color-sickLeaveDays)" radius={3}/>
+                    <Bar dataKey="compOffDays" name="Franco Comp. (C)" stackId="leaves" fill="var(--color-compOffDays)" radius={3}/>
+                    <Bar dataKey="holidaysOff" name="Feriado Libre (F)" stackId="leaves" fill="var(--color-holidaysOff)" radius={3}/>
                   </BarChart>
                 </ChartContainer>
               </div>
-
 
               <Separator />
 
@@ -180,7 +198,7 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.map((empMetrics) => (
+                      {(data as EmployeeReportMetrics[]).map((empMetrics) => (
                         <TableRow key={empMetrics.employeeId}>
                           <TableCell className="font-medium">{empMetrics.employeeName}</TableCell>
                           <TableCell className="text-center">{empMetrics.totalAssignedDays}</TableCell>
@@ -234,5 +252,6 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
 
   return null;
 }
+    
 
     
