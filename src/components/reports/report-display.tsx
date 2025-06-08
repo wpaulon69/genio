@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Brain, Users, BarChartHorizontalBig, LineChart, PieChartIcon } from 'lucide-react';
+import { Brain, Users, BarChartHorizontalBig, LineChart, PieChartIcon, Ratio } from 'lucide-react';
 import type { EmployeeComparisonReportOutput, EmployeeReportMetrics } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -175,8 +175,9 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
               <Separator />
 
               <div>
-                <h3 className="text-lg font-semibold mb-2 mt-6">
-                  Datos Detallados
+                <h3 className="text-lg font-semibold mb-2 mt-6 flex items-center">
+                  <Users className="mr-2 h-5 w-5 text-muted-foreground" />
+                  Datos Detallados por Empleado
                 </h3>
                 <ScrollArea className="h-[60vh] w-full">
                   <Table>
@@ -187,6 +188,7 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                         <TableHead className="text-center text-green-600">D.Trab.</TableHead>
                         <TableHead className="text-center text-green-600">FDS Trab.</TableHead>
                         <TableHead className="text-center text-green-600">Fer. Trab.</TableHead>
+                        <TableHead className="text-center text-orange-600">FDS Desc.</TableHead> {/* Nueva Columna */}
                         <TableHead className="text-center text-blue-600">M</TableHead>
                         <TableHead className="text-center text-blue-600">T</TableHead>
                         <TableHead className="text-center text-blue-600">N</TableHead>
@@ -195,6 +197,7 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                         <TableHead className="text-center text-purple-600">LM</TableHead>
                         <TableHead className="text-center text-purple-600">C</TableHead>
                         <TableHead className="text-center text-purple-600">F</TableHead>
+                        <TableHead className="text-center text-gray-600">Trabajo/Libre</TableHead> {/* Nueva Columna */}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -205,6 +208,7 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                           <TableCell className="text-center font-semibold text-green-700">{empMetrics.workDays}</TableCell>
                           <TableCell className="text-center">{empMetrics.weekendWorkDays}</TableCell>
                           <TableCell className="text-center">{empMetrics.holidayWorkDays}</TableCell>
+                          <TableCell className="text-center">{empMetrics.weekendRestDays}</TableCell> {/* Nuevo Dato */}
                           <TableCell className="text-center">{empMetrics.shiftsM}</TableCell>
                           <TableCell className="text-center">{empMetrics.shiftsT}</TableCell>
                           <TableCell className="text-center">{empMetrics.shiftsN}</TableCell>
@@ -213,6 +217,7 @@ export default function ReportDisplay({ summary, employeeComparisonOutput }: Rep
                           <TableCell className="text-center">{empMetrics.sickLeaveDays}</TableCell>
                           <TableCell className="text-center">{empMetrics.compOffDays}</TableCell>
                           <TableCell className="text-center">{empMetrics.holidaysOff}</TableCell>
+                          <TableCell className="text-center">{empMetrics.workToRestRatio}</TableCell> {/* Nuevo Dato */}
                         </TableRow>
                       ))}
                     </TableBody>

@@ -84,13 +84,10 @@ export default function ReportsPage() {
         schedulesInRange = await getSchedulesInDateRange(yearFrom, monthFrom, yearTo, monthTo, targetServiceId);
 
         const metricsByEmployee: Record<string, EmployeeReportMetrics> = {};
-        const employeeMap = new Map(employees.map(e => [e.id, e.name]));
+        // const employeeMap = new Map(employees.map(e => [e.id, e.name])); // No se usa directamente
 
         schedulesInRange.forEach(schedule => {
           schedule.shifts.forEach(shift => {
-            // Encontrar el empleado por nombre desde AIShift.employeeName
-            // Es más robusto si AIShift tuviera employeeId directamente.
-            // Por ahora, asumimos que podemos mapear nombre a ID de 'employees'
             const employee = employees.find(e => e.name === shift.employeeName);
             if (!employee) {
               console.warn(`Empleado "${shift.employeeName}" del turno no encontrado en la lista de empleados.`);
@@ -101,8 +98,10 @@ export default function ReportsPage() {
               metricsByEmployee[employee.id] = {
                 employeeId: employee.id, employeeName: employee.name,
                 totalAssignedDays: 0, workDays: 0, weekendWorkDays: 0, holidayWorkDays: 0,
+                weekendRestDays: 0, // Nueva métrica
                 restDays: 0, ptoDays: 0, sickLeaveDays: 0, compOffDays: 0, holidaysOff: 0,
                 shiftsM: 0, shiftsT: 0, shiftsN: 0,
+                workToRestRatio: '', // Nueva métrica
               };
             }
             const metrics = metricsByEmployee[employee.id];
@@ -127,6 +126,7 @@ export default function ReportsPage() {
               }
             } else if (shiftType === 'D') {
               metrics.restDays++;
+              if (isWeekend) metrics.weekendRestDays++;
             } else if (shiftType === 'LAO') {
               metrics.ptoDays++;
             } else if (shiftType === 'LM') {
@@ -135,11 +135,19 @@ export default function ReportsPage() {
               metrics.compOffDays++;
             } else if (shiftType === 'F') {
               metrics.holidaysOff++;
+              if (isWeekend) metrics.weekendRestDays++; // Contar feriados en fin de semana como descanso de fin de semana
             }
           });
         });
 
-        const reportDataArray = Object.values(metricsByEmployee).sort((a,b) => a.employeeName.localeCompare(b.employeeName));
+        // Calcular workToRestRatio y ordenar
+        const reportDataArray = Object.values(metricsByEmployee).map(metrics => {
+          const totalOffDays = metrics.restDays + metrics.ptoDays + metrics.sickLeaveDays + metrics.compOffDays + metrics.holidaysOff;
+          metrics.workToRestRatio = `${metrics.workDays} W : ${totalOffDays} L`;
+          return metrics;
+        }).sort((a,b) => a.employeeName.localeCompare(b.employeeName));
+
+
         const dateFromLabel = `${reportMonths.find(m => m.value === monthFrom)?.label} ${yearFrom}`;
         const dateToLabel = `${reportMonths.find(m => m.value === monthTo)?.label} ${yearTo}`;
         
@@ -148,7 +156,6 @@ export default function ReportsPage() {
             const foundService = services.find(s => s.id === targetServiceId);
             if (foundService) serviceNameForLabel = foundService.name;
         }
-
 
         setEmployeeComparisonOutput({
             reportType: 'employeeComparison',
@@ -223,3 +230,4 @@ export default function ReportsPage() {
     </div>
   );
 }
+

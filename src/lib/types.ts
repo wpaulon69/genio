@@ -125,6 +125,7 @@ export interface EmployeeReportMetrics {
   workDays: number; // M, T, N
   weekendWorkDays: number; // M, T, N en Sábado o Domingo (que no sea feriado)
   holidayWorkDays: number; // M, T, N en día feriado
+  weekendRestDays: number; // D o F en Sábado o Domingo
   restDays: number; // D
   ptoDays: number; // LAO
   sickLeaveDays: number; // LM
@@ -133,6 +134,7 @@ export interface EmployeeReportMetrics {
   shiftsM: number;
   shiftsT: number;
   shiftsN: number;
+  workToRestRatio: string; // e.g., "20 W : 8 L"
 }
 
 export interface EmployeeComparisonReportOutput {
@@ -141,3 +143,4 @@ export interface EmployeeComparisonReportOutput {
   dateRangeLabel: string;
   serviceNameLabel?: string;
 }
+
