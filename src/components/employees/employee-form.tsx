@@ -255,9 +255,9 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-grow min-h-0 gap-4">
-            <ScrollArea className="flex-grow min-h-0"> 
-              <div className="space-y-4 p-1 pr-5">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-grow min-h-0">
+            <ScrollArea className="flex-grow overflow-y-auto"> 
+              <div className="space-y-4 p-4">
                 {currentStep === 1 && (
                   <>
                     <FormField control={form.control} name="name" render={({ field }) => (
@@ -405,7 +405,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
                 )}
               </div>
             </ScrollArea>
-            <DialogFooter className="pt-4 flex justify-between w-full flex-shrink-0">
+            <DialogFooter className="mt-auto pt-4 flex justify-between w-full flex-shrink-0">
               <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancelar</Button>
               <div className="flex gap-2">
                 {currentStep > 1 && (<Button type="button" variant="outline" onClick={handlePreviousStep} disabled={isLoading}>Anterior</Button>)}
@@ -419,5 +419,4 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
     </Dialog>
   );
 }
-
     
