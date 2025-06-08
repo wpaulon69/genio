@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, Archive, BadgeAlert, BadgeCheck, CircleAlert, CircleHelp } from 'lucide-react';
+import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, Archive, BadgeAlert, BadgeCheck, CircleAlert, CircleHelp, UploadCloud } from 'lucide-react';
 import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-scheduler';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -53,7 +53,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false); // Renamed from isLoadingSchedule
   
   const [generatedResponseText, setGeneratedResponseText] = useState<string | null>(null);
   const [algorithmGeneratedShifts, setAlgorithmGeneratedShifts] = useState<AIShift[] | null>(null);
@@ -72,6 +72,11 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveActionType, setSaveActionType] = useState<'update_or_new_version' | 'confirm_new_with_archive' | 'confirm_save_brand_new' | null>(null);
+  
+  // State to track if a configuration has been successfully loaded by the user
+  const [configLoaded, setConfigLoaded] = useState(false);
+  // Store the specific config that was loaded to compare with form values
+  const [loadedConfigValues, setLoadedConfigValues] = useState<ShiftGenerationConfigFormData | null>(null);
 
 
   const { data: holidays = [], isLoading: isLoadingHolidays, error: errorHolidays } = useQuery<Holiday[]>({
@@ -88,87 +93,40 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     },
   });
 
-  const selectedServiceId = form.watch('serviceId');
-  const selectedMonth = form.watch('month');
-  const selectedYear = form.watch('year');
+  const watchedServiceId = form.watch('serviceId');
+  const watchedMonth = form.watch('month');
+  const watchedYear = form.watch('year');
   
-  const selectedService = useMemo(() => {
-    return allServices.find(s => s.id === selectedServiceId);
-  }, [selectedServiceId, allServices]);
+  const watchedSelectedService = useMemo(() => {
+    return allServices.find(s => s.id === watchedServiceId);
+  }, [watchedServiceId, allServices]);
 
+  // This useEffect updates the displayInfoText based on current form selections (real-time preview)
   useEffect(() => {
-    const loadSchedules = async () => {
-      if (selectedServiceId && selectedMonth && selectedYear) {
-        setIsLoadingSchedule(true);
-        setError(null);
-        setAlgorithmGeneratedShifts(null);
-        setEditableShifts(null);
-        setGeneratedResponseText(null);
-        setGeneratedScore(null);
-        setGeneratedViolations(null);
-        setShowGrid(false);
-        setUserChoiceForExisting(null);
-        setCurrentLoadedSchedule(null);
-        setPreviousMonthSchedule(null);
-        
-        try {
-          const existingSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
-          setCurrentLoadedSchedule(existingSchedule);
-          setGeneratedScore(existingSchedule?.score ?? null); 
-          setGeneratedViolations(existingSchedule?.violations ?? null);
-
-          const currentMonthDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
-          const prevMonthDate = subMonths(currentMonthDate, 1);
-          const prevMonthYearStr = format(prevMonthDate, 'yyyy');
-          const prevMonthMonthStr = format(prevMonthDate, 'M');
-          const prevSchedule = await getActiveMonthlySchedule(prevMonthYearStr, prevMonthMonthStr, selectedServiceId);
-          setPreviousMonthSchedule(prevSchedule);
-
-          if (existingSchedule) {
-            setShowInitialChoiceDialog(true);
-          } else {
-            setShowInitialChoiceDialog(false); 
-            setUserChoiceForExisting(null);
-          }
-        } catch (e) {
-          console.error("Error cargando horarios:", e);
-          setError("Error al cargar horarios.");
-          setCurrentLoadedSchedule(null);
-          setPreviousMonthSchedule(null);
-        } finally {
-          setIsLoadingSchedule(false);
-        }
-      }
-    };
-    loadSchedules();
-  }, [selectedServiceId, selectedMonth, selectedYear]);
-
-
-  useEffect(() => {
-    if (selectedService && selectedMonth && selectedYear && allEmployees && !isLoadingHolidays) {
-      const monthIdx = parseInt(selectedMonth, 10) - 1;
-      const yearInt = parseInt(selectedYear, 10);
+    if (watchedSelectedService && watchedMonth && watchedYear && allEmployees && !isLoadingHolidays) {
+      const monthIdx = parseInt(watchedMonth, 10) - 1;
+      const yearInt = parseInt(watchedYear, 10);
       
       const monthDate = new Date(yearInt, monthIdx, 1);
       const monthStart = startOfMonth(monthDate);
       const monthEnd = endOfMonth(monthDate);
 
-      let info = `Resumen para generar horario para el servicio: ${selectedService.name}\n`;
-      info += `Mes: ${months.find(m => m.value === selectedMonth)?.label || selectedMonth}, Año: ${selectedYear}\n\n`;
+      let info = `Resumen para generar horario para el servicio: ${watchedSelectedService.name}\n`;
+      info += `Mes: ${months.find(m => m.value === watchedMonth)?.label || watchedMonth}, Año: ${watchedYear}\n\n`;
       
       info += "Reglas del Servicio:\n";
-      info += `- Dotación Días de Semana: Mañana=${selectedService.staffingNeeds.morningWeekday}, Tarde=${selectedService.staffingNeeds.afternoonWeekday}${selectedService.enableNightShift ? `, Noche=${selectedService.staffingNeeds.nightWeekday}` : ''}\n`;
-      info += `- Dotación Fin de Semana/Feriados: Mañana=${selectedService.staffingNeeds.morningWeekendHoliday}, Tarde=${selectedService.staffingNeeds.afternoonWeekendHoliday}${selectedService.enableNightShift ? `, Noche=${selectedService.staffingNeeds.nightWeekendHoliday}` : ''}\n`;
-      info += `- Turno Noche (N) Habilitado: ${selectedService.enableNightShift ? 'Sí' : 'No'}\n`;
-      if (selectedService.consecutivenessRules) {
-        info += `- Consecutividad Trabajo: Máx=${selectedService.consecutivenessRules.maxConsecutiveWorkDays}, Pref=${selectedService.consecutivenessRules.preferredConsecutiveWorkDays}\n`;
-        info += `- Consecutividad Descanso: Máx=${selectedService.consecutivenessRules.maxConsecutiveDaysOff}, Pref=${selectedService.consecutivenessRules.preferredConsecutiveDaysOff}\n`;
-        if (selectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork) {
-          info += `- Mín. Descansos Antes de Trabajar: ${selectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork}\n`;
+      info += `- Dotación Días de Semana: Mañana=${watchedSelectedService.staffingNeeds.morningWeekday}, Tarde=${watchedSelectedService.staffingNeeds.afternoonWeekday}${watchedSelectedService.enableNightShift ? `, Noche=${watchedSelectedService.staffingNeeds.nightWeekday}` : ''}\n`;
+      info += `- Dotación Fin de Semana/Feriados: Mañana=${watchedSelectedService.staffingNeeds.morningWeekendHoliday}, Tarde=${watchedSelectedService.staffingNeeds.afternoonWeekendHoliday}${watchedSelectedService.enableNightShift ? `, Noche=${watchedSelectedService.staffingNeeds.nightWeekendHoliday}` : ''}\n`;
+      info += `- Turno Noche (N) Habilitado: ${watchedSelectedService.enableNightShift ? 'Sí' : 'No'}\n`;
+      if (watchedSelectedService.consecutivenessRules) {
+        info += `- Consecutividad Trabajo: Máx=${watchedSelectedService.consecutivenessRules.maxConsecutiveWorkDays}, Pref=${watchedSelectedService.consecutivenessRules.preferredConsecutiveWorkDays}\n`;
+        info += `- Consecutividad Descanso: Máx=${watchedSelectedService.consecutivenessRules.maxConsecutiveDaysOff}, Pref=${watchedSelectedService.consecutivenessRules.preferredConsecutiveDaysOff}\n`;
+        if (watchedSelectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork) {
+          info += `- Mín. Descansos Antes de Trabajar: ${watchedSelectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork}\n`;
         }
       }
-      if (selectedService.additionalNotes) {
-        info += `- Notas Adicionales del Servicio: ${selectedService.additionalNotes}\n`;
+      if (watchedSelectedService.additionalNotes) {
+        info += `- Notas Adicionales del Servicio: ${watchedSelectedService.additionalNotes}\n`;
       }
       info += "\n";
 
@@ -178,17 +136,17 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       });
 
       if (holidaysInMonth.length > 0) {
-        info += `Feriados en ${months.find(m => m.value === selectedMonth)?.label || selectedMonth} ${selectedYear}:\n`;
+        info += `Feriados en ${months.find(m => m.value === watchedMonth)?.label || watchedMonth} ${watchedYear}:\n`;
         holidaysInMonth.forEach(h => {
             info += `  - ${format(parseISO(h.date), 'dd/MM/yyyy')}: ${h.name}\n`;
         });
         info += "\n";
       } else {
-        info += `No hay feriados registrados para ${months.find(m => m.value === selectedMonth)?.label || selectedMonth} ${selectedYear}.\n\n`;
+        info += `No hay feriados registrados para ${months.find(m => m.value === watchedMonth)?.label || watchedMonth} ${watchedYear}.\n\n`;
       }
 
-      const employeesInService = allEmployees.filter(emp => emp.serviceIds.includes(selectedService.id));
-      info += `Empleados Asignados a ${selectedService.name} (${employeesInService.length}):\n`;
+      const employeesInService = allEmployees.filter(emp => emp.serviceIds.includes(watchedSelectedService.id));
+      info += `Empleados Asignados a ${watchedSelectedService.name} (${employeesInService.length}):\n`;
       if (employeesInService.length === 0) {
         info += "- Ninguno\n";
       } else {
@@ -223,7 +181,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
           });
 
           if (relevantAssignments.length > 0) {
-            info += `  - Asignaciones Fijas en ${months.find(m => m.value === selectedMonth)?.label || selectedMonth}:\n`;
+            info += `  - Asignaciones Fijas en ${months.find(m => m.value === watchedMonth)?.label || watchedMonth}:\n`;
             relevantAssignments.forEach(assign => {
               const startDateFormatted = format(parseISO(assign.startDate), 'dd/MM/yyyy');
               const endDateFormatted = assign.endDate && assign.endDate !== assign.startDate ? format(parseISO(assign.endDate), 'dd/MM/yyyy') : startDateFormatted;
@@ -236,13 +194,69 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     } else if (isLoadingHolidays) {
       setDisplayInfoText("Cargando lista de feriados...");
     } else {
-      setDisplayInfoText("Seleccione un servicio, mes y año para ver el resumen. Asegúrese de que los feriados estén cargados.");
+      setDisplayInfoText("Seleccione un servicio, mes y año para ver el resumen y luego haga clic en 'Cargar Configuración'. Asegúrese de que los feriados estén cargados.");
     }
-  }, [selectedServiceId, selectedMonth, selectedYear, allServices, allEmployees, selectedService, holidays, isLoadingHolidays]);
+  }, [watchedServiceId, watchedMonth, watchedYear, allServices, allEmployees, watchedSelectedService, holidays, isLoadingHolidays]);
+
+  const handleLoadConfiguration = async () => {
+    const { serviceId, month, year } = form.getValues();
+    if (!serviceId || !month || !year) {
+      setError("Por favor, seleccione servicio, mes y año.");
+      return;
+    }
+
+    setIsLoadingConfig(true);
+    setError(null);
+    setAlgorithmGeneratedShifts(null);
+    setEditableShifts(null);
+    setGeneratedResponseText(null);
+    setGeneratedScore(null);
+    setGeneratedViolations(null);
+    setShowGrid(false);
+    setUserChoiceForExisting(null);
+    setCurrentLoadedSchedule(null);
+    setPreviousMonthSchedule(null);
+    setConfigLoaded(false);
+
+    try {
+      const existingSchedule = await getActiveMonthlySchedule(year, month, serviceId);
+      setCurrentLoadedSchedule(existingSchedule);
+      setGeneratedScore(existingSchedule?.score ?? null); 
+      setGeneratedViolations(existingSchedule?.violations ?? null);
+
+      const currentMonthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const prevMonthDate = subMonths(currentMonthDate, 1);
+      const prevMonthYearStr = format(prevMonthDate, 'yyyy');
+      const prevMonthMonthStr = format(prevMonthDate, 'M');
+      const prevSchedule = await getActiveMonthlySchedule(prevMonthYearStr, prevMonthMonthStr, serviceId);
+      setPreviousMonthSchedule(prevSchedule);
+      
+      setConfigLoaded(true); // Mark config as loaded
+      setLoadedConfigValues({serviceId, month, year}); // Store the loaded config values
+
+      if (existingSchedule) {
+        setShowInitialChoiceDialog(true);
+      } else {
+        setShowInitialChoiceDialog(false); 
+        setUserChoiceForExisting(null);
+        // If no existing schedule, we can directly proceed to generation or show grid if needed later
+      }
+    } catch (e) {
+      console.error("Error cargando configuración de horarios:", e);
+      setError("Error al cargar configuración de horarios.");
+      setCurrentLoadedSchedule(null);
+      setPreviousMonthSchedule(null);
+      setConfigLoaded(false);
+      setLoadedConfigValues(null);
+    } finally {
+      setIsLoadingConfig(false);
+    }
+  };
+
 
   const handleGenerateSubmit = async (data: ShiftGenerationConfigFormData) => {
-    if (!selectedService) {
-        setError("Por favor, seleccione un servicio válido.");
+    if (!watchedSelectedService) {
+        setError("Por favor, seleccione un servicio válido y cargue la configuración.");
         return;
     }
     if (isLoadingHolidays) {
@@ -253,6 +267,19 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setError("Error al cargar feriados. No se puede generar el horario.");
         return;
     }
+    // Ensure the current form values match the loaded config if a config was previously loaded.
+    // This handles the case where user changes selectors after loading, then tries to generate.
+    if (loadedConfigValues && (data.serviceId !== loadedConfigValues.serviceId || data.month !== loadedConfigValues.month || data.year !== loadedConfigValues.year)) {
+        setError("La selección ha cambiado. Por favor, haga clic en 'Cargar Configuración' antes de generar.");
+        toast({ variant: "destructive", title: "Selección Cambiada", description: "Recargue la configuración."});
+        return;
+    }
+    if (!configLoaded && !currentLoadedSchedule) { // If nothing is loaded and user directly wants to generate
+        setError("Por favor, cargue primero la configuración haciendo clic en 'Cargar Configuración'.");
+        toast({ variant: "destructive", title: "Configuración no Cargada", description: "Cargue la configuración."});
+        return;
+    }
+
 
     setIsGenerating(true);
     setGeneratedResponseText(null);
@@ -264,7 +291,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setShowGrid(false); 
     try {
       const result = await generateAlgorithmicSchedule(
-        selectedService,
+        watchedSelectedService,
         data.month,
         data.year,
         allEmployees,
@@ -293,7 +320,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const handleConfirmSave = async (action: 'update' | 'new_version') => {
     setShowSaveDialog(false);
-    if (!editableShifts || !selectedService || !selectedYear || !selectedMonth) {
+    if (!editableShifts || !watchedSelectedService || !watchedYear || !watchedMonth) {
         setError("Faltan datos para guardar el horario.");
         toast({ variant: "destructive", title: "Error", description: "Faltan datos para guardar el horario." });
         return;
@@ -310,15 +337,15 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         if (action === 'update' && currentLoadedSchedule?.id && userChoiceForExisting === 'modify') {
             await updateExistingActiveSchedule(currentLoadedSchedule.id, editableShifts, responseTextToSave, scoreToSave, violationsToSave);
             toast({ title: "Horario Actualizado", description: "El horario activo ha sido actualizado." });
-            const updatedSchedule = await getActiveMonthlySchedule(selectedYear, selectedMonth, selectedServiceId);
+            const updatedSchedule = await getActiveMonthlySchedule(watchedYear, watchedMonth, watchedServiceId);
             savedOrUpdatedSchedule = updatedSchedule;
         } else { 
             const scheduleData: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'> = {
-                scheduleKey: generateScheduleKey(selectedYear, selectedMonth, selectedServiceId),
-                year: selectedYear,
-                month: selectedMonth,
-                serviceId: selectedServiceId,
-                serviceName: selectedService.name,
+                scheduleKey: generateScheduleKey(watchedYear, watchedMonth, watchedServiceId),
+                year: watchedYear,
+                month: watchedMonth,
+                serviceId: watchedServiceId,
+                serviceName: watchedSelectedService.name,
                 shifts: editableShifts,
                 responseText: responseTextToSave,
                 score: scoreToSave,
@@ -326,7 +353,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             };
             const newActive = await saveNewActiveSchedule(scheduleData, currentLoadedSchedule?.id);
             savedOrUpdatedSchedule = newActive;
-            toast({ title: "Horario Guardado", description: `El horario para ${selectedService.name} - ${months.find(m=>m.value===selectedMonth)?.label}/${selectedYear} se guardó como activo.` });
+            toast({ title: "Horario Guardado", description: `El horario para ${watchedSelectedService.name} - ${months.find(m=>m.value===watchedMonth)?.label}/${watchedYear} se guardó como activo.` });
         }
         
         setCurrentLoadedSchedule(savedOrUpdatedSchedule);
@@ -334,8 +361,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setGeneratedScore(savedOrUpdatedSchedule?.score ?? null);
         setGeneratedViolations(savedOrUpdatedSchedule?.violations ?? null);
         setGeneratedResponseText(savedOrUpdatedSchedule?.responseText ?? null);
+        setLoadedConfigValues({serviceId: watchedServiceId, month: watchedMonth, year: watchedYear}); // Update loaded config
 
-        queryClient.invalidateQueries({ queryKey: ['monthlySchedule', selectedYear, selectedMonth, selectedServiceId] });
+        queryClient.invalidateQueries({ queryKey: ['monthlySchedule', watchedYear, watchedMonth, watchedServiceId] });
         setShowGrid(true); 
     } catch (e) {
         console.error("Error guardando el horario:", e);
@@ -366,6 +394,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const handleBackToConfig = () => {
     setShowGrid(false);
+    // Do not reset configLoaded or loadedConfigValues here, user might want to generate again with same config
   };
 
   const handleInitialChoice = (choice: 'modify' | 'generate_new') => {
@@ -376,21 +405,31 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setGeneratedResponseText(currentLoadedSchedule.responseText || "");
         setGeneratedScore(currentLoadedSchedule.score ?? null);
         setGeneratedViolations(currentLoadedSchedule.violations ?? null);
-setShowGrid(true);
+        setShowGrid(true);
     } else { 
+        // If generating new, ensure other states are reset for a fresh generation
         setEditableShifts(null);
         setAlgorithmGeneratedShifts(null);
-        setGeneratedResponseText(null);
-        setGeneratedScore(null);
-        setGeneratedViolations(null);
+        // setGeneratedResponseText(null); // Keep response from loaded config if any, or it will be overwritten by generator
+        // setGeneratedScore(null);
+        // setGeneratedViolations(null);
         setShowGrid(false);
     }
   };
+  
+  const isFormSelectionChanged = () => {
+    if (!loadedConfigValues) return false; // No config loaded yet, so not "changed" from loaded
+    const currentFormValues = form.getValues();
+    return currentFormValues.serviceId !== loadedConfigValues.serviceId ||
+           currentFormValues.month !== loadedConfigValues.month ||
+           currentFormValues.year !== loadedConfigValues.year;
+  };
 
-  const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingSchedule;
+  const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingConfig;
+  const canGenerate = configLoaded && (userChoiceForExisting === 'generate_new' || !currentLoadedSchedule) && !isFormSelectionChanged();
 
   const renderScheduleEvaluation = () => {
-    if (isLoadingSchedule || (!currentLoadedSchedule && !algorithmGeneratedShifts && !generatedScore && (!generatedViolations || generatedViolations.length === 0))) return null;
+    if (isLoadingConfig || (!currentLoadedSchedule && !algorithmGeneratedShifts && !generatedScore && (!generatedViolations || generatedViolations.length === 0))) return null;
 
     const scoreToShow = generatedScore ?? currentLoadedSchedule?.score;
     const violationsToShow = generatedViolations ?? currentLoadedSchedule?.violations;
@@ -464,17 +503,12 @@ setShowGrid(true);
               Generador de Horarios
             </CardTitle>
             <CardDescription>
-              Seleccione servicio, mes y año. Si existe un horario activo, podrá modificarlo o generar uno nuevo.
+              Seleccione servicio, mes y año, luego haga clic en "Cargar Configuración". Si existe un horario activo, podrá modificarlo o generar uno nuevo.
             </CardDescription>
           </CardHeader>
-          {isLoadingSchedule && (
-            <CardContent className="flex justify-center items-center py-6">
-                <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" /> Cargando información de horarios...
-            </CardContent>
-          )}
-          {!isLoadingSchedule && (
+          
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleGenerateSubmit)}>
+              <form onSubmit={form.handleSubmit(handleGenerateSubmit)}> {/* Form wraps main content now */}
                 <CardContent className="space-y-6">
                   {errorHolidays && (
                     <Alert variant="destructive">
@@ -488,40 +522,53 @@ setShowGrid(true);
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <FormField control={form.control} name="serviceId" render={({ field }) => (
                         <FormItem> <FormLabel>Servicio</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ''} disabled={isActionDisabled}>
+                          <Select onValueChange={(value) => { field.onChange(value); setConfigLoaded(false); }} value={field.value || ''} disabled={isActionDisabled || showInitialChoiceDialog}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un servicio" /></SelectTrigger></FormControl>
                             <SelectContent>{allServices.map(service => (<SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>))}</SelectContent>
                           </Select><FormMessage />
                         </FormItem>)} />
                     <FormField control={form.control} name="month" render={({ field }) => (
                         <FormItem> <FormLabel>Mes</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={isActionDisabled}>
+                          <Select onValueChange={(value) => { field.onChange(value); setConfigLoaded(false); }} value={field.value} disabled={isActionDisabled || showInitialChoiceDialog}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un mes" /></SelectTrigger></FormControl>
                             <SelectContent>{months.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
                           </Select><FormMessage />
                         </FormItem>)} />
                     <FormField control={form.control} name="year" render={({ field }) => (
                         <FormItem> <FormLabel>Año</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={isActionDisabled}>
+                          <Select onValueChange={(value) => { field.onChange(value); setConfigLoaded(false); }} value={field.value} disabled={isActionDisabled || showInitialChoiceDialog}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Seleccione un año" /></SelectTrigger></FormControl>
                             <SelectContent>{years.map(y => (<SelectItem key={y} value={y}>{y}</SelectItem>))}</SelectContent>
                           </Select><FormMessage />
                         </FormItem>)} />
                   </div>
+
+                   <Button type="button" onClick={handleLoadConfiguration} disabled={isActionDisabled || showInitialChoiceDialog || isLoadingHolidays} className="w-full md:w-auto">
+                    {isLoadingConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+                     Cargar Configuración
+                  </Button>
                   
-                  {userChoiceForExisting !== 'modify' && (
-                    <FormItem>
+                  { (configLoaded && userChoiceForExisting !== 'modify' && !showInitialChoiceDialog) && (
+                    <FormItem className="mt-4">
                         <FormLabel className="flex items-center"><Info className="mr-2 h-4 w-4 text-primary" /> Información para Generación</FormLabel>
                         <Textarea value={isLoadingHolidays ? "Cargando feriados..." : displayInfoText} readOnly rows={10} className="min-h-[150px] font-mono text-xs bg-muted/30 border-dashed" placeholder="Seleccione servicio, mes y año para ver el resumen..." />
                     </FormItem>
                   )}
+                  {(!configLoaded && !showInitialChoiceDialog) && (
+                     <Alert variant="default" className="mt-4">
+                        <Info className="h-4 w-4" />
+                        <AlertTitle>Información Pendiente</AlertTitle>
+                        <AlertDescription>{displayInfoText}</AlertDescription>
+                    </Alert>
+                  )}
+
 
                 </CardContent>
                 <CardFooter className="flex flex-col items-stretch gap-4">
-                { userChoiceForExisting !== 'modify' && (
-                    <Button type="submit" disabled={isActionDisabled || !selectedServiceId || showInitialChoiceDialog} className="w-full">
+                { (configLoaded && (userChoiceForExisting === 'generate_new' || (!currentLoadedSchedule && !showInitialChoiceDialog))) && (
+                    <Button type="submit" disabled={isActionDisabled || !watchedServiceId || showInitialChoiceDialog || isFormSelectionChanged()} className="w-full">
                         {isGenerating ? ( <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generando Horario... </>
-                        ) : ( <> <CalendarDays className="mr-2 h-4 w-4" /> Generar Horario para {selectedService?.name || ''} </> )}
+                        ) : ( <> <CalendarDays className="mr-2 h-4 w-4" /> Generar Horario para {watchedSelectedService?.name || ''} </> )}
                     </Button>
                 )}
                  {generatedResponseText && !showGrid && ( 
@@ -535,16 +582,15 @@ setShowGrid(true);
               </CardFooter>
               </form>
             </Form>
-          )}
         </>
       ) : (
-        editableShifts && selectedMonth && selectedYear && (
+        editableShifts && watchedMonth && watchedYear && (
           <InteractiveScheduleGrid
             initialShifts={editableShifts}
             allEmployees={allEmployees}
-            targetService={selectedService}
-            month={selectedMonth}
-            year={selectedYear}
+            targetService={watchedSelectedService} // Use watched service for grid context
+            month={watchedMonth} // Use watched month
+            year={watchedYear}   // Use watched year
             holidays={holidays} 
             onShiftsChange={(updatedShifts) => setEditableShifts(updatedShifts)}
             onBackToConfig={handleBackToConfig}
@@ -552,7 +598,7 @@ setShowGrid(true);
         )
       )}
       
-      {(showGrid || (algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0) || (currentLoadedSchedule && userChoiceForExisting === null && !showInitialChoiceDialog && !isLoadingSchedule)) && renderScheduleEvaluation()}
+      {(showGrid || (algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0) || (currentLoadedSchedule && userChoiceForExisting === null && !showInitialChoiceDialog && !isLoadingConfig && configLoaded)) && renderScheduleEvaluation()}
 
 
       {error && (
@@ -574,7 +620,7 @@ setShowGrid(true);
             </Button>
         </CardFooter>
       )}
-       {!showGrid && generatedResponseText && algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0 && !isLoadingSchedule && (
+       {!showGrid && algorithmGeneratedShifts && algorithmGeneratedShifts.length > 0 && !isLoadingConfig && configLoaded && (
          <CardFooter className="flex flex-col items-stretch gap-4 pt-0">
             <Button onClick={() => setShowGrid(true)} variant="outline" className="w-full" disabled={isActionDisabled}>
                 <Eye className="mr-2 h-4 w-4" /> Ver y Editar Horario Generado ({algorithmGeneratedShifts.length} turnos)
@@ -582,19 +628,19 @@ setShowGrid(true);
          </CardFooter>
       )}
 
-      <AlertDialog open={showInitialChoiceDialog} onOpenChange={(open) => { if (!open && (isSaving || isGenerating)) return; setShowInitialChoiceDialog(open); if(!open) setUserChoiceForExisting(null);}}>
+      <AlertDialog open={showInitialChoiceDialog} onOpenChange={(open) => { if (!open && (isSaving || isGenerating || isLoadingConfig)) return; setShowInitialChoiceDialog(open); if(!open) { setUserChoiceForExisting(null); /* setConfigLoaded(false); */ }}}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Horario Existente Encontrado</AlertDialogTitle>
             <AlertDialogDescription>
-              Ya existe un horario activo para {currentLoadedSchedule?.serviceName || selectedService?.name} en {months.find(m=>m.value===selectedMonth)?.label || selectedMonth}/{selectedYear}. ¿Qué desea hacer?
+              Ya existe un horario activo para {currentLoadedSchedule?.serviceName || watchedSelectedService?.name} en {months.find(m=>m.value===watchedMonth)?.label || watchedMonth}/{watchedYear}. ¿Qué desea hacer?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => handleInitialChoice('modify')} disabled={isSaving || isGenerating} className="w-full sm:w-auto">
+            <Button variant="outline" onClick={() => handleInitialChoice('modify')} disabled={isSaving || isGenerating || isLoadingConfig} className="w-full sm:w-auto">
               <Edit className="mr-2 h-4 w-4" /> Modificar Horario Existente
             </Button>
-            <Button onClick={() => handleInitialChoice('generate_new')} disabled={isSaving || isGenerating} className="w-full sm:w-auto">
+            <Button onClick={() => handleInitialChoice('generate_new')} disabled={isSaving || isGenerating || isLoadingConfig} className="w-full sm:w-auto">
               <FilePlus2 className="mr-2 h-4 w-4" /> Generar Nuevo Horario
               <span className="text-xs ml-1 block sm:inline">(El actual se archivará al guardar)</span>
             </Button>
@@ -619,7 +665,7 @@ setShowGrid(true);
             )}
             {saveActionType === 'confirm_save_brand_new' && (
                  <AlertDialogDescription>
-                    Se guardará este nuevo horario como activo para {selectedService?.name} ({months.find(m=>m.value===selectedMonth)?.label}/{selectedYear}). ¿Continuar?
+                    Se guardará este nuevo horario como activo para {watchedSelectedService?.name} ({months.find(m=>m.value===watchedMonth)?.label}/{watchedYear}). ¿Continuar?
                 </AlertDialogDescription>
             )}
           </AlertDialogHeader>
@@ -650,3 +696,4 @@ setShowGrid(true);
     </Card>
   );
 }
+
