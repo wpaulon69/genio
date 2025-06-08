@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Brain, Users, BarChartHorizontalBig, LineChart, PieChartIcon, CheckCircle, ShieldCheck, HeartHandshake, BadgeCheck, CircleAlert, CircleHelp } from 'lucide-react';
+import { Brain, Users, BarChartHorizontalBig, LineChart, PieChartIcon, CheckCircle, ShieldCheck, HeartHandshake, BadgeCheck, CircleAlert, CircleHelp, CalendarDays } from 'lucide-react';
 import type { EmployeeComparisonReportOutput, EmployeeReportMetrics, ScheduleQualityReportOutput, ScheduleViolation } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -177,6 +177,12 @@ export default function ReportDisplay({ summary, employeeComparisonOutput, sched
       holidaysOff: { label: "Feriado Libre (F)", color: "hsl(var(--chart-5))" },
     } satisfies ChartConfig;
 
+    const specialDaysChartConfig = {
+      fdsTrabajado: { label: "FDS Trabajado", color: "hsl(var(--chart-1))" },
+      feriadoTrabajado: { label: "Feriado Trabajado", color: "hsl(var(--chart-2))" },
+      fdsDescansado: { label: "FDS Descansado", color: "hsl(var(--chart-3))" },
+    } satisfies ChartConfig;
+
 
     return (
       <Card className="h-full">
@@ -310,6 +316,47 @@ export default function ReportDisplay({ summary, employeeComparisonOutput, sched
                   </BarChart>
                 </ChartContainer>
               </div>
+
+              <Separator />
+               <div>
+                <h3 className="text-lg font-semibold mb-2 flex items-center">
+                  <CalendarDays className="mr-2 h-5 w-5 text-muted-foreground" />
+                  Distribución de Días Especiales (FDS y Feriados)
+                </h3>
+                <ChartContainer config={specialDaysChartConfig} className="min-h-[250px] w-full">
+                  <BarChart 
+                    accessibilityLayer 
+                    data={data} 
+                    layout="vertical" 
+                    margin={{ left: 20, right: 20, top: 5, bottom: 20 }} 
+                    barCategoryGap="20%"
+                    barSize={data.length > 10 ? 15 : 20}
+                  >
+                    <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                    <YAxis
+                      dataKey="employeeName"
+                      type="category"
+                      tickLine={false}
+                      tickMargin={5}
+                      axisLine={false}
+                      tickFormatter={(value: string) => value.length > 20 ? value.slice(0, 18) + '...' : value}
+                      className="text-xs fill-muted-foreground"
+                      interval={0}
+                      width={120}
+                    />
+                    <XAxis type="number" hide />
+                    <Tooltip
+                      cursor={{ fill: 'hsl(var(--muted)/0.5)' }}
+                      content={<ChartTooltipContent indicator="dot" />}
+                    />
+                    <Legend content={<ChartLegendContent nameKey="name" />} verticalAlign="bottom" wrapperStyle={{paddingTop: '10px'}} />
+                    <Bar dataKey="weekendWorkDays" name="FDS Trabajado" stackId="specialDays" fill="var(--color-fdsTrabajado)" radius={3}/>
+                    <Bar dataKey="holidayWorkDays" name="Feriado Trabajado" stackId="specialDays" fill="var(--color-feriadoTrabajado)" radius={3}/>
+                    <Bar dataKey="weekendRestDays" name="FDS Descansado" stackId="specialDays" fill="var(--color-fdsDescansado)" radius={3}/>
+                  </BarChart>
+                </ChartContainer>
+              </div>
+
 
               <Separator />
 
