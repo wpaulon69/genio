@@ -22,7 +22,8 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
   const note = aiShift.notes?.toUpperCase();
 
   if (note?.startsWith('F') || note?.includes('FERIADO')) return 'F';
-  if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO')) return 'D';
+  // Modificado para incluir 'D (FIJO SEMANAL)'
+  if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO') || note === 'D (FIJO SEMANAL)') return 'D';
   if (note === 'C' || note === 'C (FRANCO COMP.)' || note?.includes('FRANCO COMP')) return 'C';
   if (note?.startsWith('LAO')) return 'LAO';
   if (note?.startsWith('LM')) return 'LM';
@@ -395,3 +396,4 @@ export default function InteractiveScheduleGrid({
     </Card>
   );
 }
+
