@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { Employee, Service, EmployeePreferences, FixedAssignment as FixedAssignmentType, WorkPattern } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'; // FormProvider removed from import
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -45,7 +45,7 @@ const preferencesSchema = z.object({
 
 const fixedAssignmentSchema = z.object({
   id: z.string(), // For react-hook-form's useFieldArray
-  type: z.enum(['D', 'LAO', 'LM'], { 
+  type: z.enum(['D', 'LAO', 'LM'], {
     required_error: "El tipo de asignación es obligatorio.",
     invalid_type_error: "Seleccione un tipo de asignación válido."
   }),
@@ -227,17 +227,17 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isLoading) onClose(); }}>
-      <DialogContent className="sm:max-w-3xl md:max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-3xl md:max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{employee ? 'Editar Empleado' : 'Añadir Nuevo Empleado'} - Paso {currentStep} de 2</DialogTitle>
           <DialogDescription>
             {currentStep === 1 ? 'Complete la información básica y servicios.' : 'Defina patrón de trabajo, preferencias, turno fijo y asignaciones.'}
           </DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-grow min-h-0 space-y-3">
-            <ScrollArea className="flex-grow pr-4 -mr-2 py-2 min-h-0">
-              <div className="space-y-4">
+        <Form {...form}> {/* Changed FormProvider to Form */}
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-grow min-h-0 gap-4">
+            <ScrollArea className="flex-grow min-h-0"> 
+              <div className="space-y-4 p-1 pr-5">
                 {currentStep === 1 && (
                   <>
                     <FormField control={form.control} name="name" render={({ field }) => (
@@ -390,10 +390,8 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
               </div>
             </DialogFooter>
           </form>
-        </Form>
+        </Form> {/* Changed FormProvider to Form */}
       </DialogContent>
     </Dialog>
   );
 }
-
-    
