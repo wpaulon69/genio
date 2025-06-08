@@ -396,3 +396,5 @@ export default function ReportDisplay({ summary, employeeComparisonOutput, sched
 
   return null;
 }
+
+    
