@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { Service, Employee, FixedAssignment, Holiday, ScheduleViolation, AIShift, WorkPattern } from '@/lib/types';
+import type { Service, Employee, FixedAssignment, Holiday, ScheduleViolation, AIShift, WorkPattern, ScoreBreakdown } from '@/lib/types';
 import { format, getDaysInMonth, parseISO, isWithinInterval, startOfDay, endOfDay, getDay, subDays, isValid, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { SHIFT_OPTIONS } from '@/lib/constants/schedule-constants';
@@ -11,6 +11,7 @@ interface AlgorithmicScheduleOutput {
   responseText: string;
   violations: ScheduleViolation[];
   score: number;
+  scoreBreakdown: ScoreBreakdown;
 }
 
 interface EmployeeState {
@@ -69,6 +70,7 @@ export async function generateAlgorithmicSchedule(
   const generatedShifts: AIShift[] = [];
   const violations: ScheduleViolation[] = [];
   let score = 100;
+  let scoreBreakdown: ScoreBreakdown = { serviceRules: 100, employeeWellbeing: 100 };
 
   const monthInt = parseInt(month, 10);
   const yearInt = parseInt(year, 10);
@@ -77,7 +79,14 @@ export async function generateAlgorithmicSchedule(
 
   const employeesForService = allEmployees.filter(emp => emp.serviceIds.includes(service.id));
   if (employeesForService.length === 0) {
-    return { generatedShifts: [], violations: [{ rule: "Sin Empleados", details: `No hay empleados asignados al servicio ${service.name}`, severity: 'error', date: format(firstDayOfCurrentMonth, 'yyyy-MM-dd'), shiftType:'General' }], score: 0, responseText: `No hay empleados asignados al servicio ${service.name}.` };
+    const noEmployeeViolation: ScheduleViolation = { rule: "Sin Empleados", details: `No hay empleados asignados al servicio ${service.name}`, severity: 'error', date: format(firstDayOfCurrentMonth, 'yyyy-MM-dd'), shiftType:'General', category: 'serviceRule' };
+    return { 
+      generatedShifts: [], 
+      violations: [noEmployeeViolation], 
+      score: 0, 
+      scoreBreakdown: { serviceRules: 0, employeeWellbeing: 100 },
+      responseText: `No hay empleados asignados al servicio ${service.name}.` 
+    };
   }
 
   const employeeStates: Record<string, EmployeeState> = {};
@@ -214,7 +223,7 @@ export async function generateAlgorithmicSchedule(
                     const shiftCode = fixedTiming.toLowerCase().charAt(0).toUpperCase() as 'M' | 'T' | 'N';
                     
                     if (shiftCode === 'N' && !service.enableNightShift) {
-                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Error de Configuración de Turno Fijo", details: `Turno fijo 'N' para ${emp.name} pero el servicio no tiene turno noche habilitado. No se asignó.`, severity: 'error' }); score -= 5;
+                        violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Error de Configuración de Turno Fijo", details: `Turno fijo 'N' para ${emp.name} pero el servicio no tiene turno noche habilitado. No se asignó.`, severity: 'error', category: 'serviceRule' }); score -= 5; scoreBreakdown.serviceRules -= 5;
                         return; 
                     }
                     
@@ -228,10 +237,10 @@ export async function generateAlgorithmicSchedule(
                         const wasRestingFixed = state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined;
                         let forcedViolation = false;
                         if (state.consecutiveWorkDays + 1 > maxWorkDays) {
-                            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola máx. días de trabajo (${state.consecutiveWorkDays + 1}/${maxWorkDays}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10; forcedViolation = true;
+                            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola máx. días de trabajo (${state.consecutiveWorkDays + 1}/${maxWorkDays}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error', category: 'serviceRule' }); score -= 10; scoreBreakdown.serviceRules -= 10; forcedViolation = true;
                         }
                         if (wasRestingFixed && state.consecutiveRestDays < minRestDaysRequired) {
-                            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola mín. días de descanso (${state.consecutiveRestDays}/${minRestDaysRequired}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error' }); score -= 10; forcedViolation = true;
+                            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftCode, rule: "Violación de Regla por Turno Fijo", details: `Turno fijo ${shiftCode} asignado a ${emp.name} viola mín. días de descanso (${state.consecutiveRestDays}/${minRestDaysRequired}). ¡REVISAR PREFERENCIAS FIJAS!`, severity: 'error', category: 'serviceRule' }); score -= 10; scoreBreakdown.serviceRules -= 10; forcedViolation = true;
                         }
 
                         generatedShifts.push({ date: currentDateStrYYYYMMDD, employeeName: emp.name, serviceName: service.name, startTime, endTime, notes: `Turno Fijo ${notesSuffix}${forcedViolation ? ' (Forzado por Regla)' : ''}` });
@@ -271,17 +280,14 @@ export async function generateAlgorithmicSchedule(
             const aMetPreferredRest = aWasResting ? stateA.consecutiveRestDays >= preferredRestDays : false;
             const bMetPreferredRest = bWasResting ? stateB.consecutiveRestDays >= preferredRestDays : false;
 
-            // Prioritize those who met preferred rest
             if (aMetPreferredRest && !bMetPreferredRest) return -1; 
             if (!aMetPreferredRest && bMetPreferredRest) return 1;  
             
-            // If both (or neither) met preferred rest, then consider who is continuing a preferred work block
             const aIsContinuingPreferredWorkBlock = !aWasResting && stateA.consecutiveWorkDays < preferredWorkDays;
             const bIsContinuingPreferredWorkBlock = !bWasResting && stateB.consecutiveWorkDays < preferredWorkDays;
 
             if (aIsContinuingPreferredWorkBlock && !bIsContinuingPreferredWorkBlock) return -1;
             if (!aIsContinuingPreferredWorkBlock && bIsContinuingPreferredWorkBlock) return 1;
-
 
             if (stateA.shiftsThisMonth !== stateB.shiftsThisMonth) return stateA.shiftsThisMonth - stateB.shiftsThisMonth;
 
@@ -290,18 +296,15 @@ export async function generateAlgorithmicSchedule(
                 if (prefersA && !prefersB) return -1; if (!prefersA && prefersB) return 1;
             }
             
-            // If starting a new block (both were resting)
             if (aWasResting && bWasResting) {
-                 if (stateA.consecutiveRestDays > stateB.consecutiveRestDays) return -1; // More rest is better for starting new block
+                 if (stateA.consecutiveRestDays > stateB.consecutiveRestDays) return -1;
                  if (stateA.consecutiveRestDays < stateB.consecutiveRestDays) return 1;  
-            } else if (aWasResting && !bWasResting) return -1; // Prioritize those who were resting to start work
+            } else if (aWasResting && !bWasResting) return -1;
             else if (!aWasResting && bWasResting) return 1; 
 
-            // If both were working, prioritize fewer consecutive work days
             if (!aWasResting && !bWasResting && stateA.consecutiveWorkDays !== stateB.consecutiveWorkDays) {
                 return stateA.consecutiveWorkDays - stateB.consecutiveWorkDays;
             }
-
             return Math.random() - 0.5; 
         });
 
@@ -311,10 +314,10 @@ export async function generateAlgorithmicSchedule(
         const wasResting = state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined;
         
         if (wasResting && state.consecutiveRestDays < preferredRestDays && service.consecutivenessRules?.preferredConsecutiveDaysOff) {
-            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftType, rule: "Bloque de Descanso Preferido Interrumpido", details: `Inicia trabajo con ${state.consecutiveRestDays} días de descanso (preferido: ${preferredRestDays}).`, severity: 'warning' }); score -= 1;
+            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftType, rule: "Bloque de Descanso Preferido Interrumpido", details: `Inicia trabajo con ${state.consecutiveRestDays} días de descanso (preferido: ${preferredRestDays}).`, severity: 'warning', category: 'employeeWellbeing' }); score -= 1; scoreBreakdown.employeeWellbeing -=1;
         }
-        if (!wasResting && state.consecutiveWorkDays +1 > preferredWorkDays && state.consecutiveWorkDays < maxWorkDays) { // Check if work day exceeds preferred but not max
-             violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftType, rule: "Bloque de Trabajo Preferido Excedido", details: `Trabajará ${state.consecutiveWorkDays + 1} días (preferido: ${preferredWorkDays}).`, severity: 'warning' }); score -=1;
+        if (!wasResting && state.consecutiveWorkDays +1 > preferredWorkDays && state.consecutiveWorkDays < maxWorkDays) {
+             violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: shiftType, rule: "Bloque de Trabajo Preferido Excedido", details: `Trabajará ${state.consecutiveWorkDays + 1} días (preferido: ${preferredWorkDays}).`, severity: 'warning', category: 'employeeWellbeing' }); score -=1; scoreBreakdown.employeeWellbeing -=1;
         }
 
         generatedShifts.push({ date: currentDateStrYYYYMMDD, employeeName: emp.name, serviceName: service.name, startTime: startTime, endTime: endTime, notes: `${notesDetail} ${notesSuffix}` });
@@ -330,9 +333,9 @@ export async function generateAlgorithmicSchedule(
     if (service.enableNightShift) assignShiftsForType('N', () => staffingNeeds.night, () => staffingNeeds.night--, "Turno Noche");
 
     // 4. Check for remaining staffing needs
-    if (staffingNeeds.morning > 0) { violations.push({ date: currentDateStrYYYYMMDD, shiftType: 'M', rule: "Falta de Personal", details: `Faltan ${staffingNeeds.morning} empleado(s) para Mañana.`, severity: 'error' }); score -= staffingNeeds.morning * 5; }
-    if (staffingNeeds.afternoon > 0) { violations.push({ date: currentDateStrYYYYMMDD, shiftType: 'T', rule: "Falta de Personal", details: `Faltan ${staffingNeeds.afternoon} empleado(s) para Tarde.`, severity: 'error' }); score -= staffingNeeds.afternoon * 5; }
-    if (service.enableNightShift && staffingNeeds.night > 0) { violations.push({ date: currentDateStrYYYYMMDD, shiftType: 'N', rule: "Falta de Personal", details: `Faltan ${staffingNeeds.night} empleado(s) para Noche.`, severity: 'error' }); score -= staffingNeeds.night * 5; }
+    if (staffingNeeds.morning > 0) { violations.push({ date: currentDateStrYYYYMMDD, shiftType: 'M', rule: "Falta de Personal", details: `Faltan ${staffingNeeds.morning} empleado(s) para Mañana.`, severity: 'error', category: 'serviceRule' }); score -= staffingNeeds.morning * 5; scoreBreakdown.serviceRules -= staffingNeeds.morning * 5;}
+    if (staffingNeeds.afternoon > 0) { violations.push({ date: currentDateStrYYYYMMDD, shiftType: 'T', rule: "Falta de Personal", details: `Faltan ${staffingNeeds.afternoon} empleado(s) para Tarde.`, severity: 'error', category: 'serviceRule' }); score -= staffingNeeds.afternoon * 5; scoreBreakdown.serviceRules -= staffingNeeds.afternoon * 5;}
+    if (service.enableNightShift && staffingNeeds.night > 0) { violations.push({ date: currentDateStrYYYYMMDD, shiftType: 'N', rule: "Falta de Personal", details: `Faltan ${staffingNeeds.night} empleado(s) para Noche.`, severity: 'error', category: 'serviceRule' }); score -= staffingNeeds.night * 5; scoreBreakdown.serviceRules -= staffingNeeds.night * 5;}
 
     // 5. Safeguard: Check if any employee with a fixed WORK shift for today was not processed.
     employeesForService.forEach(emp => {
@@ -346,9 +349,9 @@ export async function generateAlgorithmicSchedule(
                     employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', 
                     rule: "Error Interno del Algoritmo", 
                     details: `El empleado ${emp.name} tiene un patrón de trabajo fijo L-V (${workPattern}) para hoy pero no fue procesado. Se evita asignación de descanso. Revise la lógica.`, 
-                    severity: 'error' 
+                    severity: 'error', category: 'serviceRule'
                 });
-                score -= 20; dailyProcessedEmployees.add(emp.id); return;
+                score -= 20; scoreBreakdown.serviceRules -= 20; dailyProcessedEmployees.add(emp.id); return;
             }
             
             if ((!workPattern || workPattern === 'standardRotation') && preferences?.fixedWeeklyShiftDays && preferences.fixedWeeklyShiftDays.includes(currentDayOfWeekName)) {
@@ -360,9 +363,9 @@ export async function generateAlgorithmicSchedule(
                             employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', 
                             rule: "Error Interno del Algoritmo", 
                             details: `El empleado ${emp.name} tiene un turno de trabajo fijo (${fixedTiming}) para hoy (${currentDayOfWeekName}) pero no fue procesado. Se evita asignación de descanso. Revise sus preferencias y la lógica.`, 
-                            severity: 'error' 
+                            severity: 'error', category: 'serviceRule'
                         });
-                        score -= 20; dailyProcessedEmployees.add(emp.id);
+                        score -= 20; scoreBreakdown.serviceRules -= 20; dailyProcessedEmployees.add(emp.id);
                     }
                 }
             }
@@ -379,12 +382,12 @@ export async function generateAlgorithmicSchedule(
         const isLastShiftWorkType = (state.lastShiftType === 'M' || state.lastShiftType === 'T' || state.lastShiftType === 'N');
 
         if (isLastShiftWorkType && state.consecutiveWorkDays < preferredWorkDays) {
-            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', rule: "Bloque de Trabajo Preferido Interrumpido", details: `Descansa después de ${state.consecutiveWorkDays} días de trabajo (preferido: ${preferredWorkDays}).`, severity: 'warning' }); score -= 1;
+            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', rule: "Bloque de Trabajo Preferido Interrumpido", details: `Descansa después de ${state.consecutiveWorkDays} días de trabajo (preferido: ${preferredWorkDays}).`, severity: 'warning', category: 'employeeWellbeing' }); score -= 1; scoreBreakdown.employeeWellbeing -=1;
         }
         
         const isLastShiftRestType = state.lastShiftType === 'D' || state.lastShiftType === 'F' || state.lastShiftType === 'C' || state.lastShiftType === 'LAO' || state.lastShiftType === 'LM' || state.lastShiftType === undefined;
         if (isLastShiftRestType && state.consecutiveRestDays >= maxRestDays) {
-             violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', rule: "Exceso Descansos Consecutivos (Forzado a Trabajo)", details: `Excedió máx. descansos (${state.consecutiveRestDays}/${maxRestDays}), pero no se pudo asignar trabajo. Se asigna descanso/feriado.`, severity: 'warning' }); score -= 1;
+             violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: 'General', rule: "Exceso Descansos Consecutivos (Forzado a Trabajo)", details: `Excedió máx. descansos (${state.consecutiveRestDays}/${maxRestDays}), pero no se pudo asignar trabajo. Se asigna descanso/feriado.`, severity: 'warning', category: 'serviceRule' }); score -= 1; scoreBreakdown.serviceRules -= 1;
         }
         
         const shiftNote = isHolidayDay ? 'F (Feriado)' : 'D (Descanso)';
@@ -400,7 +403,7 @@ export async function generateAlgorithmicSchedule(
       } else if (dailyAssignedWorkShifts.has(emp.id)) { 
         const maxWork = service.consecutivenessRules?.maxConsecutiveWorkDays || 7;
         if (state.consecutiveWorkDays > maxWork) { 
-            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: state.lastShiftType as 'M'|'T'|'N' || 'General', rule: "Exceso Días Trabajo Consecutivos", details: `Trabajó ${state.consecutiveWorkDays} días (máx: ${maxWork}).`, severity: 'error' }); score -= 10;
+            violations.push({ employeeName: emp.name, date: currentDateStrYYYYMMDD, shiftType: state.lastShiftType as 'M'|'T'|'N' || 'General', rule: "Exceso Días Trabajo Consecutivos", details: `Trabajó ${state.consecutiveWorkDays} días (máx: ${maxWork}).`, severity: 'error', category: 'serviceRule' }); score -= 10; scoreBreakdown.serviceRules -= 10;
         }
       }
     });
@@ -408,13 +411,16 @@ export async function generateAlgorithmicSchedule(
 
   const monthName = format(new Date(yearInt, monthInt - 1), 'MMMM yyyy', { locale: es });
   const finalScore = Math.max(0, Math.min(100, score));
+  scoreBreakdown.serviceRules = Math.max(0, Math.min(100, scoreBreakdown.serviceRules));
+  scoreBreakdown.employeeWellbeing = Math.max(0, Math.min(100, scoreBreakdown.employeeWellbeing));
+
   const errorCount = violations.filter(v => v.severity === 'error').length;
   const warningCount = violations.filter(v => v.severity === 'warning').length;
-  let responseSummary = `Horario generado para ${service.name} (${monthName}). Puntuación: ${finalScore}/100.`;
+  let responseSummary = `Horario generado para ${service.name} (${monthName}). Puntuación General: ${finalScore}/100.`;
+  responseSummary += ` [Reglas Servicio: ${scoreBreakdown.serviceRules}/100, Bienestar Personal: ${scoreBreakdown.employeeWellbeing}/100].`;
   if (errorCount > 0) responseSummary += ` Errores: ${errorCount}.`;
   if (warningCount > 0) responseSummary += ` Advertencias: ${warningCount}.`;
   if (errorCount === 0 && warningCount === 0) responseSummary += " ¡Sin errores ni advertencias notables!";
 
-  return { generatedShifts, responseText: responseSummary, violations, score: finalScore };
+  return { generatedShifts, responseText: responseSummary, violations, score: finalScore, scoreBreakdown };
 }
-

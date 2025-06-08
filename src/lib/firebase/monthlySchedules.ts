@@ -16,7 +16,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from './config';
-import type { MonthlySchedule, AIShift } from '@/lib/types';
+import type { MonthlySchedule, AIShift, ScheduleViolation, ScoreBreakdown } from '@/lib/types';
 import { cleanDataForFirestore } from '@/lib/utils';
 import { format, addMonths } from 'date-fns';
 
@@ -40,8 +40,9 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): MonthlySc
         status: data.status,
         version: data.version,
         responseText: data.responseText,
-        score: data.score, // Incluir score y violations
-        violations: data.violations,
+        score: data.score,
+        violations: data.violations || [],
+        scoreBreakdown: data.scoreBreakdown, // Leer scoreBreakdown
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (typeof data.createdAt === 'number' ? data.createdAt : 0),
         updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toMillis() : (typeof data.updatedAt === 'number' ? data.updatedAt : 0),
     } as MonthlySchedule;
@@ -177,6 +178,7 @@ export const saveNewActiveSchedule = async (
       version: newVersion,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      // scoreBreakdown ya debería estar en scheduleData si existe
     };
 
     batch.set(newDocRef, cleanDataForFirestore(newScheduleForDb));
@@ -205,18 +207,20 @@ export const updateExistingActiveSchedule = async (
   shifts: AIShift[],
   responseText?: string,
   score?: number,
-  violations?: ScheduleViolation[]
+  violations?: ScheduleViolation[],
+  scoreBreakdown?: ScoreBreakdown
 ): Promise<void> => {
   const scheduleDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, scheduleId);
   
   const updateData: Partial<Omit<MonthlySchedule, 'id' | 'scheduleKey' | 'year' | 'month' | 'serviceId' | 'serviceName' | 'status' | 'version' | 'createdAt'>> = {
     shifts,
-    updatedAt: serverTimestamp() as any, // Asegurar que any se maneje bien si cleanDataForFirestore lo requiere
+    updatedAt: serverTimestamp() as any,
   };
 
   if (responseText !== undefined) updateData.responseText = responseText;
   if (score !== undefined) updateData.score = score;
   if (violations !== undefined) updateData.violations = violations;
+  if (scoreBreakdown !== undefined) updateData.scoreBreakdown = scoreBreakdown; // Guardar scoreBreakdown
   
   try {
     await updateDoc(scheduleDocRef, cleanDataForFirestore(updateData));
@@ -225,4 +229,3 @@ export const updateExistingActiveSchedule = async (
     throw new Error(`Failed to update schedule ${scheduleId}: ${(error as Error).message}`);
   }
 };
-

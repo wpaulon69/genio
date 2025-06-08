@@ -79,6 +79,12 @@ export interface ScheduleViolation {
   rule: string;         // Descripción corta de la regla incumplida (ej. "Falta de personal en Turno Mañana")
   details: string;      // Detalles específicos de la violación
   severity: 'error' | 'warning'; // 'error' para reglas duras, 'warning' para blandas/preferencias
+  category?: 'serviceRule' | 'employeeWellbeing'; // Nueva categoría de violación
+}
+
+export interface ScoreBreakdown {
+  serviceRules: number;
+  employeeWellbeing: number;
 }
 
 export interface MonthlySchedule {
@@ -94,6 +100,7 @@ export interface MonthlySchedule {
   responseText?: string;
   score?: number;
   violations?: ScheduleViolation[];
+  scoreBreakdown?: ScoreBreakdown; // Nuevo desglose de puntaje
   createdAt: number; // Timestamp milliseconds
   updatedAt: number; // Timestamp milliseconds
 }

@@ -10,12 +10,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, Archive, BadgeAlert, BadgeCheck, CircleAlert, CircleHelp, UploadCloud } from 'lucide-react';
+import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, Archive, BadgeAlert, BadgeCheck, CircleAlert, CircleHelp, UploadCloud, ShieldCheck, HeartHandshake } from 'lucide-react';
 import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-scheduler';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import type { Employee, Service, Holiday, MonthlySchedule, ScheduleViolation } from '@/lib/types';
+import type { Employee, Service, Holiday, MonthlySchedule, ScheduleViolation, ScoreBreakdown } from '@/lib/types';
 import { format, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, getYear as getYearFromDate, getMonth as getMonthFromDate, startOfDay, endOfDay, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid';
@@ -53,13 +53,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingConfig, setIsLoadingConfig] = useState(false); // Renamed from isLoadingSchedule
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   
   const [generatedResponseText, setGeneratedResponseText] = useState<string | null>(null);
   const [algorithmGeneratedShifts, setAlgorithmGeneratedShifts] = useState<AIShift[] | null>(null);
   const [editableShifts, setEditableShifts] = useState<AIShift[] | null>(null);
   const [generatedScore, setGeneratedScore] = useState<number | null>(null);
   const [generatedViolations, setGeneratedViolations] = useState<ScheduleViolation[] | null>(null);
+  const [generatedScoreBreakdown, setGeneratedScoreBreakdown] = useState<ScoreBreakdown | null>(null);
   
   const [error, setError] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(false);
@@ -73,9 +74,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveActionType, setSaveActionType] = useState<'update_or_new_version' | 'confirm_new_with_archive' | 'confirm_save_brand_new' | null>(null);
   
-  // State to track if a configuration has been successfully loaded by the user
   const [configLoaded, setConfigLoaded] = useState(false);
-  // Store the specific config that was loaded to compare with form values
   const [loadedConfigValues, setLoadedConfigValues] = useState<ShiftGenerationConfigFormData | null>(null);
 
 
@@ -101,7 +100,6 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     return allServices.find(s => s.id === watchedServiceId);
   }, [watchedServiceId, allServices]);
 
-  // This useEffect updates the displayInfoText based on current form selections (real-time preview)
   useEffect(() => {
     if (watchedSelectedService && watchedMonth && watchedYear && allEmployees && !isLoadingHolidays) {
       const monthIdx = parseInt(watchedMonth, 10) - 1;
@@ -212,6 +210,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setGeneratedResponseText(null);
     setGeneratedScore(null);
     setGeneratedViolations(null);
+    setGeneratedScoreBreakdown(null);
     setShowGrid(false);
     setUserChoiceForExisting(null);
     setCurrentLoadedSchedule(null);
@@ -223,6 +222,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       setCurrentLoadedSchedule(existingSchedule);
       setGeneratedScore(existingSchedule?.score ?? null); 
       setGeneratedViolations(existingSchedule?.violations ?? null);
+      setGeneratedScoreBreakdown(existingSchedule?.scoreBreakdown ?? null);
+
 
       const currentMonthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
       const prevMonthDate = subMonths(currentMonthDate, 1);
@@ -231,15 +232,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       const prevSchedule = await getActiveMonthlySchedule(prevMonthYearStr, prevMonthMonthStr, serviceId);
       setPreviousMonthSchedule(prevSchedule);
       
-      setConfigLoaded(true); // Mark config as loaded
-      setLoadedConfigValues({serviceId, month, year}); // Store the loaded config values
+      setConfigLoaded(true); 
+      setLoadedConfigValues({serviceId, month, year}); 
 
       if (existingSchedule) {
         setShowInitialChoiceDialog(true);
       } else {
         setShowInitialChoiceDialog(false); 
         setUserChoiceForExisting(null);
-        // If no existing schedule, we can directly proceed to generation or show grid if needed later
       }
     } catch (e) {
       console.error("Error cargando configuración de horarios:", e);
@@ -267,19 +267,16 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setError("Error al cargar feriados. No se puede generar el horario.");
         return;
     }
-    // Ensure the current form values match the loaded config if a config was previously loaded.
-    // This handles the case where user changes selectors after loading, then tries to generate.
     if (loadedConfigValues && (data.serviceId !== loadedConfigValues.serviceId || data.month !== loadedConfigValues.month || data.year !== loadedConfigValues.year)) {
         setError("La selección ha cambiado. Por favor, haga clic en 'Cargar Configuración' antes de generar.");
         toast({ variant: "destructive", title: "Selección Cambiada", description: "Recargue la configuración."});
         return;
     }
-    if (!configLoaded && !currentLoadedSchedule) { // If nothing is loaded and user directly wants to generate
+    if (!configLoaded && !currentLoadedSchedule) { 
         setError("Por favor, cargue primero la configuración haciendo clic en 'Cargar Configuración'.");
         toast({ variant: "destructive", title: "Configuración no Cargada", description: "Cargue la configuración."});
         return;
     }
-
 
     setIsGenerating(true);
     setGeneratedResponseText(null);
@@ -287,6 +284,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setEditableShifts(null);
     setGeneratedScore(null);
     setGeneratedViolations(null);
+    setGeneratedScoreBreakdown(null);
     setError(null);
     setShowGrid(false); 
     try {
@@ -301,6 +299,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       setGeneratedResponseText(result.responseText);
       setGeneratedScore(result.score);
       setGeneratedViolations(result.violations);
+      setGeneratedScoreBreakdown(result.scoreBreakdown);
 
       if (result.generatedShifts && result.generatedShifts.length > 0) {
         setAlgorithmGeneratedShifts(result.generatedShifts);
@@ -333,9 +332,10 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         const scoreToSave = generatedScore ?? currentLoadedSchedule?.score ?? 0;
         const violationsToSave = generatedViolations ?? currentLoadedSchedule?.violations ?? [];
         const responseTextToSave = generatedResponseText ?? currentLoadedSchedule?.responseText ?? "Horario guardado.";
+        const scoreBreakdownToSave = generatedScoreBreakdown ?? currentLoadedSchedule?.scoreBreakdown;
 
         if (action === 'update' && currentLoadedSchedule?.id && userChoiceForExisting === 'modify') {
-            await updateExistingActiveSchedule(currentLoadedSchedule.id, editableShifts, responseTextToSave, scoreToSave, violationsToSave);
+            await updateExistingActiveSchedule(currentLoadedSchedule.id, editableShifts, responseTextToSave, scoreToSave, violationsToSave, scoreBreakdownToSave);
             toast({ title: "Horario Actualizado", description: "El horario activo ha sido actualizado." });
             const updatedSchedule = await getActiveMonthlySchedule(watchedYear, watchedMonth, watchedServiceId);
             savedOrUpdatedSchedule = updatedSchedule;
@@ -350,6 +350,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                 responseText: responseTextToSave,
                 score: scoreToSave,
                 violations: violationsToSave,
+                scoreBreakdown: scoreBreakdownToSave,
             };
             const newActive = await saveNewActiveSchedule(scheduleData, currentLoadedSchedule?.id);
             savedOrUpdatedSchedule = newActive;
@@ -361,7 +362,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setGeneratedScore(savedOrUpdatedSchedule?.score ?? null);
         setGeneratedViolations(savedOrUpdatedSchedule?.violations ?? null);
         setGeneratedResponseText(savedOrUpdatedSchedule?.responseText ?? null);
-        setLoadedConfigValues({serviceId: watchedServiceId, month: watchedMonth, year: watchedYear}); // Update loaded config
+        setGeneratedScoreBreakdown(savedOrUpdatedSchedule?.scoreBreakdown ?? null);
+        setLoadedConfigValues({serviceId: watchedServiceId, month: watchedMonth, year: watchedYear}); 
 
         queryClient.invalidateQueries({ queryKey: ['monthlySchedule', watchedYear, watchedMonth, watchedServiceId] });
         setShowGrid(true); 
@@ -394,7 +396,6 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const handleBackToConfig = () => {
     setShowGrid(false);
-    // Do not reset configLoaded or loadedConfigValues here, user might want to generate again with same config
   };
 
   const handleInitialChoice = (choice: 'modify' | 'generate_new') => {
@@ -405,20 +406,17 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setGeneratedResponseText(currentLoadedSchedule.responseText || "");
         setGeneratedScore(currentLoadedSchedule.score ?? null);
         setGeneratedViolations(currentLoadedSchedule.violations ?? null);
+        setGeneratedScoreBreakdown(currentLoadedSchedule.scoreBreakdown ?? null);
         setShowGrid(true);
     } else { 
-        // If generating new, ensure other states are reset for a fresh generation
         setEditableShifts(null);
         setAlgorithmGeneratedShifts(null);
-        // setGeneratedResponseText(null); // Keep response from loaded config if any, or it will be overwritten by generator
-        // setGeneratedScore(null);
-        // setGeneratedViolations(null);
         setShowGrid(false);
     }
   };
   
   const isFormSelectionChanged = () => {
-    if (!loadedConfigValues) return false; // No config loaded yet, so not "changed" from loaded
+    if (!loadedConfigValues) return false; 
     const currentFormValues = form.getValues();
     return currentFormValues.serviceId !== loadedConfigValues.serviceId ||
            currentFormValues.month !== loadedConfigValues.month ||
@@ -429,13 +427,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const canGenerate = configLoaded && (userChoiceForExisting === 'generate_new' || !currentLoadedSchedule) && !isFormSelectionChanged();
 
   const renderScheduleEvaluation = () => {
-    if (isLoadingConfig || (!currentLoadedSchedule && !algorithmGeneratedShifts && !generatedScore && (!generatedViolations || generatedViolations.length === 0))) return null;
+    const scoreToDisplay = generatedScore ?? currentLoadedSchedule?.score;
+    const violationsToDisplay = generatedViolations ?? currentLoadedSchedule?.violations;
+    const breakdownToDisplay = generatedScoreBreakdown ?? currentLoadedSchedule?.scoreBreakdown;
 
-    const scoreToShow = generatedScore ?? currentLoadedSchedule?.score;
-    const violationsToShow = generatedViolations ?? currentLoadedSchedule?.violations;
-
-    if (scoreToShow === null && (!violationsToShow || violationsToShow.length === 0)) return null;
-
+    if (scoreToDisplay === null && (!violationsToDisplay || violationsToDisplay.length === 0) && !breakdownToDisplay) {
+        return null;
+    }
+    
     return (
       <Card className="mt-4 w-full border-dashed">
         <CardHeader className="pb-2 pt-4">
@@ -445,26 +444,45 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {scoreToShow !== null && (
+          {scoreToDisplay !== null && (
             <div className="text-base font-semibold">
-              Puntuación del Horario: <Badge variant={scoreToShow >= 80 ? "default" : scoreToShow >= 60 ? "secondary" : "destructive"}>{scoreToShow.toFixed(0)} / 100</Badge>
+              Puntuación General del Horario: <Badge variant={scoreToDisplay >= 80 ? "default" : scoreToDisplay >= 60 ? "secondary" : "destructive"}>{scoreToDisplay.toFixed(0)} / 100</Badge>
             </div>
           )}
-          {violationsToShow && violationsToShow.length > 0 ? (
+          {breakdownToDisplay && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm mt-1 mb-3">
+                <div className="flex items-center">
+                    <ShieldCheck className="mr-2 h-5 w-5 text-blue-600"/>
+                    <span>Cumplimiento Reglas Servicio:</span>
+                    <Badge variant={breakdownToDisplay.serviceRules >= 80 ? "default" : breakdownToDisplay.serviceRules >= 60 ? "secondary" : "destructive"} className="ml-2">{breakdownToDisplay.serviceRules.toFixed(0)} / 100</Badge>
+                </div>
+                <div className="flex items-center">
+                    <HeartHandshake className="mr-2 h-5 w-5 text-green-600"/>
+                    <span>Bienestar del Personal:</span>
+                    <Badge variant={breakdownToDisplay.employeeWellbeing >= 80 ? "default" : breakdownToDisplay.employeeWellbeing >= 60 ? "secondary" : "destructive"} className="ml-2">{breakdownToDisplay.employeeWellbeing.toFixed(0)} / 100</Badge>
+                </div>
+            </div>
+          )}
+          {violationsToDisplay && violationsToDisplay.length > 0 ? (
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="item-1">
                 <AccordionTrigger className="text-base hover:no-underline">
-                  Informe de Reglas y Preferencias ({violationsToShow.length} {violationsToShow.length === 1 ? 'incidencia' : 'incidencias'})
+                  Informe de Reglas y Preferencias ({violationsToDisplay.length} {violationsToDisplay.length === 1 ? 'incidencia' : 'incidencias'})
                 </AccordionTrigger>
                 <AccordionContent>
                   <ScrollArea className="max-h-60 pr-3">
                     <ul className="space-y-2 pt-2">
-                      {violationsToShow.map((v, index) => (
+                      {violationsToDisplay.map((v, index) => (
                         <li key={index} className={`p-2 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
                           <div className="flex items-start gap-2">
                             {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
                             <div>
-                              <span className="font-semibold">{v.severity === 'error' ? 'Error: ' : 'Advertencia: '}</span> {v.rule}
+                              <span className="font-semibold">
+                                {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
+                                {v.category === 'serviceRule' && <Badge variant="outline" className="mr-1 border-blue-500 text-blue-700">Regla</Badge>}
+                                {v.category === 'employeeWellbeing' && <Badge variant="outline" className="mr-1 border-green-500 text-green-700">Bienestar</Badge>}
+                                {v.rule}
+                              </span>
                               <p className="text-xs opacity-90">
                                 {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
                                 {v.date && <><strong>Fecha:</strong> {v.date} </>}
@@ -481,11 +499,13 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
               </AccordionItem>
             </Accordion>
           ) : (
-            <Alert variant="default" className="mt-2">
-              <BadgeCheck className="h-4 w-4"/>
-              <AlertTitle>¡Excelente!</AlertTitle>
-              <AlertDescription>No se encontraron incumplimientos de reglas o preferencias en este horario.</AlertDescription>
-            </Alert>
+            scoreToDisplay !== null && ( // Solo mostrar "Excelente" si hay un puntaje (indicando que se evaluó)
+                <Alert variant="default" className="mt-2">
+                <BadgeCheck className="h-4 w-4"/>
+                <AlertTitle>¡Excelente!</AlertTitle>
+                <AlertDescription>No se encontraron incumplimientos de reglas o preferencias en este horario.</AlertDescription>
+                </Alert>
+            )
           )}
         </CardContent>
       </Card>
@@ -508,7 +528,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
           </CardHeader>
           
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleGenerateSubmit)}> {/* Form wraps main content now */}
+              <form onSubmit={form.handleSubmit(handleGenerateSubmit)}> 
                 <CardContent className="space-y-6">
                   {errorHolidays && (
                     <Alert variant="destructive">
@@ -588,9 +608,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
           <InteractiveScheduleGrid
             initialShifts={editableShifts}
             allEmployees={allEmployees}
-            targetService={watchedSelectedService} // Use watched service for grid context
-            month={watchedMonth} // Use watched month
-            year={watchedYear}   // Use watched year
+            targetService={watchedSelectedService} 
+            month={watchedMonth} 
+            year={watchedYear}   
             holidays={holidays} 
             onShiftsChange={(updatedShifts) => setEditableShifts(updatedShifts)}
             onBackToConfig={handleBackToConfig}
@@ -628,7 +648,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
          </CardFooter>
       )}
 
-      <AlertDialog open={showInitialChoiceDialog} onOpenChange={(open) => { if (!open && (isSaving || isGenerating || isLoadingConfig)) return; setShowInitialChoiceDialog(open); if(!open) { setUserChoiceForExisting(null); /* setConfigLoaded(false); */ }}}>
+      <AlertDialog open={showInitialChoiceDialog} onOpenChange={(open) => { if (!open && (isSaving || isGenerating || isLoadingConfig)) return; setShowInitialChoiceDialog(open); if(!open) { setUserChoiceForExisting(null); }}}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Horario Existente Encontrado</AlertDialogTitle>
@@ -696,4 +716,3 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
-
