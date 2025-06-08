@@ -227,7 +227,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isLoading) onClose(); }}>
-      <DialogContent className="sm:max-w-3xl md:max-h-[85vh]">
+      <DialogContent className="sm:max-w-3xl md:max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{employee ? 'Editar Empleado' : 'Añadir Nuevo Empleado'} - Paso {currentStep} de 2</DialogTitle>
           <DialogDescription>
@@ -235,8 +235,8 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-3">
-            <ScrollArea className="max-h-[calc(85vh-220px)] pr-4 -mr-2 py-2"> {/* Ajuste aquí */}
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-grow min-h-0 space-y-3">
+            <ScrollArea className="flex-grow pr-4 -mr-2 py-2 min-h-0">
               <div className="space-y-4">
                 {currentStep === 1 && (
                   <>
@@ -381,7 +381,7 @@ export default function EmployeeForm({ isOpen, onClose, onSubmit, employee, avai
                 )}
               </div>
             </ScrollArea>
-            <DialogFooter className="pt-4 flex justify-between w-full">
+            <DialogFooter className="pt-4 flex justify-between w-full flex-shrink-0">
               <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancelar</Button>
               <div className="flex gap-2">
                 {currentStep > 1 && (<Button type="button" variant="outline" onClick={handlePreviousStep} disabled={isLoading}>Anterior</Button>)}
