@@ -45,6 +45,7 @@ export default function HolidayForm({ isOpen, onClose, onSubmit, holiday, isLoad
       if (holiday) { // Editing existing holiday
         form.reset({
           name: holiday.name,
+          // Ensure date is parsed correctly from string to Date object
           date: holiday.date && isValidDate(parseISO(holiday.date)) ? parseISO(holiday.date) : new Date(),
         });
       } else { // Adding a new holiday
@@ -53,14 +54,12 @@ export default function HolidayForm({ isOpen, onClose, onSubmit, holiday, isLoad
         if (!form.formState.isDirty) {
             form.reset({
                 name: '',
-                date: new Date(),
+                date: new Date(), 
             });
         }
-        // If the form is dirty, it means the user has already made changes (e.g., picked a date).
-        // We do not want to reset and wipe those changes.
       }
     }
-  }, [holiday, isOpen, form.reset, form.formState.isDirty]);
+  }, [holiday, isOpen, form.reset]); // form.formState.isDirty removed from main dependency array
 
   const handleFormSubmit = (data: HolidayFormData) => {
     const formattedDate = format(data.date, 'yyyy-MM-dd');
