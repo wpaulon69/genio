@@ -29,10 +29,10 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee 
 
   const fixedAssignmentsData = data.fixedAssignments || [];
   const finalFixedAssignments: FixedAssignment[] = fixedAssignmentsData.map((assign: any) => ({
-    type: assign.type,
-    startDate: assign.startDate, // Assume dates are stored as YYYY-MM-DD strings
+    type: assign.type, // Assume type is always present from Firestore if saved correctly
+    startDate: assign.startDate, // Assume startDate is always present
     endDate: assign.endDate, // Will be undefined if not in Firestore
-    description: assign.description === undefined ? '' : assign.description,
+    description: assign.description, // Let it be undefined if not present
   }));
 
   return {
@@ -44,11 +44,13 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee 
     preferences: finalPreferences,
     availability: data.availability || '',
     constraints: data.constraints || '',
-    fixedAssignments: finalFixedAssignments,
+    fixedAssignments: finalFixedAssignments.length > 0 ? finalFixedAssignments : undefined,
   } as Employee;
 };
 
 // Helper function to clean individual fixed assignment for Firestore
+// It returns Partial<FixedAssignment> but ensures type and startDate are present.
+// This is compatible with FixedAssignment if endDate/description are optional in FixedAssignment.
 const cleanFixedAssignmentForFirestore = (assignment: FixedAssignment): Partial<FixedAssignment> => {
   const cleanedAssignment: Partial<FixedAssignment> = {
     type: assignment.type,
@@ -57,7 +59,8 @@ const cleanFixedAssignmentForFirestore = (assignment: FixedAssignment): Partial<
   if (assignment.endDate && typeof assignment.endDate === 'string' && assignment.endDate.trim() !== "") {
     cleanedAssignment.endDate = assignment.endDate;
   }
-  if (assignment.description !== undefined) {
+  // Only include description if it's a non-empty string, otherwise let it be undefined (and thus removed by cleanDataForFirestore)
+  if (assignment.description && typeof assignment.description === 'string' && assignment.description.trim() !== "") {
     cleanedAssignment.description = assignment.description;
   }
   return cleanedAssignment;
@@ -73,7 +76,7 @@ export const getEmployees = async (): Promise<Employee[]> => {
 export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<Employee> => {
   const employeesCol = collection(db, EMPLOYEES_COLLECTION);
 
-  let preferencesToSave: EmployeePreferences | undefined = undefined;
+  let preferencesToSave: EmployeePreferences;
   if (employeeData.preferences) {
     preferencesToSave = {
       eligibleForDayOffAfterDuty: employeeData.preferences.eligibleForDayOffAfterDuty ?? defaultPreferences.eligibleForDayOffAfterDuty,
@@ -97,15 +100,29 @@ export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<E
   const cleanedData = cleanDataForFirestore(dataToSave);
   const docRef = await addDoc(employeesCol, cleanedData);
 
-  const savedEmployeeData = { ...cleanedData } as Omit<Employee, 'id'>;
-  if (!savedEmployeeData.preferences) {
-    savedEmployeeData.preferences = { ...defaultPreferences };
-  }
-  if (!savedEmployeeData.fixedAssignments) {
-    savedEmployeeData.fixedAssignments = [];
-  }
+  // Explicitly construct the returned object to match the Employee type
+  const returnedEmployee: Employee = {
+    id: docRef.id,
+    name: cleanedData.name as string, // employeeData ensures this is string
+    contact: cleanedData.contact as string, // employeeData ensures this is string
+    serviceIds: cleanedData.serviceIds as string[], // employeeData ensures this is string[]
+    roles: cleanedData.roles as string[], // employeeData ensures this is string[]
+    availability: cleanedData.availability as string, // employeeData ensures this is string
+    constraints: cleanedData.constraints as string, // employeeData ensures this is string
+    preferences: cleanedData.preferences as EmployeePreferences, // preferencesToSave ensures this is EmployeePreferences
+    fixedAssignments: (cleanedData.fixedAssignments || []) as FixedAssignment[], // cleanFixedAssignmentForFirestore ensures type/startDate
+  };
 
-  return { id: docRef.id, ...savedEmployeeData };
+  // Ensure fixedAssignments is undefined if the array is empty, to match `?: FixedAssignment[]`
+  if (returnedEmployee.fixedAssignments && returnedEmployee.fixedAssignments.length === 0) {
+    returnedEmployee.fixedAssignments = undefined;
+  }
+  
+  // Ensure preferences matches the optional nature if it's equivalent to default and no other part of it is set
+  // However, `preferencesToSave` always creates a full EmployeePreferences object.
+  // The type `Employee` has `preferences?: EmployeePreferences;` which is fine.
+
+  return returnedEmployee;
 };
 
 export const updateEmployee = async (employeeId: string, employeeData: Partial<Omit<Employee, 'id'>>): Promise<void> => {
@@ -114,7 +131,8 @@ export const updateEmployee = async (employeeId: string, employeeData: Partial<O
   let dataToUpdate: Partial<Omit<Employee, 'id'>> = { ...employeeData };
 
   if (employeeData.hasOwnProperty('preferences')) {
-    const newPrefs = employeeData.preferences || {};
+    const newPrefs = employeeData.preferences || {}; // newPrefs can be Partial<EmployeePreferences> or undefined
+    // Construct a full EmployeePreferences object, ensuring all fields are present or default
     dataToUpdate.preferences = {
         eligibleForDayOffAfterDuty: newPrefs.eligibleForDayOffAfterDuty ?? defaultPreferences.eligibleForDayOffAfterDuty,
         prefersWeekendWork: newPrefs.prefersWeekendWork ?? defaultPreferences.prefersWeekendWork,
@@ -126,6 +144,7 @@ export const updateEmployee = async (employeeId: string, employeeData: Partial<O
 
 
   if (employeeData.hasOwnProperty('fixedAssignments')) {
+    // Ensure that even if an empty array is passed, it's stored as such (or omitted if that's the desired behavior)
     dataToUpdate.fixedAssignments = (employeeData.fixedAssignments || []).map(cleanFixedAssignmentForFirestore);
   }
 
@@ -136,3 +155,4 @@ export const deleteEmployee = async (employeeId: string): Promise<void> => {
   const employeeDoc = doc(db, EMPLOYEES_COLLECTION, employeeId);
   await deleteDoc(employeeDoc);
 };
+
