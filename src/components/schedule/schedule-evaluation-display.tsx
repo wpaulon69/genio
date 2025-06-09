@@ -25,9 +25,6 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
                            (!violationsToDisplay || violationsToDisplay.length === 0) &&
                            !breakdownToDisplay;
   
-  // Specific handling for viewer when schedule is loaded but has no score/violations (e.g. manually created, not evaluated)
-  // score being undefined usually means the schedule object itself doesn't have the score property yet.
-  // score being null might mean it was evaluated to null.
   if (context === 'viewer' && score === undefined && (!violations || violations.length === 0) && !scoreBreakdown) {
     return (
       <Card className="mt-6 w-full border-dashed">
@@ -48,7 +45,7 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
       return null; 
   }
   if (scoreToDisplay === null && (!violationsToDisplay || violationsToDisplay.length === 0) && !breakdownToDisplay && context === 'viewer') {
-      return null; // If all are explicitly null/empty in viewer, don't show anything unless it was `undefined` (handled above)
+      return null; 
   }
 
 
@@ -86,9 +83,9 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
               <AccordionTrigger className="text-base hover:no-underline">
                 Informe de Reglas y Preferencias ({violationsToDisplay.length} {violationsToDisplay.length === 1 ? 'incidencia' : 'incidencias'})
               </AccordionTrigger>
-              <AccordionContent>
-                <ScrollArea className="max-h-72"> {/* Max height for scroll area */}
-                  <ul className="space-y-3 pt-2"> {/* Removed horizontal padding (pr-3/pr-4) */}
+              <AccordionContent className="p-0"> {/* Removed default padding from AccordionContent's inner div */}
+                <ScrollArea className="max-h-72 p-4"> {/* Added padding to ScrollArea, kept max-h-72 */}
+                  <ul className="space-y-3"> {/* Removed pt-2 from ul */}
                     {violationsToDisplay.map((v, index) => (
                       <li key={index} className={`p-3 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
                         <div className="flex items-start gap-2">
@@ -131,4 +128,3 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
     </Card>
   );
 }
-
