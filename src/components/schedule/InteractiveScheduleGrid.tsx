@@ -162,11 +162,11 @@ export default function InteractiveScheduleGrid({
 
     const selectedOption = SHIFT_OPTIONS.find(opt => opt.value === selectedShiftValue);
 
-    if (selectedShiftValue === '') { 
+    if (selectedShiftValue === '' || !selectedOption) { 
       if (existingShiftIndex !== -1) {
         newShifts.splice(existingShiftIndex, 1);
       }
-    } else if (selectedOption) {
+    } else {
       const serviceName = targetService?.name || (existingShiftIndex !== -1 ? newShifts[existingShiftIndex]?.serviceName : '') || 'Servicio Desconocido';
       
       const newOrUpdatedShift: AIShift = {
@@ -176,8 +176,8 @@ export default function InteractiveScheduleGrid({
         startTime: selectedOption.startTime || '', 
         endTime: selectedOption.endTime || '',   
         notes: (selectedOption.value === 'D' || selectedOption.value === 'C' || selectedOption.value === 'LAO' || selectedOption.value === 'LM' || selectedOption.value === 'F') 
-                ? selectedOption.label 
-                : `Turno ${selectedOption.label}`, 
+                ? selectedOption.label // Usar la etiqueta completa para las notas de estos tipos especiales
+                : `Turno ${selectedOption.label}`, // Usar la etiqueta completa para M, T, N
       };
 
       if (existingShiftIndex !== -1) {
@@ -319,6 +319,7 @@ export default function InteractiveScheduleGrid({
                   {dayHeaders.map(header => {
                     const shift = gridData[employeeName]?.[header.dayNumber];
                     const currentShiftType = getGridShiftTypeFromAIShift(shift);
+                    const selectedOption = SHIFT_OPTIONS.find(opt => opt.value === currentShiftType);
                     return (
                       <TableCell key={`${employeeName}-${header.dayNumber}`} className="p-1 w-[70px] min-w-[70px]">
                         <Select
@@ -327,12 +328,14 @@ export default function InteractiveScheduleGrid({
                           disabled={isReadOnly}
                         >
                           <SelectTrigger className="h-8 w-full text-xs px-2">
-                            <SelectValue placeholder="-" />
+                            <SelectValue placeholder="-">
+                              {selectedOption ? selectedOption.displayValue : '-'}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {SHIFT_OPTIONS.map(opt => (
                               <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                                {opt.label}
+                                {opt.displayValue}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -397,4 +400,3 @@ export default function InteractiveScheduleGrid({
     </Card>
   );
 }
-
