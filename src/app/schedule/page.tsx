@@ -4,22 +4,25 @@
 import PageHeader from '@/components/common/page-header';
 import ShiftGeneratorForm from '@/components/schedule/shift-generator-form';
 import InteractiveScheduleGrid from '@/components/schedule/InteractiveScheduleGrid';
-import ScheduleEvaluationDisplay from '@/components/schedule/schedule-evaluation-display'; // Importar nuevo componente
+import ScheduleEvaluationDisplay from '@/components/schedule/schedule-evaluation-display';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Employee, Service, MonthlySchedule, Holiday } from '@/lib/types';
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query'; // Importar useQueryClient
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { getEmployees } from '@/lib/firebase/employees';
 import { getServices } from '@/lib/firebase/services';
-import { getActiveMonthlySchedule } from '@/lib/firebase/monthlySchedules';
+import { getActiveMonthlySchedule, deleteActiveSchedule } from '@/lib/firebase/monthlySchedules';
 import { getHolidays } from '@/lib/firebase/holidays';
-import { Loader2, CalendarSearch, AlertTriangle, Info, UploadCloud } from 'lucide-react'; // Importar UploadCloud
+import { Loader2, CalendarSearch, AlertTriangle, Info, UploadCloud, Trash2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Button } from '@/components/ui/button'; // Importar Button
+import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { es } from 'date-fns/locale';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
+
 
 const currentYear = new Date().getFullYear();
 const scheduleYears = Array.from({ length: 5 }, (_, i) => (currentYear - 2 + i).toString());
@@ -30,10 +33,16 @@ const scheduleMonths = Array.from({ length: 12 }, (_, i) => ({
 
 export default function SchedulePage() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [selectedYearView, setSelectedYearView] = useState<string>(currentYear.toString());
   const [selectedMonthView, setSelectedMonthView] = useState<string>((new Date().getMonth() + 1).toString());
   const [selectedServiceIdView, setSelectedServiceIdView] = useState<string | undefined>(undefined);
   const [hasAttemptedInitialLoad, setHasAttemptedInitialLoad] = useState(false);
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [scheduleToDeleteId, setScheduleToDeleteId] = useState<string | null>(null);
+  const [viewableScheduleData, setViewableScheduleData] = useState<MonthlySchedule | null>(null);
+
 
   const { data: employees = [], isLoading: isLoadingEmployees, error: errorEmployees } = useQuery<Employee[]>({
     queryKey: ['employees'],
@@ -56,23 +65,29 @@ export default function SchedulePage() {
   }, [services, selectedServiceIdView]);
 
   const {
-    data: viewableSchedule,
+    data: fetchedViewableSchedule, // Renamed to avoid conflict with state
     isLoading: isLoadingViewableSchedule,
     error: errorViewableSchedule,
     refetch: refetchViewableSchedule,
   } = useQuery<MonthlySchedule | null>({
     queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView],
-    queryFn: () => {
+    queryFn: async () => {
       if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) {
         return Promise.resolve(null);
       }
-      return getActiveMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
+      const schedule = await getActiveMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
+      setViewableScheduleData(schedule); // Update state here
+      return schedule;
     },
-    enabled: false, // Query will not run automatically
+    enabled: false, 
   });
+  
+  useEffect(() => {
+    setViewableScheduleData(fetchedViewableSchedule ?? null);
+  }, [fetchedViewableSchedule]);
+
 
   useEffect(() => {
-    // Attempt initial load once all parameters are set and if it hasn't been attempted yet
     if (selectedServiceIdView && selectedMonthView && selectedYearView && !hasAttemptedInitialLoad) {
       refetchViewableSchedule();
       setHasAttemptedInitialLoad(true);
@@ -90,6 +105,35 @@ export default function SchedulePage() {
   const handleLoadRefreshSchedule = () => {
     if (selectedServiceIdView && selectedYearView && selectedMonthView) {
       refetchViewableSchedule();
+    }
+  };
+
+  const deleteScheduleMutation = useMutation({
+    mutationFn: deleteActiveSchedule,
+    onSuccess: () => {
+      toast({ title: "Horario Eliminado", description: "El horario activo ha sido marcado como inactivo." });
+      queryClient.invalidateQueries({ queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView] });
+      setViewableScheduleData(null); // Clear the view
+      setIsDeleteDialogOpen(false);
+      setScheduleToDeleteId(null);
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Error al Eliminar", description: error.message });
+      setIsDeleteDialogOpen(false);
+      setScheduleToDeleteId(null);
+    },
+  });
+
+  const handleDeleteClick = () => {
+    if (viewableScheduleData) {
+      setScheduleToDeleteId(viewableScheduleData.id);
+      setIsDeleteDialogOpen(true);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (scheduleToDeleteId) {
+      deleteScheduleMutation.mutate(scheduleToDeleteId);
     }
   };
 
@@ -162,13 +206,26 @@ export default function SchedulePage() {
               </div>
               <Button
                 onClick={handleLoadRefreshSchedule}
-                disabled={!selectedServiceIdView || !selectedMonthView || !selectedYearView || isLoadingViewableSchedule}
+                disabled={!selectedServiceIdView || !selectedMonthView || !selectedYearView || isLoadingViewableSchedule || deleteScheduleMutation.isPending}
                 className="w-full md:w-auto mt-2"
               >
                 {isLoadingViewableSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UploadCloud className="mr-2 h-4 w-4" />}
                 Cargar/Refrescar Horario
               </Button>
             </CardContent>
+            {viewableScheduleData && (
+              <CardFooter className="border-t pt-4">
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteClick}
+                  disabled={isLoadingViewableSchedule || deleteScheduleMutation.isPending}
+                  className="w-full md:w-auto"
+                >
+                  {deleteScheduleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
+                  Eliminar Horario Activo
+                </Button>
+              </CardFooter>
+            )}
           </Card>
 
           {isLoadingViewableSchedule && (
@@ -184,11 +241,11 @@ export default function SchedulePage() {
                <AlertDescription>{(errorViewableSchedule as Error).message || "No se pudo cargar el horario seleccionado."}</AlertDescription>
              </Alert>
           )}
-          {!isLoadingViewableSchedule && !errorViewableSchedule && selectedServiceIdView && hasAttemptedInitialLoad && ( // Ensure initial load was attempted
-            viewableSchedule ? (
+          {!isLoadingViewableSchedule && !errorViewableSchedule && selectedServiceIdView && hasAttemptedInitialLoad && (
+            viewableScheduleData ? (
               <>
                 <InteractiveScheduleGrid
-                  initialShifts={viewableSchedule.shifts}
+                  initialShifts={viewableScheduleData.shifts}
                   allEmployees={employees}
                   targetService={selectedServiceForView}
                   month={selectedMonthView}
@@ -197,9 +254,9 @@ export default function SchedulePage() {
                   isReadOnly={true}
                 />
                 <ScheduleEvaluationDisplay
-                  score={viewableSchedule.score}
-                  violations={viewableSchedule.violations}
-                  scoreBreakdown={viewableSchedule.scoreBreakdown}
+                  score={viewableScheduleData.score}
+                  violations={viewableScheduleData.violations}
+                  scoreBreakdown={viewableScheduleData.scoreBreakdown}
                   context="viewer"
                 />
               </>
@@ -214,7 +271,7 @@ export default function SchedulePage() {
               </Alert>
             )
           )}
-          {(!selectedServiceIdView || !hasAttemptedInitialLoad && !isLoadingViewableSchedule) && ( // Show this if no service or initial load not done
+          {(!selectedServiceIdView || !hasAttemptedInitialLoad && !isLoadingViewableSchedule && !viewableScheduleData) && ( 
              <Alert variant="default">
                 <Info className="h-5 w-5 mr-2"/>
                 <AlertTitle>Seleccione Filtros y Cargue</AlertTitle>
@@ -230,6 +287,25 @@ export default function SchedulePage() {
           />
         </TabsContent>
       </Tabs>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Está seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción marcará el horario activo de {selectedServiceForView?.name} para {scheduleMonths.find(m => m.value === selectedMonthView)?.label || ''} {selectedYearView} como inactivo.
+              No se podrá ver directamente, pero permanecerá en el historial. ¿Desea continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteScheduleMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleteScheduleMutation.isPending} className="bg-destructive hover:bg-destructive/90">
+              {deleteScheduleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" /> }
+              Sí, Eliminar Horario
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
+

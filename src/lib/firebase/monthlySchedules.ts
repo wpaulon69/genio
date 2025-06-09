@@ -164,7 +164,7 @@ export const saveNewActiveSchedule = async (
       );
       const activeSnapshot = await getDocs(activeQuery);
       activeSnapshot.forEach(docSnapshot => {
-          if (docSnapshot.id !== previousActiveScheduleIdToArchive) {
+          if (docSnapshot.id !== previousActiveScheduleIdToArchive) { // Ensure not to re-archive if ID matches
             batch.update(docSnapshot.ref, { status: 'inactive', updatedAt: serverTimestamp() });
           }
       });
@@ -220,12 +220,25 @@ export const updateExistingActiveSchedule = async (
   if (responseText !== undefined) updateData.responseText = responseText;
   if (score !== undefined) updateData.score = score;
   if (violations !== undefined) updateData.violations = violations;
-  if (scoreBreakdown !== undefined) updateData.scoreBreakdown = scoreBreakdown; // Guardar scoreBreakdown
+  if (scoreBreakdown !== undefined) updateData.scoreBreakdown = scoreBreakdown;
   
   try {
     await updateDoc(scheduleDocRef, cleanDataForFirestore(updateData));
   } catch (error) {
     console.error("Error updating existing active schedule:", { scheduleId, error });
     throw new Error(`Failed to update schedule ${scheduleId}: ${(error as Error).message}`);
+  }
+};
+
+export const deleteActiveSchedule = async (scheduleId: string): Promise<void> => {
+  const scheduleDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, scheduleId);
+  try {
+    await updateDoc(scheduleDocRef, {
+      status: 'inactive',
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Error deleting (inactivating) active schedule:", { scheduleId, error });
+    throw new Error(`Failed to delete (inactivate) schedule ${scheduleId}: ${(error as Error).message}`);
   }
 };
