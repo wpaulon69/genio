@@ -95,12 +95,12 @@ export interface MonthlySchedule {
   serviceId: string;
   serviceName: string;
   shifts: AIShift[];
-  status: 'active' | 'inactive'; // 'active' es la versión actual, 'inactive' son versiones archivadas
+  status: 'active' | 'inactive' | 'draft'; // Added 'draft' status
   version: number;
   responseText?: string;
   score?: number;
   violations?: ScheduleViolation[];
-  scoreBreakdown?: ScoreBreakdown; // Nuevo desglose de puntaje
+  scoreBreakdown?: ScoreBreakdown; 
   createdAt: number; // Timestamp milliseconds
   updatedAt: number; // Timestamp milliseconds
 }

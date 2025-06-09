@@ -37,12 +37,12 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): MonthlySc
         serviceId: data.serviceId,
         serviceName: data.serviceName,
         shifts: data.shifts || [],
-        status: data.status,
-        version: data.version,
+        status: data.status || 'inactive', // Default to inactive if status is missing
+        version: data.version || 0,
         responseText: data.responseText,
         score: data.score,
         violations: data.violations || [],
-        scoreBreakdown: data.scoreBreakdown, 
+        scoreBreakdown: data.scoreBreakdown ? { serviceRules: data.scoreBreakdown.serviceRules, employeeWellbeing: data.scoreBreakdown.employeeWellbeing } : undefined,
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (typeof data.createdAt === 'number' ? data.createdAt : 0),
         updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toMillis() : (typeof data.updatedAt === 'number' ? data.updatedAt : 0),
     } as MonthlySchedule;
@@ -78,13 +78,43 @@ export const getActiveMonthlySchedule = async (
   }
 };
 
+export const getDraftMonthlySchedule = async (
+  year: string,
+  month: string,
+  serviceId: string
+): Promise<MonthlySchedule | null> => {
+  if (!year || !month || !serviceId) {
+    console.warn("getDraftMonthlySchedule called with invalid parameters", { year, month, serviceId });
+    return null;
+  }
+  const scheduleKey = generateScheduleKey(year, month, serviceId);
+  const schedulesCol = collection(db, MONTHLY_SCHEDULES_COLLECTION);
+  const q = query(
+    schedulesCol,
+    where('scheduleKey', '==', scheduleKey),
+    where('status', '==', 'draft'),
+    limit(1)
+  );
+
+  try {
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return null;
+    }
+    return fromFirestore(snapshot.docs[0]);
+  } catch (error) {
+    console.error("Error fetching draft monthly schedule:", { scheduleKey, error });
+    throw new Error(`Error fetching draft schedule for ${scheduleKey}: ${(error as Error).message}`);
+  }
+};
+
 
 export const getSchedulesInDateRange = async (
   yearFrom: string,
   monthFrom: string,
   yearTo: string,
   monthTo: string,
-  serviceId?: string 
+  serviceId?: string
 ): Promise<MonthlySchedule[]> => {
   const allSchedules: MonthlySchedule[] = [];
   const startDate = new Date(parseInt(yearFrom), parseInt(monthFrom) - 1, 1);
@@ -95,19 +125,19 @@ export const getSchedulesInDateRange = async (
 
   while (currentDate <= endDate) {
     const currentYearStr = format(currentDate, 'yyyy');
-    const currentMonthStr = format(currentDate, 'M'); 
+    const currentMonthStr = format(currentDate, 'M');
 
     let q;
-    if (serviceId && serviceId !== "__ALL_SERVICES_COMPARISON__") { 
+    if (serviceId && serviceId !== "__ALL_SERVICES_COMPARISON__") {
       const scheduleKey = generateScheduleKey(currentYearStr, currentMonthStr, serviceId);
       q = query(
         schedulesCol,
         where('scheduleKey', '==', scheduleKey),
-        where('status', '==', 'active'), 
+        where('status', '==', 'active'),
         limit(1)
       );
     } else {
-      
+
       q = query(
         schedulesCol,
         where('year', '==', currentYearStr),
@@ -123,7 +153,7 @@ export const getSchedulesInDateRange = async (
       });
     } catch (error) {
       console.error("Error fetching schedules in date range for", { currentYearStr, currentMonthStr, serviceId, error });
-      
+
     }
     currentDate = addMonths(currentDate, 1);
   }
@@ -157,23 +187,27 @@ export const saveNewActiveSchedule = async (
         const prevScheduleDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, previousActiveScheduleIdToArchive);
         batch.update(prevScheduleDocRef, { status: 'inactive', updatedAt: serverTimestamp() });
     } else {
-      const activeQuery = query(
+      // Archive any other active or draft schedules for this key
+      const conflictingQuery = query(
           schedulesCol,
           where('scheduleKey', '==', scheduleData.scheduleKey),
-          where('status', '==', 'active')
+          where('status', 'in', ['active', 'draft'])
       );
-      const activeSnapshot = await getDocs(activeQuery);
-      activeSnapshot.forEach(docSnapshot => {
-          if (docSnapshot.id !== previousActiveScheduleIdToArchive) { 
-            batch.update(docSnapshot.ref, { status: 'inactive', updatedAt: serverTimestamp() });
-          }
+      const conflictingSnapshot = await getDocs(conflictingQuery);
+      conflictingSnapshot.forEach(docSnapshot => {
+          batch.update(docSnapshot.ref, { status: 'inactive', updatedAt: serverTimestamp() });
       });
     }
+    
+    // If the schedule being saved was a draft, its original doc is now inactive. We create a new active one.
+    // This logic assumes scheduleData might come from a modified draft that now needs to become active.
+    // If scheduleData.id (from a draft) was passed, we should ensure that draft is marked inactive.
 
     const newDocRef = doc(collection(db, MONTHLY_SCHEDULES_COLLECTION));
 
     const newScheduleForDb = {
-      ...scheduleData, // scoreBreakdown is spread here (could be undefined)
+      ...scheduleData,
+      scoreBreakdown: scheduleData.scoreBreakdown ? { serviceRules: scheduleData.scoreBreakdown.serviceRules, employeeWellbeing: scheduleData.scoreBreakdown.employeeWellbeing } : undefined,
       status: 'active',
       version: newVersion,
       createdAt: serverTimestamp(),
@@ -181,7 +215,7 @@ export const saveNewActiveSchedule = async (
     };
 
     batch.set(newDocRef, cleanDataForFirestore(newScheduleForDb));
-    
+
     await batch.commit();
 
     const nowMillis = Date.now();
@@ -190,7 +224,7 @@ export const saveNewActiveSchedule = async (
       ...scheduleData,
       status: 'active',
       version: newVersion,
-      createdAt: nowMillis, 
+      createdAt: nowMillis,
       updatedAt: nowMillis,
     };
     return newScheduleForReturn;
@@ -201,16 +235,77 @@ export const saveNewActiveSchedule = async (
   }
 };
 
+
+export const saveOrUpdateDraftSchedule = async (
+  scheduleData: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'>,
+  existingDraftId?: string
+): Promise<MonthlySchedule> => {
+  const schedulesCol = collection(db, MONTHLY_SCHEDULES_COLLECTION);
+  const scheduleKey = generateScheduleKey(scheduleData.year, scheduleData.month, scheduleData.serviceId);
+
+  const dataToSave = {
+      ...scheduleData,
+      scheduleKey,
+      scoreBreakdown: scheduleData.scoreBreakdown ? { serviceRules: scheduleData.scoreBreakdown.serviceRules, employeeWellbeing: scheduleData.scoreBreakdown.employeeWellbeing } : undefined,
+      status: 'draft',
+      updatedAt: serverTimestamp(),
+  };
+  
+  let draftIdToReturn = existingDraftId;
+  let versionToReturn = scheduleData.version || 1; // Retain version if exists, else 1
+  let createdAtToReturn = scheduleData.createdAt || Date.now();
+
+
+  try {
+    if (existingDraftId) {
+      const draftDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, existingDraftId);
+      // Ensure version is not accidentally reset if it exists on scheduleData from a loaded draft
+      const updatePayload = { ...dataToSave, version: versionToReturn }; 
+      await updateDoc(draftDocRef, cleanDataForFirestore(updatePayload));
+    } else {
+      // Check if a draft already exists for this key, just in case existingDraftId wasn't passed
+      const q = query(schedulesCol, where('scheduleKey', '==', scheduleKey), where('status', '==', 'draft'), limit(1));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const existingDoc = snapshot.docs[0];
+        draftIdToReturn = existingDoc.id;
+        versionToReturn = existingDoc.data().version || 1; // Use existing draft's version
+        createdAtToReturn = existingDoc.data().createdAt instanceof Timestamp ? existingDoc.data().createdAt.toMillis() : (existingDoc.data().createdAt || Date.now());
+        await updateDoc(existingDoc.ref, cleanDataForFirestore({ ...dataToSave, version: versionToReturn }));
+      } else {
+        const newDocRef = await addDoc(schedulesCol, cleanDataForFirestore({ ...dataToSave, version: 1, createdAt: serverTimestamp() }));
+        draftIdToReturn = newDocRef.id;
+        versionToReturn = 1;
+        createdAtToReturn = Date.now(); // Approximate
+      }
+    }
+
+    return {
+      id: draftIdToReturn!, // Should be set by this point
+      ...scheduleData,
+      status: 'draft',
+      version: versionToReturn,
+      createdAt: createdAtToReturn,
+      updatedAt: Date.now(), // Approximate
+    };
+
+  } catch (error) {
+      console.error("Error saving or updating draft schedule:", error);
+      throw new Error(`Failed to save/update draft schedule: ${(error as Error).message}`);
+  }
+};
+
+
 export const updateExistingActiveSchedule = async (
   scheduleId: string,
   shifts: AIShift[],
   responseText?: string,
   score?: number,
   violations?: ScheduleViolation[],
-  scoreBreakdown?: ScoreBreakdown // This is ScoreBreakdown | undefined
+  scoreBreakdown?: ScoreBreakdown
 ): Promise<void> => {
   const scheduleDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, scheduleId);
-  
+
   const updateData: Partial<Omit<MonthlySchedule, 'id' | 'scheduleKey' | 'year' | 'month' | 'serviceId' | 'serviceName' | 'status' | 'version' | 'createdAt'>> = {
     shifts,
     updatedAt: serverTimestamp() as any,
@@ -219,15 +314,14 @@ export const updateExistingActiveSchedule = async (
   if (responseText !== undefined) updateData.responseText = responseText;
   if (score !== undefined) updateData.score = score;
   if (violations !== undefined) updateData.violations = violations;
-  
+
   if (scoreBreakdown !== undefined) {
-    // Explicitly reconstruct scoreBreakdown to ensure it's a plain object
-    updateData.scoreBreakdown = { 
-      serviceRules: scoreBreakdown.serviceRules, 
-      employeeWellbeing: scoreBreakdown.employeeWellbeing 
+    updateData.scoreBreakdown = {
+      serviceRules: scoreBreakdown.serviceRules,
+      employeeWellbeing: scoreBreakdown.employeeWellbeing
     };
   }
-  
+
   try {
     await updateDoc(scheduleDocRef, cleanDataForFirestore(updateData));
   } catch (error) {
@@ -239,13 +333,14 @@ export const updateExistingActiveSchedule = async (
 export const deleteActiveSchedule = async (scheduleId: string): Promise<void> => {
   const scheduleDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, scheduleId);
   try {
+    // This function now effectively "archives" by setting to inactive.
+    // If it was a draft, it also becomes inactive.
     await updateDoc(scheduleDocRef, {
       status: 'inactive',
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
-    console.error("Error deleting (inactivating) active schedule:", { scheduleId, error });
+    console.error("Error deleting (inactivating) schedule:", { scheduleId, error });
     throw new Error(`Failed to delete (inactivate) schedule ${scheduleId}: ${(error as Error).message}`);
   }
 };
-
