@@ -4,7 +4,7 @@
 import type { ScheduleViolation, ScoreBreakdown } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+// ScrollArea ya no se usa aquí directamente para la lista de violaciones
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { BadgeCheck, CircleAlert, CircleHelp, ShieldCheck, HeartHandshake, Info } from 'lucide-react';
@@ -88,39 +88,41 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
                   Detalle de Incidencias ({violationsToDisplay.length})
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent> {/* Este CardContent tiene p-6 pt-0 por defecto */}
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="violations-list">
                     <AccordionTrigger className="hover:no-underline">Ver lista de incidencias</AccordionTrigger>
-                    <AccordionContent>
-                      <ScrollArea className="max-h-72">
-                        <ul className="space-y-3 pt-2">
-                          {violationsToDisplay.map((v, index) => (
-                            <li key={index} className={`p-3 rounded-md border ${v.severity === 'error' ? 'border-destructive/60 bg-destructive/10 text-destructive-foreground/90' : 'border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
-                              <div className="flex items-start gap-2">
-                                {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
-                                <div>
-                                  <span className="font-semibold block">
-                                    {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
-                                    {v.rule}
-                                  </span>
-                                  {((v.category === 'serviceRule') || (v.category === 'employeeWellbeing')) &&
-                                     <Badge variant="outline" className={`mr-1 mt-1 text-xs ${v.category === 'serviceRule' ? 'border-blue-500 text-blue-700' : 'border-green-500 text-green-700'}`}>
-                                      {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
-                                     </Badge>
-                                  }
-                                  <p className="text-xs opacity-90 mt-1">
-                                    {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
-                                    {v.date && <><strong>Fecha:</strong> {v.date} </>}
-                                    {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
-                                  </p>
-                                  <p className="text-sm mt-1.5">{v.details}</p>
-                                </div>
+                    {/* Aplicamos clases de scroll y padding al AccordionContent.
+                        Esto hará que el div interno del AccordionContent sea el que tenga scroll.
+                        Usamos max-h-72 (288px) y p-3 (12px padding).
+                    */}
+                    <AccordionContent className="max-h-72 overflow-y-auto p-3">
+                      <ul className="space-y-3"> {/* ul ya no necesita padding propio aquí */}
+                        {violationsToDisplay.map((v, index) => (
+                          <li key={index} className={`p-3 rounded-md border ${v.severity === 'error' ? 'border-destructive/60 bg-destructive/10 text-destructive-foreground/90' : 'border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
+                            <div className="flex items-start gap-2">
+                              {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
+                              <div>
+                                <span className="font-semibold block">
+                                  {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
+                                  {v.rule}
+                                </span>
+                                {((v.category === 'serviceRule') || (v.category === 'employeeWellbeing')) &&
+                                   <Badge variant="outline" className={`mr-1 mt-1 text-xs ${v.category === 'serviceRule' ? 'border-blue-500 text-blue-700' : 'border-green-500 text-green-700'}`}>
+                                    {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
+                                   </Badge>
+                                }
+                                <p className="text-xs opacity-90 mt-1">
+                                  {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
+                                  {v.date && <><strong>Fecha:</strong> {v.date} </>}
+                                  {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
+                                </p>
+                                <p className="text-sm mt-1.5">{v.details}</p>
                               </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </ScrollArea>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
@@ -146,3 +148,4 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
     </Card>
   );
 }
+
