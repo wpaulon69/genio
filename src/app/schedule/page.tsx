@@ -65,7 +65,7 @@ export default function SchedulePage() {
   }, [services, selectedServiceIdView]);
 
   const {
-    data: fetchedViewableSchedule, // Renamed to avoid conflict with state
+    data: fetchedViewableSchedule, 
     isLoading: isLoadingViewableSchedule,
     error: errorViewableSchedule,
     refetch: refetchViewableSchedule,
@@ -73,10 +73,11 @@ export default function SchedulePage() {
     queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView],
     queryFn: async () => {
       if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) {
+        setViewableScheduleData(null); 
         return Promise.resolve(null);
       }
       const schedule = await getActiveMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
-      setViewableScheduleData(schedule); // Update state here
+      setViewableScheduleData(schedule); 
       return schedule;
     },
     enabled: false, 
@@ -105,6 +106,12 @@ export default function SchedulePage() {
   const handleLoadRefreshSchedule = () => {
     if (selectedServiceIdView && selectedYearView && selectedMonthView) {
       refetchViewableSchedule();
+    } else {
+        toast({
+            variant: "destructive",
+            title: "Faltan Filtros",
+            description: "Por favor, seleccione servicio, mes y año antes de cargar.",
+        });
     }
   };
 
@@ -112,8 +119,8 @@ export default function SchedulePage() {
     mutationFn: deleteActiveSchedule,
     onSuccess: () => {
       toast({ title: "Horario Eliminado", description: "El horario activo ha sido marcado como inactivo." });
+      setViewableScheduleData(null); 
       queryClient.invalidateQueries({ queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView] });
-      setViewableScheduleData(null); // Clear the view
       setIsDeleteDialogOpen(false);
       setScheduleToDeleteId(null);
     },
@@ -158,6 +165,14 @@ export default function SchedulePage() {
     );
   }
 
+  // Calculate an approximate offset for elements above the TabsContent
+  // AppShell header (h-14 ~ 56px), PageHeader (estimate ~70px), TabsList (h-10 ~ 40px), main p-6 (24px top/bottom)
+  // Total approx: 56 + 70 + 40 + 24 (top padding of main) + 24 (bottom padding of main, if TabsContent fills space) = 214px
+  // Let's use a slightly larger buffer, say 250px for sticky top offset.
+  // For maxHeight, we consider a bit more for page paddings and margins.
+  const tabContentMaxHeight = "calc(100vh - 250px)";
+
+
   return (
     <div className="container mx-auto">
       <PageHeader
@@ -170,8 +185,12 @@ export default function SchedulePage() {
           <TabsTrigger value="generate-shifts">Generar/Editar Horarios</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="view-schedule" className="mt-6">
-          <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow duration-300">
+        <TabsContent 
+          value="view-schedule" 
+          className="mt-6 overflow-y-auto"
+          style={{ maxHeight: tabContentMaxHeight }}
+        >
+          <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow duration-300 sticky top-0 bg-background z-10">
             <CardHeader>
               <CardTitle className="flex items-center text-xl font-headline">
                 <CalendarSearch className="mr-3 h-6 w-6 text-primary"/>
@@ -235,7 +254,7 @@ export default function SchedulePage() {
             </div>
           )}
           {errorViewableSchedule && (
-             <Alert variant="destructive">
+             <Alert variant="destructive" className="mt-4">
                <AlertTriangle className="h-5 w-5 mr-2"/>
                <AlertTitle>Error al Cargar Horario</AlertTitle>
                <AlertDescription>{(errorViewableSchedule as Error).message || "No se pudo cargar el horario seleccionado."}</AlertDescription>
@@ -261,7 +280,7 @@ export default function SchedulePage() {
                 />
               </>
             ) : (
-              <Alert>
+              <Alert className="mt-4">
                 <Info className="h-5 w-5 mr-2"/>
                 <AlertTitle>No se encontró un horario activo</AlertTitle>
                 <AlertDescription>
@@ -272,7 +291,7 @@ export default function SchedulePage() {
             )
           )}
           {(!selectedServiceIdView || !hasAttemptedInitialLoad && !isLoadingViewableSchedule && !viewableScheduleData) && ( 
-             <Alert variant="default">
+             <Alert variant="default" className="mt-4">
                 <Info className="h-5 w-5 mr-2"/>
                 <AlertTitle>Seleccione Filtros y Cargue</AlertTitle>
                 <AlertDescription>Por favor, elija un servicio, mes y año, y luego haga clic en "Cargar/Refrescar Horario" para ver el horario activo.</AlertDescription>
@@ -309,3 +328,5 @@ export default function SchedulePage() {
   );
 }
 
+
+    
