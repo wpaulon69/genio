@@ -85,35 +85,33 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
             <h3 className="text-base font-medium mb-2">
               Informe de Reglas y Preferencias ({violationsToDisplay.length} {violationsToDisplay.length === 1 ? 'incidencia' : 'incidencias'})
             </h3>
-            <ScrollArea className="h-80 border rounded-md"> {/* Explicit height and border */}
-              <div className="p-4"> {/* Padding on the direct child */}
-                <ul className="space-y-3"> {/* No padding here */}
-                  {violationsToDisplay.map((v, index) => (
-                    <li key={index} className={`p-3 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
-                      <div className="flex items-start gap-2">
-                        {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
-                        <div>
-                          <span className="font-semibold block">
-                            {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
-                            {v.rule}
-                          </span>
-                          {((v.category === 'serviceRule') || (v.category === 'employeeWellbeing')) &&
-                              <Badge variant="outline" className={`mr-1 mt-1 text-xs ${v.category === 'serviceRule' ? 'border-blue-500 text-blue-700' : 'border-green-500 text-green-700'}`}>
-                              {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
-                              </Badge>
-                          }
-                          <p className="text-xs opacity-90 mt-1">
-                            {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
-                            {v.date && <><strong>Fecha:</strong> {v.date} </>}
-                            {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
-                          </p>
-                          <p className="text-sm mt-1.5">{v.details}</p>
-                        </div>
+            <ScrollArea className="h-80 rounded-md border"> {/* Explicit height, border */}
+              <ul className="p-4 space-y-3"> {/* Padding and item spacing on the UL itself */}
+                {violationsToDisplay.map((v, index) => (
+                  <li key={index} className={`p-3 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
+                    <div className="flex items-start gap-2">
+                      {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
+                      <div>
+                        <span className="font-semibold block">
+                          {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
+                          {v.rule}
+                        </span>
+                        {((v.category === 'serviceRule') || (v.category === 'employeeWellbeing')) &&
+                            <Badge variant="outline" className={`mr-1 mt-1 text-xs ${v.category === 'serviceRule' ? 'border-blue-500 text-blue-700' : 'border-green-500 text-green-700'}`}>
+                            {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
+                            </Badge>
+                        }
+                        <p className="text-xs opacity-90 mt-1">
+                          {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
+                          {v.date && <><strong>Fecha:</strong> {v.date} </>}
+                          {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
+                        </p>
+                        <p className="text-sm mt-1.5">{v.details}</p>
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </ScrollArea>
           </div>
         ) : (
@@ -125,7 +123,15 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
               </Alert>
           )
         )}
+         {scoreToDisplay === null && scoreToDisplay === undefined && (!violationsToDisplay || violationsToDisplay.length === 0) && !breakdownToDisplay && context === 'generator' && (
+           <Alert variant="default" className="mt-2">
+              <Info className="h-4 w-4"/>
+              <AlertTitle>Evaluación no Disponible</AlertTitle>
+              <AlertDescription>Los datos de evaluación para este horario generado no están disponibles o no se han calculado aún.</AlertDescription>
+           </Alert>
+        )}
       </CardContent>
     </Card>
   );
 }
+
