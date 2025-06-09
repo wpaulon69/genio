@@ -15,11 +15,11 @@ import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-schedul
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import type { Employee, Service, Holiday, MonthlySchedule } from '@/lib/types';
+import type { Employee, Service, Holiday, MonthlySchedule, ScoreBreakdown } from '@/lib/types';
 import { format, isValid, parseISO, getYear as getYearFromDate, getMonth as getMonthFromDate, startOfMonth, endOfMonth, isWithinInterval, startOfDay, endOfDay, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import InteractiveScheduleGrid from './InteractiveScheduleGrid';
-import ScheduleEvaluationDisplay from './schedule-evaluation-display'; // Importar el nuevo componente
+import ScheduleEvaluationDisplay from './schedule-evaluation-display'; 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getHolidays } from '@/lib/firebase/holidays';
 import { getActiveMonthlySchedule, saveNewActiveSchedule, updateExistingActiveSchedule, generateScheduleKey } from '@/lib/firebase/monthlySchedules';
@@ -330,10 +330,15 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         const scoreToSave = generatedScore ?? currentLoadedSchedule?.score ?? 0;
         const violationsToSave = generatedViolations ?? currentLoadedSchedule?.violations ?? [];
         const responseTextToSave = generatedResponseText ?? currentLoadedSchedule?.responseText ?? "Horario guardado.";
+        
         const scoreBreakdownToSave = generatedScoreBreakdown ?? currentLoadedSchedule?.scoreBreakdown;
+        const plainScoreBreakdownToSave = scoreBreakdownToSave
+            ? { serviceRules: scoreBreakdownToSave.serviceRules, employeeWellbeing: scoreBreakdownToSave.employeeWellbeing }
+            : undefined;
+
 
         if (action === 'update' && currentLoadedSchedule?.id && userChoiceForExisting === 'modify') {
-            await updateExistingActiveSchedule(currentLoadedSchedule.id, editableShifts, responseTextToSave, scoreToSave, violationsToSave, scoreBreakdownToSave);
+            await updateExistingActiveSchedule(currentLoadedSchedule.id, editableShifts, responseTextToSave, scoreToSave, violationsToSave, plainScoreBreakdownToSave);
             toast({ title: "Horario Actualizado", description: "El horario activo ha sido actualizado." });
             const updatedSchedule = await getActiveMonthlySchedule(watchedYear, watchedMonth, watchedServiceId);
             savedOrUpdatedSchedule = updatedSchedule;
@@ -348,7 +353,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                 responseText: responseTextToSave,
                 score: scoreToSave,
                 violations: violationsToSave,
-                scoreBreakdown: scoreBreakdownToSave,
+                scoreBreakdown: plainScoreBreakdownToSave,
             };
             const newActive = await saveNewActiveSchedule(scheduleData, currentLoadedSchedule?.id);
             savedOrUpdatedSchedule = newActive;
@@ -639,3 +644,4 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
+

@@ -42,7 +42,7 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): MonthlySc
         responseText: data.responseText,
         score: data.score,
         violations: data.violations || [],
-        scoreBreakdown: data.scoreBreakdown, // Leer scoreBreakdown
+        scoreBreakdown: data.scoreBreakdown, 
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (typeof data.createdAt === 'number' ? data.createdAt : 0),
         updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toMillis() : (typeof data.updatedAt === 'number' ? data.updatedAt : 0),
     } as MonthlySchedule;
@@ -84,7 +84,7 @@ export const getSchedulesInDateRange = async (
   monthFrom: string,
   yearTo: string,
   monthTo: string,
-  serviceId?: string // Hacer serviceId opcional
+  serviceId?: string 
 ): Promise<MonthlySchedule[]> => {
   const allSchedules: MonthlySchedule[] = [];
   const startDate = new Date(parseInt(yearFrom), parseInt(monthFrom) - 1, 1);
@@ -95,19 +95,19 @@ export const getSchedulesInDateRange = async (
 
   while (currentDate <= endDate) {
     const currentYearStr = format(currentDate, 'yyyy');
-    const currentMonthStr = format(currentDate, 'M'); // Mes sin padding para coincidir con cómo se guarda
+    const currentMonthStr = format(currentDate, 'M'); 
 
     let q;
-    if (serviceId && serviceId !== "__ALL_SERVICES_COMPARISON__") { // Asumiendo que este es el valor para "todos" en el filtro
+    if (serviceId && serviceId !== "__ALL_SERVICES_COMPARISON__") { 
       const scheduleKey = generateScheduleKey(currentYearStr, currentMonthStr, serviceId);
       q = query(
         schedulesCol,
         where('scheduleKey', '==', scheduleKey),
-        where('status', '==', 'active'), // Por ahora, solo activos. Podría cambiarse para análisis histórico.
+        where('status', '==', 'active'), 
         limit(1)
       );
     } else {
-      // Si no hay serviceId específico, buscar todos los activos para ese mes/año
+      
       q = query(
         schedulesCol,
         where('year', '==', currentYearStr),
@@ -123,7 +123,7 @@ export const getSchedulesInDateRange = async (
       });
     } catch (error) {
       console.error("Error fetching schedules in date range for", { currentYearStr, currentMonthStr, serviceId, error });
-      // Considerar si se debe lanzar el error o continuar
+      
     }
     currentDate = addMonths(currentDate, 1);
   }
@@ -164,7 +164,7 @@ export const saveNewActiveSchedule = async (
       );
       const activeSnapshot = await getDocs(activeQuery);
       activeSnapshot.forEach(docSnapshot => {
-          if (docSnapshot.id !== previousActiveScheduleIdToArchive) { // Ensure not to re-archive if ID matches
+          if (docSnapshot.id !== previousActiveScheduleIdToArchive) { 
             batch.update(docSnapshot.ref, { status: 'inactive', updatedAt: serverTimestamp() });
           }
       });
@@ -173,12 +173,11 @@ export const saveNewActiveSchedule = async (
     const newDocRef = doc(collection(db, MONTHLY_SCHEDULES_COLLECTION));
 
     const newScheduleForDb = {
-      ...scheduleData,
+      ...scheduleData, // scoreBreakdown is spread here (could be undefined)
       status: 'active',
       version: newVersion,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      // scoreBreakdown ya debería estar en scheduleData si existe
     };
 
     batch.set(newDocRef, cleanDataForFirestore(newScheduleForDb));
@@ -208,7 +207,7 @@ export const updateExistingActiveSchedule = async (
   responseText?: string,
   score?: number,
   violations?: ScheduleViolation[],
-  scoreBreakdown?: ScoreBreakdown
+  scoreBreakdown?: ScoreBreakdown // This is ScoreBreakdown | undefined
 ): Promise<void> => {
   const scheduleDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, scheduleId);
   
@@ -220,7 +219,14 @@ export const updateExistingActiveSchedule = async (
   if (responseText !== undefined) updateData.responseText = responseText;
   if (score !== undefined) updateData.score = score;
   if (violations !== undefined) updateData.violations = violations;
-  if (scoreBreakdown !== undefined) updateData.scoreBreakdown = scoreBreakdown;
+  
+  if (scoreBreakdown !== undefined) {
+    // Explicitly reconstruct scoreBreakdown to ensure it's a plain object
+    updateData.scoreBreakdown = { 
+      serviceRules: scoreBreakdown.serviceRules, 
+      employeeWellbeing: scoreBreakdown.employeeWellbeing 
+    };
+  }
   
   try {
     await updateDoc(scheduleDocRef, cleanDataForFirestore(updateData));
@@ -242,3 +248,4 @@ export const deleteActiveSchedule = async (scheduleId: string): Promise<void> =>
     throw new Error(`Failed to delete (inactivate) schedule ${scheduleId}: ${(error as Error).message}`);
   }
 };
+
