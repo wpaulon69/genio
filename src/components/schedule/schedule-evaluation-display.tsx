@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { BadgeCheck, CircleAlert, CircleHelp, ShieldCheck, HeartHandshake, Info } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
@@ -81,48 +82,59 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
         {(scoreToDisplay !== null && scoreToDisplay !== undefined) && (breakdownToDisplay || (violationsToDisplay && violationsToDisplay.length > 0)) && <Separator className="my-3" />}
 
         {violationsToDisplay && violationsToDisplay.length > 0 ? (
-          <div>
-            <h3 className="text-base font-medium mb-2">
-              Informe de Reglas y Preferencias ({violationsToDisplay.length} {violationsToDisplay.length === 1 ? 'incidencia' : 'incidencias'})
-            </h3>
-            <ScrollArea className="h-80 rounded-md border"> {/* Explicit height, border */}
-              <ul className="p-4 space-y-3"> {/* Padding and item spacing on the UL itself */}
-                {violationsToDisplay.map((v, index) => (
-                  <li key={index} className={`p-3 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
-                    <div className="flex items-start gap-2">
-                      {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
-                      <div>
-                        <span className="font-semibold block">
-                          {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
-                          {v.rule}
-                        </span>
-                        {((v.category === 'serviceRule') || (v.category === 'employeeWellbeing')) &&
-                            <Badge variant="outline" className={`mr-1 mt-1 text-xs ${v.category === 'serviceRule' ? 'border-blue-500 text-blue-700' : 'border-green-500 text-green-700'}`}>
-                            {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
-                            </Badge>
-                        }
-                        <p className="text-xs opacity-90 mt-1">
-                          {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
-                          {v.date && <><strong>Fecha:</strong> {v.date} </>}
-                          {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
-                        </p>
-                        <p className="text-sm mt-1.5">{v.details}</p>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </ScrollArea>
-          </div>
-        ) : (
-          (scoreToDisplay !== null && scoreToDisplay !== undefined) && ( 
-              <Alert variant="default" className="mt-2">
-              <BadgeCheck className="h-4 w-4"/>
-              <AlertTitle>¡Excelente!</AlertTitle>
-              <AlertDescription>No se encontraron incumplimientos de reglas o preferencias en este horario.</AlertDescription>
-              </Alert>
-          )
-        )}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">
+                  Detalle de Incidencias ({violationsToDisplay.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="violations-list">
+                    <AccordionTrigger className="hover:no-underline">Ver lista de incidencias</AccordionTrigger>
+                    <AccordionContent>
+                      <ScrollArea className="max-h-72">
+                        <ul className="space-y-3 pt-2">
+                          {violationsToDisplay.map((v, index) => (
+                            <li key={index} className={`p-3 rounded-md border ${v.severity === 'error' ? 'border-destructive/60 bg-destructive/10 text-destructive-foreground/90' : 'border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
+                              <div className="flex items-start gap-2">
+                                {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
+                                <div>
+                                  <span className="font-semibold block">
+                                    {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
+                                    {v.rule}
+                                  </span>
+                                  {((v.category === 'serviceRule') || (v.category === 'employeeWellbeing')) &&
+                                     <Badge variant="outline" className={`mr-1 mt-1 text-xs ${v.category === 'serviceRule' ? 'border-blue-500 text-blue-700' : 'border-green-500 text-green-700'}`}>
+                                      {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
+                                     </Badge>
+                                  }
+                                  <p className="text-xs opacity-90 mt-1">
+                                    {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
+                                    {v.date && <><strong>Fecha:</strong> {v.date} </>}
+                                    {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
+                                  </p>
+                                  <p className="text-sm mt-1.5">{v.details}</p>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </ScrollArea>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </CardContent>
+            </Card>
+          ) : (
+            (scoreToDisplay !== null && scoreToDisplay !== undefined) && ( 
+                <Alert variant="default" className="mt-2">
+                <BadgeCheck className="h-4 w-4"/>
+                <AlertTitle>¡Excelente!</AlertTitle>
+                <AlertDescription>No se encontraron incumplimientos de reglas o preferencias en este horario.</AlertDescription>
+                </Alert>
+            )
+          )}
          {scoreToDisplay === null && scoreToDisplay === undefined && (!violationsToDisplay || violationsToDisplay.length === 0) && !breakdownToDisplay && context === 'generator' && (
            <Alert variant="default" className="mt-2">
               <Info className="h-4 w-4"/>
@@ -134,4 +146,3 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
     </Card>
   );
 }
-
