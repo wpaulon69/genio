@@ -85,33 +85,35 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
             <h3 className="text-base font-medium mb-2">
               Informe de Reglas y Preferencias ({violationsToDisplay.length} {violationsToDisplay.length === 1 ? 'incidencia' : 'incidencias'})
             </h3>
-            <ScrollArea className="max-h-96 p-1 border rounded-md"> {/* Increased max-height and added padding */}
-              <ul className="space-y-3 p-3"> {/* Added padding to ul */}
-                {violationsToDisplay.map((v, index) => (
-                  <li key={index} className={`p-3 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
-                    <div className="flex items-start gap-2">
-                      {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
-                      <div>
-                        <span className="font-semibold block">
-                          {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
-                          {v.rule}
-                        </span>
-                        {((v.category === 'serviceRule') || (v.category === 'employeeWellbeing')) &&
-                            <Badge variant="outline" className={`mr-1 mt-1 text-xs ${v.category === 'serviceRule' ? 'border-blue-500 text-blue-700' : 'border-green-500 text-green-700'}`}>
-                            {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
-                            </Badge>
-                        }
-                        <p className="text-xs opacity-90 mt-1">
-                          {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
-                          {v.date && <><strong>Fecha:</strong> {v.date} </>}
-                          {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
-                        </p>
-                        <p className="text-sm mt-1.5">{v.details}</p>
+            <ScrollArea className="h-80 border rounded-md"> {/* Explicit height and border */}
+              <div className="p-4"> {/* Padding on the direct child */}
+                <ul className="space-y-3"> {/* No padding here */}
+                  {violationsToDisplay.map((v, index) => (
+                    <li key={index} className={`p-3 rounded-md border ${v.severity === 'error' ? 'border-destructive/50 bg-destructive/10 text-destructive' : 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'}`}>
+                      <div className="flex items-start gap-2">
+                        {v.severity === 'error' ? <CircleAlert className="h-5 w-5 mt-0.5 text-destructive flex-shrink-0" /> : <CircleHelp className="h-5 w-5 mt-0.5 text-yellow-600 dark:text-yellow-500 flex-shrink-0" />}
+                        <div>
+                          <span className="font-semibold block">
+                            {v.severity === 'error' ? 'Error: ' : 'Advertencia: '}
+                            {v.rule}
+                          </span>
+                          {((v.category === 'serviceRule') || (v.category === 'employeeWellbeing')) &&
+                              <Badge variant="outline" className={`mr-1 mt-1 text-xs ${v.category === 'serviceRule' ? 'border-blue-500 text-blue-700' : 'border-green-500 text-green-700'}`}>
+                              {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
+                              </Badge>
+                          }
+                          <p className="text-xs opacity-90 mt-1">
+                            {v.employeeName && <><strong>Empleado:</strong> {v.employeeName} </>}
+                            {v.date && <><strong>Fecha:</strong> {v.date} </>}
+                            {v.shiftType && v.shiftType !== 'General' && <><strong>Turno:</strong> {v.shiftType} </>}
+                          </p>
+                          <p className="text-sm mt-1.5">{v.details}</p>
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </ScrollArea>
           </div>
         ) : (
