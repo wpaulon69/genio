@@ -29,11 +29,12 @@ const scheduleMonths = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 export default function SchedulePage() {
-  const queryClient = useQueryClient(); // Inicializar queryClient
+  const queryClient = useQueryClient();
   const [selectedYearView, setSelectedYearView] = useState<string>(currentYear.toString());
   const [selectedMonthView, setSelectedMonthView] = useState<string>((new Date().getMonth() + 1).toString());
   const [selectedServiceIdView, setSelectedServiceIdView] = useState<string | undefined>(undefined);
-  
+  const [hasAttemptedInitialLoad, setHasAttemptedInitialLoad] = useState(false);
+
   const { data: employees = [], isLoading: isLoadingEmployees, error: errorEmployees } = useQuery<Employee[]>({
     queryKey: ['employees'],
     queryFn: getEmployees,
@@ -54,21 +55,30 @@ export default function SchedulePage() {
     }
   }, [services, selectedServiceIdView]);
 
-  const { 
-    data: viewableSchedule, 
-    isLoading: isLoadingViewableSchedule, 
+  const {
+    data: viewableSchedule,
+    isLoading: isLoadingViewableSchedule,
     error: errorViewableSchedule,
-    refetch: refetchViewableSchedule, // Obtener función de refetch
+    refetch: refetchViewableSchedule,
   } = useQuery<MonthlySchedule | null>({
     queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView],
     queryFn: () => {
       if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) {
-        return Promise.resolve(null); 
+        return Promise.resolve(null);
       }
       return getActiveMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
     },
-    enabled: !!selectedServiceIdView && !!selectedYearView && !!selectedMonthView,
+    enabled: false, // Query will not run automatically
   });
+
+  useEffect(() => {
+    // Attempt initial load once all parameters are set and if it hasn't been attempted yet
+    if (selectedServiceIdView && selectedMonthView && selectedYearView && !hasAttemptedInitialLoad) {
+      refetchViewableSchedule();
+      setHasAttemptedInitialLoad(true);
+    }
+  }, [selectedServiceIdView, selectedMonthView, selectedYearView, hasAttemptedInitialLoad, refetchViewableSchedule]);
+
 
   const selectedServiceForView = useMemo(() => {
     return services.find(s => s.id === selectedServiceIdView);
@@ -79,12 +89,7 @@ export default function SchedulePage() {
 
   const handleLoadRefreshSchedule = () => {
     if (selectedServiceIdView && selectedYearView && selectedMonthView) {
-        // Invalidar y refetch la query del horario activo
-        queryClient.invalidateQueries({ 
-            queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView] 
-        });
-        // Opcionalmente, llamar a refetch directamente si se prefiere un control más inmediato
-        // refetchViewableSchedule(); 
+      refetchViewableSchedule();
     }
   };
 
@@ -108,7 +113,7 @@ export default function SchedulePage() {
       </div>
     );
   }
-  
+
   return (
     <div className="container mx-auto">
       <PageHeader
@@ -120,7 +125,7 @@ export default function SchedulePage() {
           <TabsTrigger value="view-schedule">Ver Horario Activo</TabsTrigger>
           <TabsTrigger value="generate-shifts">Generar/Editar Horarios</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="view-schedule" className="mt-6">
           <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
@@ -155,9 +160,9 @@ export default function SchedulePage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button 
-                onClick={handleLoadRefreshSchedule} 
-                disabled={!selectedServiceIdView || isLoadingViewableSchedule}
+              <Button
+                onClick={handleLoadRefreshSchedule}
+                disabled={!selectedServiceIdView || !selectedMonthView || !selectedYearView || isLoadingViewableSchedule}
                 className="w-full md:w-auto mt-2"
               >
                 {isLoadingViewableSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UploadCloud className="mr-2 h-4 w-4" />}
@@ -179,7 +184,7 @@ export default function SchedulePage() {
                <AlertDescription>{(errorViewableSchedule as Error).message || "No se pudo cargar el horario seleccionado."}</AlertDescription>
              </Alert>
           )}
-          {!isLoadingViewableSchedule && !errorViewableSchedule && selectedServiceIdView && (
+          {!isLoadingViewableSchedule && !errorViewableSchedule && selectedServiceIdView && hasAttemptedInitialLoad && ( // Ensure initial load was attempted
             viewableSchedule ? (
               <>
                 <InteractiveScheduleGrid
@@ -191,7 +196,7 @@ export default function SchedulePage() {
                   holidays={holidays}
                   isReadOnly={true}
                 />
-                <ScheduleEvaluationDisplay 
+                <ScheduleEvaluationDisplay
                   score={viewableSchedule.score}
                   violations={viewableSchedule.violations}
                   scoreBreakdown={viewableSchedule.scoreBreakdown}
@@ -209,19 +214,19 @@ export default function SchedulePage() {
               </Alert>
             )
           )}
-          {!isLoadingViewableSchedule && !errorViewableSchedule && !selectedServiceIdView && (
+          {(!selectedServiceIdView || !hasAttemptedInitialLoad && !isLoadingViewableSchedule) && ( // Show this if no service or initial load not done
              <Alert variant="default">
                 <Info className="h-5 w-5 mr-2"/>
-                <AlertTitle>Seleccione un Servicio</AlertTitle>
-                <AlertDescription>Por favor, elija un servicio, mes y año para ver el horario activo.</AlertDescription>
+                <AlertTitle>Seleccione Filtros y Cargue</AlertTitle>
+                <AlertDescription>Por favor, elija un servicio, mes y año, y luego haga clic en "Cargar/Refrescar Horario" para ver el horario activo.</AlertDescription>
              </Alert>
           )}
         </TabsContent>
 
         <TabsContent value="generate-shifts" className="mt-6">
-          <ShiftGeneratorForm 
-            allEmployees={employees} 
-            allServices={services}   
+          <ShiftGeneratorForm
+            allEmployees={employees}
+            allServices={services}
           />
         </TabsContent>
       </Tabs>
