@@ -162,7 +162,7 @@ export default function InteractiveScheduleGrid({
 
     const selectedOption = SHIFT_OPTIONS.find(opt => opt.value === selectedShiftValue);
 
-    if (selectedShiftValue === '' || !selectedOption) { 
+    if (selectedShiftValue === '_EMPTY_' || !selectedOption) { 
       if (existingShiftIndex !== -1) {
         newShifts.splice(existingShiftIndex, 1);
       }
@@ -323,13 +323,16 @@ export default function InteractiveScheduleGrid({
                     return (
                       <TableCell key={`${employeeName}-${header.dayNumber}`} className="p-1 w-[70px] min-w-[70px]">
                         <Select
-                          value={currentShiftType} 
+                          value={currentShiftType === '' ? "_EMPTY_" : currentShiftType} 
                           onValueChange={(value) => handleShiftChange(employeeName, header.dayNumber, value as GridShiftType)}
                           disabled={isReadOnly}
                         >
                           <SelectTrigger className="h-8 w-full text-xs px-2">
                             <SelectValue placeholder="-">
-                              {selectedOption ? selectedOption.displayValue : '-'}
+                              { (currentShiftType === '' || currentShiftType === '_EMPTY_' ? SHIFT_OPTIONS.find(opt => opt.value === "_EMPTY_") : selectedOption)
+                                ? (currentShiftType === '' || currentShiftType === '_EMPTY_' ? SHIFT_OPTIONS.find(opt => opt.value === "_EMPTY_")!.displayValue : selectedOption!.displayValue)
+                                : '-'
+                              }
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>

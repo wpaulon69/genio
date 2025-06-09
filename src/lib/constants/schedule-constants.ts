@@ -1,5 +1,5 @@
 
-export type GridShiftType = 'M' | 'T' | 'N' | 'D' | 'LAO' | 'LM' | 'C' | 'F' | ''; // Añadir 'F'
+export type GridShiftType = 'M' | 'T' | 'N' | 'D' | 'LAO' | 'LM' | 'C' | 'F' | '_EMPTY_' | '';
 
 export interface ShiftOption {
   value: GridShiftType;
@@ -18,6 +18,6 @@ export const SHIFT_OPTIONS: ShiftOption[] = [
   { value: 'C', label: 'Franco Comp. (C)', displayValue: 'C' },
   { value: 'LAO', label: 'LAO', displayValue: 'LAO' },
   { value: 'LM', label: 'LM', displayValue: 'LM' },
-  { value: 'F', label: 'Feriado (F)', displayValue: 'F' }, // Nueva opción
-  { value: '', label: 'Vacío (-)', displayValue: '-' }, // Option to clear the cell
+  { value: 'F', label: 'Feriado (F)', displayValue: 'F' },
+  { value: '_EMPTY_', label: 'Vacío (-)', displayValue: '-' }, // Changed value from '' to "_EMPTY_"
 ];
