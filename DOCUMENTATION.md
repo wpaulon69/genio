@@ -83,7 +83,7 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
 - Mantiene un directorio del personal del hospital.
 - Cada empleado tiene información de contacto, roles, servicios a los que puede ser asignado.
 - **Preferencias del Empleado:**
-    - Elegibilidad para día libre post-guardia.
+    - **Elegibilidad para día libre post-guardia (D/D):** Esta preferencia se registra para cada empleado. Sin embargo, es importante notar que el algoritmo de generación de horarios actual (`src/lib/scheduler/algorithmic-scheduler.ts`) **no utiliza explícitamente esta preferencia** para forzar un día de descanso después de un turno específico (ej. Noche). La asignación de descansos se basa en las reglas generales de consecutividad del servicio, las asignaciones fijas y la necesidad de cubrir turnos. Esta podría ser un área de mejora futura para el algoritmo.
     - Preferencia por trabajar fines de semana.
     - Patrón de trabajo general (Rotación Estándar, L-V Mañana Fijo, L-V Tarde Fijo).
     - Turno fijo semanal (días y horario específico, si aplica para Rotación Estándar).
@@ -180,6 +180,7 @@ Los componentes específicos de cada módulo (ej. `service-form.tsx`, `employee-
 - Notificaciones (ej. cuando un horario está por vencer, o cuando se publica uno nuevo).
 - Más tipos de informes y analíticas avanzadas.
 - Integración con calendarios externos.
+- Mejora del algoritmo de generación de horarios para considerar más preferencias de forma explícita (ej. `eligibleForDayOffAfterDuty`).
 
 ---
 
