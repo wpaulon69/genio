@@ -282,8 +282,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       }
     } catch (e) {
       console.error("Error cargando configuración de horarios:", e);
-      setError("Error al cargar configuración de horarios.");
-      toast({ variant: "destructive", title: "Error de Carga", description: "No se pudo cargar la configuración del horario." });
+      const errorMessage = e instanceof Error ? e.message : "No se pudo cargar la configuración del horario.";
+      setError(errorMessage);
+      toast({ variant: "destructive", title: "Error de Carga", description: errorMessage });
       resetScheduleState(); 
     } finally {
       setIsLoadingConfig(false);
@@ -405,6 +406,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     console.log(`[handleConfirmSave] currentLoadedDraftSchedule ID: ${currentLoadedDraftSchedule?.id}`);
     console.log(`[handleConfirmSave] currentLoadedPublishedSchedule ID: ${currentLoadedPublishedSchedule?.id}`);
 
+
     const schedulePayloadBase = {
         scheduleKey: generateScheduleKey(loadedConfigValues.year, loadedConfigValues.month, loadedConfigValues.serviceId),
         year: loadedConfigValues.year,
@@ -429,7 +431,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                         (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.scoreBreakdown) ? { serviceRules: currentLoadedPublishedSchedule.scoreBreakdown.serviceRules, employeeWellbeing: currentLoadedPublishedSchedule.scoreBreakdown.employeeWellbeing } : 
                         undefined,
     };
-     console.log("[handleConfirmSave] schedulePayloadBase:", JSON.stringify(schedulePayloadBase.scheduleKey, null, 2));
+     console.log("[handleConfirmSave] schedulePayloadBase (key only):", JSON.stringify(schedulePayloadBase.scheduleKey, null, 2));
 
     let savedSchedule: MonthlySchedule | null = null;
     try {
@@ -438,8 +440,6 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             if (currentEditingSource === 'draft' && currentLoadedDraftSchedule) {
                 draftIdToUseForUpdate = currentLoadedDraftSchedule.id;
             }
-            // If currentEditingSource is 'published' or 'new', draftIdToUseForUpdate remains undefined,
-            // so saveOrUpdateDraftSchedule will create a new draft or overwrite based on key.
             console.log(`[handleConfirmSave] Calling saveOrUpdateDraftSchedule with draftIdToUseForUpdate: ${draftIdToUseForUpdate}`);
             savedSchedule = await saveOrUpdateDraftSchedule(schedulePayloadBase, draftIdToUseForUpdate);
             setCurrentLoadedDraftSchedule(savedSchedule); 
@@ -493,7 +493,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         handleBackToConfig(); 
         resetScheduleState(); 
     } else {
-        console.warn("[handleConfirmSave] savedSchedule was null after try/catch or action type did not match.");
+        console.warn("[handleConfirmSave] saveActionType did not match or savedSchedule was null.");
     }
   };
 
@@ -549,7 +549,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             icon: <FileText className="mr-2 h-4 w-4" />,
             variant: "outline"
         });
-    } else { // currentEditingSource === 'new' or cases where loaded schedules are null
+    } else { 
         options.push({
             label: "Guardar como Borrador",
             action: () => handleConfirmSave('save_draft'),
@@ -741,7 +741,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                         </CardContent>
                     </Card>
                 )}
-                {configLoaded && !showInitialChoiceDialog && (
+                {/* Diagnostic log for Delete Button visibility */}
+                {(() => {
+                  if (typeof window !== 'undefined') { // Ensure console is only called client-side
+                    console.log('[DeleteButton Visibility Check]', { configLoaded, showGrid, showInitialChoiceDialog });
+                  }
+                  return null;
+                })()}
+                {configLoaded && !showGrid && !showInitialChoiceDialog && (
                   <Button
                     type="button"
                     variant="destructive"
@@ -917,3 +924,4 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   );
 }
     
+
