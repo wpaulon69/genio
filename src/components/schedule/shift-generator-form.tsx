@@ -439,6 +439,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         if (action === 'save_draft') {
             if (currentEditingSource === 'draft' && currentLoadedDraftSchedule) {
                 draftIdToUseForUpdate = currentLoadedDraftSchedule.id;
+            } else if (currentEditingSource === 'published') { 
+                draftIdToUseForUpdate = undefined; 
             }
             console.log(`[handleConfirmSave] Calling saveOrUpdateDraftSchedule with draftIdToUseForUpdate: ${draftIdToUseForUpdate}`);
             savedSchedule = await saveOrUpdateDraftSchedule(schedulePayloadBase, draftIdToUseForUpdate);
@@ -741,13 +743,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                         </CardContent>
                     </Card>
                 )}
-                {/* Diagnostic log for Delete Button visibility */}
-                {(() => {
-                  if (typeof window !== 'undefined') { // Ensure console is only called client-side
-                    console.log('[DeleteButton Visibility Check]', { configLoaded, showGrid, showInitialChoiceDialog });
-                  }
-                  return null;
-                })()}
+                
                 {configLoaded && !showGrid && !showInitialChoiceDialog && (
                   <Button
                     type="button"
