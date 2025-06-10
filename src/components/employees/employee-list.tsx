@@ -10,20 +10,46 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
+/**
+ * Props para el componente `EmployeeList`.
+ */
 interface EmployeeListProps {
+  /** Array de objetos `Employee` para mostrar en la lista. */
   employees: Employee[];
-  services: Service[]; 
+  /** Array de objetos `Service` disponibles, usado para mostrar nombres de servicios. */
+  services: Service[];
+  /** Función callback que se ejecuta cuando se hace clic en el botón de editar un empleado. */
   onEdit: (employee: Employee) => void;
+  /** Función callback que se ejecuta cuando se hace clic en el botón de eliminar un empleado. */
   onDelete: (employeeId: string) => void;
+  /** Indica si alguna operación (ej. eliminación) está en curso, para deshabilitar acciones. */
   isLoading?: boolean;
 }
 
+/**
+ * `EmployeeList` es un componente que muestra una lista tabular de empleados.
+ * Cada fila representa un empleado y muestra su nombre, contacto, roles y servicios asignados.
+ * Proporciona acciones de edición y eliminación para cada empleado a través de un menú desplegable.
+ *
+ * @param {EmployeeListProps} props - Las props del componente.
+ * @returns {JSX.Element} El elemento JSX que representa la lista de empleados.
+ */
 export default function EmployeeList({ employees, services, onEdit, onDelete, isLoading }: EmployeeListProps) {
+  /**
+   * Obtiene una cadena con los nombres de los servicios a partir de sus IDs.
+   * @param {string[]} serviceIds - Array de IDs de servicios.
+   * @returns {string} Una cadena con los nombres de los servicios separados por comas, o 'N/A'.
+   */
   const getServiceNames = (serviceIds: string[]) => {
     if (!serviceIds || serviceIds.length === 0) return 'N/A';
     return serviceIds.map(id => services.find(s => s.id === id)?.name || 'Desconocido').join(', ');
   };
 
+  /**
+   * Obtiene las iniciales del nombre de un empleado.
+   * @param {string} name - El nombre completo del empleado.
+   * @returns {string} Las iniciales en mayúsculas.
+   */
   const getInitials = (name: string) => {
     if (!name) return '';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();

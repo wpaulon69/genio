@@ -131,12 +131,31 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
 - El tema de colores base (claro y oscuro) se define en `src/app/globals.css` usando variables HSL CSS.
 - Los iconos son de **Lucide React**.
 
+### 5.1. Componentes de Layout
+- **`AppShell` (`src/components/layout/app-shell.tsx`):** Es el componente principal que define la estructura general de la aplicación. Incluye el `Sidebar` y el área de contenido principal. Utiliza el `SidebarProvider` y los componentes `Sidebar`, `SidebarRail`, `SidebarHeader`, `SidebarContent`, `SidebarFooter` y `SidebarInset` de ShadCN UI para lograr una navegación lateral colapsable y responsiva. También incluye un encabezado superior con un menú desplegable para el usuario.
+- **`SidebarNav` (`src/components/layout/sidebar-nav.tsx`):** Contiene la lógica para renderizar los elementos de navegación dentro del `Sidebar`. Utiliza `SidebarMenu`, `SidebarMenuItem` y `SidebarMenuButton` de ShadCN UI. Resalta el ítem activo basándose en la ruta actual.
+
+### 5.2. Componentes de UI Genéricos (ShadCN)
+La aplicación utiliza una variedad de componentes de `src/components/ui/` que son en su mayoría componentes estilizados de ShadCN UI. Algunos de los más utilizados son:
+- **`Button`**: Para acciones del usuario.
+- **`Card`**: Para agrupar contenido relacionado.
+- **`Dialog`**: Para modales y formularios emergentes.
+- **`Select`**: Para menús desplegables.
+- **`Table`**: Para mostrar datos tabulares.
+- **`Input`**, **`Textarea`**, **`Checkbox`**: Para formularios.
+- **`Alert`**: Para mostrar mensajes importantes.
+- **`Toast`**: Para notificaciones no intrusivas.
+- La documentación detallada de cada uno de estos componentes se encuentra en la [documentación oficial de ShadCN UI](https://ui.shadcn.com/docs).
+
+### 5.3. Componentes Específicos de la Aplicación
+Los componentes específicos de cada módulo (ej. `service-form.tsx`, `employee-list.tsx`, `InteractiveScheduleGrid.tsx`) se encuentran en sus respectivas carpetas dentro de `src/components/`. Estos combinan componentes de ShadCN UI y lógica de React para implementar las funcionalidades requeridas.
+
 ## 6. Firebase
 - **Firestore:** Utilizado como base de datos principal. Las colecciones principales son:
-    - `services`: Para los servicios del hospital.
-    - `employees`: Para la información del personal.
-    - `holidays`: Para los días feriados.
-    - `monthlySchedules`: Para los horarios generados (con sus estados draft, published, archived).
+    - `services`: Para los servicios del hospital. Ver `src/lib/firebase/services.ts`.
+    - `employees`: Para la información del personal. Ver `src/lib/firebase/employees.ts`.
+    - `holidays`: Para los días feriados. Ver `src/lib/firebase/holidays.ts`.
+    - `monthlySchedules`: Para los horarios generados (con sus estados `draft`, `published`, `archived`). Ver `src/lib/firebase/monthlySchedules.ts`.
 - La configuración de Firebase se encuentra en `src/lib/firebase/config.ts`.
 - Las funciones CRUD para cada colección están en `src/lib/firebase/`.
 
@@ -145,8 +164,8 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
 - Genkit se utiliza para integrar funcionalidades de IA.
 - La configuración se encuentra en `src/ai/genkit.ts`.
 - Los flujos de IA (que definen prompts y lógica de interacción con LLMs) están en `src/ai/flows/`.
-    - `summarizeShiftReport`: Resume texto de informes de turno. Ver `src/ai/flows/summarize-shift-report.ts`.
-    - `suggestShiftSchedule`: Sugiere un horario de turnos basado en un prompt detallado. Ver `src/ai/flows/suggest-shift-schedule.ts`. Este flujo es más complejo, manejando la transformación de la salida de la IA a un formato estructurado y asegurando que los campos obligatorios estén presentes.
+    - **`summarizeShiftReport`**: Resume texto de informes de turno. Ver `src/ai/flows/summarize-shift-report.ts`.
+    - **`suggestShiftSchedule`**: Sugiere un horario de turnos basado en un prompt detallado. Ver `src/ai/flows/suggest-shift-schedule.ts`. Este flujo es más complejo, manejando la transformación de la salida de la IA a un formato estructurado y asegurando que los campos obligatorios estén presentes.
 - Los flujos se llaman desde componentes de React (Server Components o a través de Server Actions implícitas en el patrón de Next.js).
 
 ## 8. Gestión de Estado
@@ -157,7 +176,7 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
 ## 9. Próximos Pasos y Mejoras Potenciales (Ejemplos)
 
 - Implementación de autenticación de usuarios y roles.
-- Mejoras en la UI para la gestión de borradores de horarios (listarlos, publicarlos, eliminarlos directamente).
+- Interfaz de usuario para listar, previsualizar y gestionar borradores de horarios.
 - Notificaciones (ej. cuando un horario está por vencer, o cuando se publica uno nuevo).
 - Más tipos de informes y analíticas avanzadas.
 - Integración con calendarios externos.

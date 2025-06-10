@@ -13,18 +13,39 @@ import { getServices, addService, updateService, deleteService } from '@/lib/fir
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
+/**
+ * `ServicesPage` es el componente de página para administrar los servicios del hospital.
+ * Permite a los usuarios ver una lista de servicios existentes, añadir nuevos servicios,
+ * editar los existentes y eliminarlos.
+ *
+ * Utiliza `TanStack Query (React Query)` para la obtención y mutación de datos de servicios,
+ * interactuando con las funciones definidas en `src/lib/firebase/services.ts`.
+ * Muestra un formulario modal (`ServiceForm`) para la creación y edición de servicios.
+ * Muestra notificaciones (`Toast`) para las acciones realizadas.
+ *
+ * @returns {JSX.Element} El elemento JSX que representa la página de gestión de servicios.
+ */
 export default function ServicesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
+  /** Estado para controlar la visibilidad del formulario de servicio. */
   const [isFormOpen, setIsFormOpen] = useState(false);
+  /** Estado para almacenar el servicio que se está editando (o `null` si es un nuevo servicio). */
   const [editingService, setEditingService] = useState<Service | null>(null);
 
+  /**
+   * Consulta para obtener la lista de servicios.
+   * @property {Service[]} data - Array de servicios (valor por defecto: []).
+   * @property {boolean} isLoading - Indica si la consulta está cargando.
+   * @property {Error | null} error - Objeto de error si la consulta falla.
+   */
   const { data: services = [], isLoading, error } = useQuery<Service[]>({
     queryKey: ['services'],
     queryFn: getServices,
   });
 
+  /** Mutación para añadir un nuevo servicio. */
   const addServiceMutation = useMutation({
     mutationFn: (newService: Omit<Service, 'id'>) => addService(newService),
     onSuccess: () => {
@@ -37,6 +58,7 @@ export default function ServicesPage() {
     },
   });
 
+  /** Mutación para actualizar un servicio existente. */
   const updateServiceMutation = useMutation({
     mutationFn: ({ id, ...data }: Service) => updateService(id, data),
     onSuccess: () => {
@@ -50,6 +72,7 @@ export default function ServicesPage() {
     },
   });
 
+  /** Mutación para eliminar un servicio. */
   const deleteServiceMutation = useMutation({
     mutationFn: (serviceId: string) => deleteService(serviceId),
     onSuccess: () => {
@@ -61,26 +84,42 @@ export default function ServicesPage() {
     },
   });
 
+  /**
+   * Manejador para el envío del formulario de servicio.
+   * Llama a la mutación de añadir o actualizar según si `editingService` está definido.
+   * @param {Service} serviceData - Datos del servicio del formulario.
+   */
   const handleFormSubmit = (serviceData: Service) => {
-    // serviceData comes from ServiceForm, it includes an ID (empty if new)
     if (editingService) {
-      updateServiceMutation.mutate({ ...serviceData, id: editingService.id }); // Ensure correct ID
+      updateServiceMutation.mutate({ ...serviceData, id: editingService.id });
     } else {
-      const { id, ...newServiceData } = serviceData; // Remove ID for creation
+      const { id, ...newServiceData } = serviceData;
       addServiceMutation.mutate(newServiceData);
     }
   };
 
+  /**
+   * Prepara el formulario para editar un servicio existente.
+   * @param {Service} service - El servicio a editar.
+   */
   const handleEditService = (service: Service) => {
     setEditingService(service);
     setIsFormOpen(true);
   };
 
+  /**
+   * Manejador para eliminar un servicio.
+   * Llama a la mutación de eliminación.
+   * @param {string} serviceId - ID del servicio a eliminar.
+   */
   const handleDeleteService = (serviceId: string) => {
-    // Optional: Add confirmation dialog here
+    // Opcional: Añadir diálogo de confirmación aquí.
     deleteServiceMutation.mutate(serviceId);
   };
 
+  /**
+   * Abre el formulario para añadir un nuevo servicio.
+   */
   const openFormForNew = () => {
     setEditingService(null);
     setIsFormOpen(true);

@@ -16,6 +16,7 @@ import { Loader2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
+/** Esquema de validación para las necesidades de personal. */
 const staffingNeedsSchema = z.object({
   morningWeekday: z.coerce.number().int().nonnegative({ message: "Debe ser 0 o más" }),
   afternoonWeekday: z.coerce.number().int().nonnegative({ message: "Debe ser 0 o más" }),
@@ -25,11 +26,13 @@ const staffingNeedsSchema = z.object({
   nightWeekendHoliday: z.coerce.number().int().nonnegative({ message: "Debe ser 0 o más" }),
 });
 
+/** Esquema de validación para las reglas de consecutividad. */
 const consecutivenessRulesSchema = z.object({
   maxConsecutiveWorkDays: z.coerce.number().int().min(0, "Debe ser 0 o más").max(14, "Máximo 14 días"),
   preferredConsecutiveWorkDays: z.coerce.number().int().min(0, "Debe ser 0 o más").max(14, "Máximo 14 días"),
   maxConsecutiveDaysOff: z.coerce.number().int().min(0, "Debe ser 0 o más").max(14, "Máximo 14 días"),
   preferredConsecutiveDaysOff: z.coerce.number().int().min(0, "Debe ser 0 o más").max(14, "Máximo 14 días"),
+  minConsecutiveDaysOffRequiredBeforeWork: z.coerce.number().int().min(0, "Debe ser 0 o más").max(7, "Máximo 7 días").optional(),
 }).refine(data => data.preferredConsecutiveWorkDays <= data.maxConsecutiveWorkDays, {
   message: "Preferidos no pueden exceder el máximo de días de trabajo consecutivos",
   path: ["preferredConsecutiveWorkDays"],
@@ -38,6 +41,7 @@ const consecutivenessRulesSchema = z.object({
   path: ["preferredConsecutiveDaysOff"],
 });
 
+/** Esquema de validación principal para el formulario de servicio. */
 const serviceSchema = z.object({
   name: z.string().min(1, "El nombre del servicio es obligatorio"),
   description: z.string().min(1, "La descripción es obligatoria"),
@@ -47,23 +51,33 @@ const serviceSchema = z.object({
   additionalNotes: z.string().optional(),
 });
 
+/** Tipo inferido de los datos del formulario de servicio. */
 type ServiceFormData = z.infer<typeof serviceSchema>;
 
+/** Props para el componente `ServiceForm`. */
 interface ServiceFormProps {
+  /** Indica si el diálogo del formulario está abierto. */
   isOpen: boolean;
+  /** Función para cerrar el diálogo. */
   onClose: () => void;
+  /** Función que se ejecuta al enviar el formulario con datos válidos. */
   onSubmit: (service: Service) => void;
+  /** Datos de un servicio existente para edición, o `null`/`undefined` para un nuevo servicio. */
   service?: Service | null;
+  /** Indica si el formulario está en estado de carga (ej. enviando datos). */
   isLoading?: boolean;
 }
 
+/** Valores por defecto para las reglas de consecutividad si no se proporcionan. */
 const defaultConsecutivenessRules: ConsecutivenessRules = {
   maxConsecutiveWorkDays: 6,
   preferredConsecutiveWorkDays: 5,
   maxConsecutiveDaysOff: 3,
   preferredConsecutiveDaysOff: 2,
+  minConsecutiveDaysOffRequiredBeforeWork: 1,
 };
 
+/** Valores por defecto para las necesidades de personal si no se proporcionan. */
 const defaultStaffingNeeds: StaffingNeeds = {
   morningWeekday: 0,
   afternoonWeekday: 0,
@@ -73,7 +87,14 @@ const defaultStaffingNeeds: StaffingNeeds = {
   nightWeekendHoliday: 0,
 };
 
-
+/**
+ * `ServiceForm` es un componente de diálogo modal utilizado para crear o editar servicios.
+ * Utiliza `react-hook-form` para la gestión del formulario y `zod` para la validación.
+ * El formulario está dividido en dos pasos para mejorar la usabilidad.
+ *
+ * @param {ServiceFormProps} props - Las props del componente.
+ * @returns {JSX.Element | null} El elemento JSX del diálogo del formulario, o `null` si no está abierto.
+ */
 export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoading }: ServiceFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
 
@@ -91,9 +112,13 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
 
   const enableNightShiftValue = form.watch('enableNightShift');
 
+  /**
+   * Efecto para resetear el formulario cuando se abre el diálogo o cambian los datos del servicio a editar.
+   * También inicializa `currentStep` a 1.
+   */
   useEffect(() => {
     if (isOpen) {
-      setCurrentStep(1); // Reset to step 1 when dialog opens
+      setCurrentStep(1);
       if (service) {
         form.reset({
           name: service.name,
@@ -116,6 +141,10 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
     }
   }, [service, form, isOpen]);
 
+  /**
+   * Efecto para ajustar los valores de dotación nocturna si `enableNightShift` cambia.
+   * Si se deshabilita el turno noche, los campos de dotación nocturna se establecen a 0.
+   */
   useEffect(() => {
     if (!enableNightShiftValue) {
       form.setValue('staffingNeeds.nightWeekday', 0, { shouldValidate: true });
@@ -123,34 +152,50 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
     }
   }, [enableNightShiftValue, form]);
 
+  /**
+   * Manejador para el envío del formulario.
+   * Procesa los datos y llama a la prop `onSubmit`.
+   * @param {ServiceFormData} data - Datos validados del formulario.
+   */
   const handleFormSubmit = (data: ServiceFormData) => {
     const finalData = { ...data };
     if (!finalData.enableNightShift) {
       finalData.staffingNeeds.nightWeekday = 0;
       finalData.staffingNeeds.nightWeekendHoliday = 0;
     }
+    // Asegura que consecutivenessRules siempre tenga un valor, incluso si el usuario no tocó esa sección.
     finalData.consecutivenessRules = data.consecutivenessRules || { ...defaultConsecutivenessRules };
     
     onSubmit({
-      id: service?.id || '',
+      id: service?.id || '', // Incluye el ID si se está editando
       ...finalData,
     });
   };
 
+  /**
+   * Avanza al siguiente paso del formulario si los campos del paso actual son válidos.
+   */
   const handleNextStep = async () => {
     let fieldsToValidate: (keyof ServiceFormData)[] = [];
     if (currentStep === 1) {
-      fieldsToValidate = ['name', 'description'];
+      fieldsToValidate = ['name', 'description']; // Solo valida estos para el primer paso.
     }
+    // El paso 2 no tiene campos obligatorios que necesiten validación *antes* de pasar.
+    // La validación completa ocurre al hacer submit.
     
     const isValid = await form.trigger(fieldsToValidate);
-    if (isValid) {
+    if (isValid && currentStep < 2) { // Solo hay 2 pasos.
       setCurrentStep(currentStep + 1);
     }
   };
 
+  /**
+   * Retrocede al paso anterior del formulario.
+   */
   const handlePreviousStep = () => {
-    setCurrentStep(currentStep - 1);
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
   };
   
 
@@ -167,7 +212,7 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
-            <ScrollArea className="max-h-[60vh] pr-6"> {/* Adjusted max height slightly */}
+            <ScrollArea className="max-h-[60vh] pr-6">
               <div className="space-y-4 pr-2">
                 {currentStep === 1 && (
                   <>
@@ -242,6 +287,11 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
                                 <FormItem><FormLabel>Días Descanso Consecutivos Preferidos</FormLabel><FormControl><Input type="number" placeholder="2" {...field} disabled={isLoading} /></FormControl><FormMessage /></FormItem>
                             )} />
                         </div>
+                         <div className="space-y-3 p-4 border rounded-md md:col-span-2">
+                             <FormField control={form.control} name="consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork" render={({ field }) => (
+                                <FormItem><FormLabel>Mín. Descansos Requeridos Antes de Trabajar</FormLabel><FormControl><Input type="number" placeholder="1" {...field} disabled={isLoading} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                        </div>
                     </div>
 
                     <Separator className="my-6" />
@@ -261,7 +311,7 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
                     Anterior
                   </Button>
                 )}
-                {currentStep < 2 && (
+                {currentStep < 2 && ( // Total de 2 pasos.
                   <Button type="button" onClick={handleNextStep} disabled={isLoading}>
                     Siguiente
                   </Button>
@@ -280,4 +330,3 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
     </Dialog>
   );
 }
-

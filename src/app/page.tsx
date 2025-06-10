@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import PageHeader from '@/components/common/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -5,7 +6,24 @@ import { Button } from '@/components/ui/button';
 import { UsersRound, BriefcaseMedical, CalendarDays, LineChart, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
 
+/**
+ * `DashboardPage` es el componente de la página principal o panel de control de la aplicación.
+ * Muestra una bienvenida y tarjetas de acceso rápido a las principales funcionalidades
+ * de ShiftFlow, como la gestión de servicios, empleados, horarios e informes.
+ *
+ * Cada tarjeta de funcionalidad incluye:
+ * - Una imagen representativa (placeholder por ahora).
+ * - Un icono.
+ * - Un título y una descripción.
+ * - Un botón que enlaza a la sección correspondiente.
+ *
+ * @returns {JSX.Element} El elemento JSX que representa la página del panel de control.
+ */
 export default function DashboardPage() {
+  /**
+   * Array de objetos que define las características principales accesibles desde el dashboard.
+   * Cada objeto contiene título, descripción, icono, enlace, imagen y una pista para IA (data-ai-hint).
+   */
   const features = [
     {
       title: 'Administrar Servicios',

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
-import type { Employee, Service, Holiday, InteractiveScheduleGridProps } from '@/lib/types'; // Holiday e InteractiveScheduleGridProps importadas
+import type { Employee, Service, Holiday, InteractiveScheduleGridProps } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -15,36 +15,59 @@ import { ChevronLeft } from 'lucide-react';
 import { SHIFT_OPTIONS, type GridShiftType, type ShiftOption } from '@/lib/constants/schedule-constants';
 import { cn } from '@/lib/utils';
 
-
+/**
+ * Convierte un objeto `AIShift` (potencialmente de la IA o guardado) al tipo de turno (`GridShiftType`)
+ * que se utiliza en la grilla interactiva para la selección y visualización.
+ * Se basa en las notas del turno (`notes`) y, secundariamente, en `startTime`.
+ *
+ * @param {AIShift | null | undefined} aiShift - El turno de entrada.
+ * @returns {GridShiftType} El tipo de turno para la grilla (ej. 'M', 'T', 'N', 'D', 'LAO', etc.).
+ */
 export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined): GridShiftType {
   if (!aiShift) return '';
 
   const note = aiShift.notes?.toUpperCase();
 
-  // Condición para 'C' movida antes de la condición genérica de 'F'
+  // Prioriza notas específicas para tipos no laborables
   if (note === 'C' || note === 'C (FRANCO COMP.)' || note?.includes('FRANCO COMP')) return 'C';
-  
   if (note?.startsWith('F') || note?.includes('FERIADO')) return 'F';
   if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO') || note === 'D (FIJO SEMANAL)') return 'D';
   if (note?.startsWith('LAO')) return 'LAO';
   if (note?.startsWith('LM')) return 'LM';
 
-
+  // Si hay startTime, intenta inferir M, T, N
   if (aiShift.startTime) {
     if (aiShift.startTime.startsWith('07:') || aiShift.startTime.startsWith('08:')) return 'M';
     if (aiShift.startTime.startsWith('14:') || aiShift.startTime.startsWith('15:')) return 'T';
     if (aiShift.startTime.startsWith('22:') || aiShift.startTime.startsWith('23:')) return 'N';
   }
   
+  // Como fallback, si hay startTime y endTime, revisa las notas por indicadores M, T, N
   if (aiShift.startTime && aiShift.endTime) {
     if (note?.includes('MAÑANA') || note?.includes('(M)')) return 'M';
     if (note?.includes('TARDE') || note?.includes('(T)')) return 'T';
     if (note?.includes('NOCHE') || note?.includes('(N)')) return 'N';
   }
   
-  return ''; 
+  return ''; // Retorna vacío si no se puede determinar
 }
 
+/**
+ * `InteractiveScheduleGrid` es un componente que muestra una grilla de horarios editable.
+ * Permite a los usuarios ver y modificar los turnos asignados a los empleados para un mes específico y servicio.
+ *
+ * Características:
+ * - Muestra empleados relevantes para el servicio.
+ * - Permite cambiar el tipo de turno para cada empleado/día usando un `Select`.
+ * - Calcula y muestra totales diarios de personal para turnos M, T, N.
+ * - Calcula y muestra el total de días 'D' (Descanso) por empleado.
+ * - Resalta días de fin de semana y feriados.
+ * - Puede ser de solo lectura (`isReadOnly`).
+ * - Notifica los cambios en los turnos a través de `onShiftsChange`.
+ *
+ * @param {InteractiveScheduleGridProps} props - Las props del componente.
+ * @returns {JSX.Element} El elemento JSX que representa la grilla de horarios interactiva.
+ */
 export default function InteractiveScheduleGrid({
   initialShifts,
   allEmployees,
@@ -58,39 +81,49 @@ export default function InteractiveScheduleGrid({
 }: InteractiveScheduleGridProps) { 
   const [editableShifts, setEditableShifts] = useState<AIShift[]>([...initialShifts]);
 
+  /**
+   * Efecto para actualizar `editableShifts` si `initialShifts` cambia desde el exterior.
+   */
   useEffect(() => {
     setEditableShifts([...initialShifts]);
   }, [initialShifts]);
 
 
+  /** Memoiza el objeto Date para el primer día del mes/año seleccionado. */
   const monthDate = useMemo(() => {
     const monthIndex = parseInt(month, 10) -1;
     if (isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) {
         console.error("Invalid month provided to InteractiveScheduleGrid:", month);
-        return new Date(); 
+        return new Date(); // Fallback, aunque debería prevenirse antes.
     }
     return new Date(parseInt(year), monthIndex, 1);
   }, [month, year]);
 
+  /** Memoiza el número de días en el mes seleccionado. */
   const daysInMonth = useMemo(() => getDaysInMonth(monthDate), [monthDate]);
 
+  /** Memoiza los encabezados de los días para la grilla (número, nombre corto, si es especial). */
   const dayHeaders = useMemo(() => {
-    const holidayDates = new Set(holidays.map(h => h.date)); // YYYY-MM-DD
+    const holidayDates = new Set(holidays.map(h => h.date)); // Formato YYYY-MM-DD
     return Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1;
       const date = new Date(parseInt(year), parseInt(month) - 1, day);
       const dateStr = format(date, 'yyyy-MM-dd');
-      const dayOfWeek = getDayOfWeek(date); // 0 (Sun) to 6 (Sat)
+      const dayOfWeek = getDayOfWeek(date); // 0 (Domingo) a 6 (Sábado)
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       const isHolidayDay = holidayDates.has(dateStr);
       return {
         dayNumber: day,
-        shortName: format(date, 'eee', { locale: es }),
+        shortName: format(date, 'eee', { locale: es }), // ej. "lun", "mar"
         isSpecialDay: isWeekend || isHolidayDay,
       };
     });
   }, [daysInMonth, month, year, holidays]);
 
+  /**
+   * Memoiza la lista de nombres de empleados relevantes para el servicio y los turnos actuales.
+   * Incluye empleados asignados al `targetService` y cualquier empleado presente en `editableShifts`.
+   */
   const relevantEmployeeNames = useMemo(() => {
     const names = new Set<string>();
     editableShifts.forEach(s => names.add(s.employeeName));
@@ -106,6 +139,10 @@ export default function InteractiveScheduleGrid({
   }, [editableShifts, allEmployees, targetService]);
 
 
+  /**
+   * Memoiza la estructura de datos de la grilla, organizada por empleado y día.
+   * Facilita el acceso rápido a los turnos.
+   */
   const gridData = useMemo(() => {
     const data: { [employeeName: string]: { [day: number]: AIShift | null } } = {};
     relevantEmployeeNames.forEach(name => data[name] = {});
@@ -119,6 +156,7 @@ export default function InteractiveScheduleGrid({
       const currentDisplayYear = parseInt(year, 10);
       if (isNaN(currentDisplayMonth) || isNaN(currentDisplayYear)) return;
 
+      // Asegura que solo se procesen turnos del mes y año actual de la vista
       if (parsedShiftDate.getFullYear() === currentDisplayYear && (parsedShiftDate.getMonth() + 1) === currentDisplayMonth) {
         const dayOfMonth = getDate(parsedShiftDate);
         if (!data[shift.employeeName]) {
@@ -130,6 +168,9 @@ export default function InteractiveScheduleGrid({
     return data;
   }, [editableShifts, relevantEmployeeNames, month, year]);
 
+ /**
+   * Memoiza las estadísticas por empleado (total de días 'D', total de días de trabajo).
+   */
  const employeeStats = useMemo(() => {
     const stats: { [employeeName: string]: { totalD: number; totalWork: number; totalAssignments: number } } = {};
     relevantEmployeeNames.forEach(name => {
@@ -139,7 +180,7 @@ export default function InteractiveScheduleGrid({
         if (shift) {
           stats[name].totalAssignments++;
           const shiftType = getGridShiftTypeFromAIShift(shift);
-          if (shiftType === 'D') { // Solo cuenta 'D' para totalD
+          if (shiftType === 'D') {
             stats[name].totalD++;
           } else if (['M', 'T', 'N'].includes(shiftType)) {
             stats[name].totalWork++;
@@ -151,6 +192,14 @@ export default function InteractiveScheduleGrid({
   }, [gridData, relevantEmployeeNames, daysInMonth]);
 
 
+  /**
+   * Manejador para cambios en la selección de un turno en la grilla.
+   * Actualiza `editableShifts` y llama a `onShiftsChange` si se proporciona.
+   *
+   * @param {string} employeeName - Nombre del empleado.
+   * @param {number} day - Número del día del mes.
+   * @param {GridShiftType} selectedShiftValue - El nuevo valor del turno seleccionado.
+   */
   const handleShiftChange = (employeeName: string, day: number, selectedShiftValue: GridShiftType) => {
     if (isReadOnly || !onShiftsChange) return;
 
@@ -162,22 +211,23 @@ export default function InteractiveScheduleGrid({
 
     const selectedOption = SHIFT_OPTIONS.find(opt => opt.value === selectedShiftValue);
 
-    if (selectedShiftValue === '_EMPTY_' || !selectedOption) { 
+    if (selectedShiftValue === '_EMPTY_' || !selectedOption) { // Si se selecciona la opción "Vacío" o no válida
       if (existingShiftIndex !== -1) {
-        newShifts.splice(existingShiftIndex, 1);
+        newShifts.splice(existingShiftIndex, 1); // Elimina el turno existente
       }
     } else {
-      const serviceName = targetService?.name || (existingShiftIndex !== -1 ? newShifts[existingShiftIndex]?.serviceName : '') || 'Servicio Desconocido';
+      // Determina el nombre del servicio. Prioriza el del turno existente, luego el targetService, o fallback.
+      const serviceName = (existingShiftIndex !== -1 ? newShifts[existingShiftIndex]?.serviceName : targetService?.name) || 'Servicio Desconocido';
       
       const newOrUpdatedShift: AIShift = {
         date: shiftDateStr,
         employeeName: employeeName,
-        serviceName: serviceName,
+        serviceName: serviceName, // Usa el nombre del servicio determinado
         startTime: selectedOption.startTime || '', 
         endTime: selectedOption.endTime || '',   
         notes: (selectedOption.value === 'D' || selectedOption.value === 'C' || selectedOption.value === 'LAO' || selectedOption.value === 'LM' || selectedOption.value === 'F') 
                 ? selectedOption.label // Usar la etiqueta completa para las notas de estos tipos especiales
-                : `Turno ${selectedOption.label}`, // Usar la etiqueta completa para M, T, N
+                : `Turno ${selectedOption.label}`, // Usar la etiqueta completa para M, T, N (ej. "Turno Mañana (M)")
       };
 
       if (existingShiftIndex !== -1) {
@@ -190,6 +240,9 @@ export default function InteractiveScheduleGrid({
     onShiftsChange(newShifts); 
   };
 
+  /**
+   * Memoiza los totales diarios de personal para cada tipo de turno (M, T, N, etc.) y el total de personal de trabajo.
+   */
   const dailyTotals = useMemo(() => {
     const totals: { [day: number]: { M: number; T: number; N: number; D: number; C: number; LAO: number; LM: number; F: number; totalStaff: number } } = {};
     dayHeaders.forEach(header => {
@@ -211,6 +264,7 @@ export default function InteractiveScheduleGrid({
           else if (shiftType === 'F') totals[header.dayNumber].F++;
 
 
+          // Considera M, T, N como turnos que contribuyen al "totalStaff" de trabajo
           if (['M', 'T', 'N'].includes(shiftType)) {
             totals[header.dayNumber].totalStaff++;
           }
@@ -221,6 +275,7 @@ export default function InteractiveScheduleGrid({
   }, [gridData, dayHeaders, relevantEmployeeNames]);
 
 
+  // Condición para mostrar mensaje si no hay datos para la grilla
   if (!targetService && initialShifts.length === 0 && relevantEmployeeNames.length === 0) {
     return (
          <Card className="mt-4">
@@ -241,8 +296,8 @@ export default function InteractiveScheduleGrid({
   
   const monthName = format(monthDate, 'MMMM', { locale: es });
   const currentYearStr = format(monthDate, 'yyyy');
-  const employeeColumnWidth = "180px";
-  const totalDColumnWidth = "80px"; 
+  const employeeColumnWidth = "180px"; // Ancho fijo para la columna de empleados
+  const totalDColumnWidth = "80px"; // Ancho fijo para la columna "Total D"
 
   return (
     <Card className="mt-6 w-full">
@@ -274,22 +329,22 @@ export default function InteractiveScheduleGrid({
         )}
         {relevantEmployeeNames.length > 0 && (
         <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-          <Table className="min-w-max">
+          <Table className="min-w-max"> {/* min-w-max asegura que la tabla tome el ancho necesario */}
             <TableHeader>
               <TableRow>
                 <TableHead 
-                  className="sticky left-0 bg-card z-20 truncate"
+                  className="sticky left-0 bg-card z-20 truncate" // `truncate` para elipsis si el nombre es muy largo
                   style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                 >Empleado</TableHead>
                 <TableHead 
-                  className="sticky bg-card z-20 text-center"
+                  className="sticky bg-card z-20 text-center" // Columna de totales también sticky
                   style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                 >Total D</TableHead>
                 {dayHeaders.map(header => (
                   <TableHead 
                     key={header.dayNumber} 
                     className={cn(
-                        "text-center w-[70px] min-w-[70px]",
+                        "text-center w-[70px] min-w-[70px]", // Ancho fijo para celdas de día
                         header.isSpecialDay && "bg-pink-100 dark:bg-pink-900 text-pink-700 dark:text-pink-300"
                     )}
                     >
@@ -307,7 +362,7 @@ export default function InteractiveScheduleGrid({
                 <TableRow key={employeeName}>
                   <TableCell 
                     className="sticky left-0 bg-card z-10 font-medium truncate" 
-                    title={employeeName}
+                    title={employeeName} // Tooltip con nombre completo por si se trunca
                     style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                   >{employeeName}</TableCell>
                   <TableCell 
@@ -323,7 +378,7 @@ export default function InteractiveScheduleGrid({
                     return (
                       <TableCell key={`${employeeName}-${header.dayNumber}`} className="p-1 w-[70px] min-w-[70px]">
                         <Select
-                          value={currentShiftType === '' ? "_EMPTY_" : currentShiftType} 
+                          value={currentShiftType === '' ? "_EMPTY_" : currentShiftType} // Maneja el caso vacío
                           onValueChange={(value) => handleShiftChange(employeeName, header.dayNumber, value as GridShiftType)}
                           disabled={isReadOnly}
                         >
@@ -331,7 +386,7 @@ export default function InteractiveScheduleGrid({
                             <SelectValue placeholder="-">
                               { (currentShiftType === '' || currentShiftType === '_EMPTY_' ? SHIFT_OPTIONS.find(opt => opt.value === "_EMPTY_") : selectedOption)
                                 ? (currentShiftType === '' || currentShiftType === '_EMPTY_' ? SHIFT_OPTIONS.find(opt => opt.value === "_EMPTY_")!.displayValue : selectedOption!.displayValue)
-                                : '-'
+                                : '-' // Fallback si el tipo de turno no se encuentra
                               }
                             </SelectValue>
                           </SelectTrigger>
@@ -348,13 +403,14 @@ export default function InteractiveScheduleGrid({
                   })}
                 </TableRow>
               ))}
+              {/* Filas de Totales */}
               <TableRow className="bg-muted/50 font-semibold">
                 <TableCell 
                   className="sticky left-0 bg-muted/50 z-10 truncate"
                   style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                 >Total Mañana (M)</TableCell>
                  <TableCell 
-                    className="sticky bg-muted/50 z-10"
+                    className="sticky bg-muted/50 z-10" // Celda vacía para alinear con "Total D"
                     style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                   ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-m-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].M}</TableCell>)}
