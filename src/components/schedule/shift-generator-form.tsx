@@ -27,7 +27,7 @@ import {
     getDraftMonthlySchedule, 
     saveOrUpdateDraftSchedule, 
     publishSchedule,
-    updatePublishedScheduleDirectly,
+    // updatePublishedScheduleDirectly, // Not currently used by dialog options
     generateScheduleKey 
 } from '@/lib/firebase/monthlySchedules';
 import { useToast } from '@/hooks/use-toast';
@@ -219,13 +219,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setCurrentLoadedPublishedSchedule(null);
     setCurrentLoadedDraftSchedule(null);
     setPreviousMonthSchedule(null);
-    // setConfigLoaded(false); // Resetting configLoaded to require explicit load action
-    // setLoadedConfigValues(null);
     setCurrentEditingSource('none');
     setError(null); 
     
-    // Keep configLoaded and loadedConfigValues if we want the user to be able to immediately generate again for the same period
-    // For now, reset them to ensure a clean state for new operations.
     setConfigLoaded(false);
     setLoadedConfigValues(null);
   };
@@ -234,19 +230,23 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     const { serviceId, month, year } = form.getValues();
     if (!serviceId || !month || !year) {
       setError("Por favor, seleccione servicio, mes y año.");
+      toast({ variant: "destructive", title: "Error", description: "Por favor, seleccione servicio, mes y año." });
       return;
     }
 
     setIsLoadingConfig(true);
     setError(null);
-    resetScheduleState(); 
+    resetScheduleState(); // Reset previous state before loading new config
 
     try {
+      console.log(`[handleLoadConfiguration] Loading for ${year}-${month}-${serviceId}`);
       const published = await getPublishedMonthlySchedule(year, month, serviceId);
       const draft = await getDraftMonthlySchedule(year, month, serviceId);
 
       setCurrentLoadedPublishedSchedule(published);
       setCurrentLoadedDraftSchedule(draft);
+      console.log(`[handleLoadConfiguration] Loaded - Published: ${!!published}, Draft: ${!!draft}`);
+
 
       const currentMonthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
       const prevMonthDate = subMonths(currentMonthDate, 1);
@@ -254,6 +254,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       const prevMonthMonthStr = format(prevMonthDate, 'M'); 
       const prevSchedule = await getPublishedMonthlySchedule(prevMonthYearStr, prevMonthMonthStr, serviceId);
       setPreviousMonthSchedule(prevSchedule);
+      console.log(`[handleLoadConfiguration] Loaded previous month schedule: ${!!prevSchedule}`);
 
       setConfigLoaded(true);
       setLoadedConfigValues({serviceId, month, year});
@@ -261,13 +262,15 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       if (published || draft) {
         setShowInitialChoiceDialog(true);
       } else {
+        // No existing schedules, proceed to generate new draft
         setUserChoiceForExisting('generate_new_draft');
         setCurrentEditingSource('new');
-        setShowInitialChoiceDialog(false);
+        setShowInitialChoiceDialog(false); // No need for dialog if nothing exists
       }
     } catch (e) {
       console.error("Error cargando configuración de horarios:", e);
       setError("Error al cargar configuración de horarios.");
+      toast({ variant: "destructive", title: "Error de Carga", description: "No se pudo cargar la configuración del horario." });
       resetScheduleState(); 
     } finally {
       setIsLoadingConfig(false);
@@ -278,14 +281,17 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setShowInitialChoiceDialog(false);
     setUserChoiceForExisting(choice);
     
+    // Clear any previously generated/edited data before loading from existing or setting up for new
     setAlgorithmGeneratedShifts(null);
     setEditableShifts(null);
     setGeneratedResponseText(null);
     setGeneratedScore(null);
     setGeneratedViolations(null);
     setGeneratedScoreBreakdown(null);
+    console.log(`[handleInitialChoice] User chose: ${choice}`);
 
     if (choice === 'modify_published' && currentLoadedPublishedSchedule) {
+        console.log(`[handleInitialChoice] Modifying published schedule ID: ${currentLoadedPublishedSchedule.id}, Version: ${currentLoadedPublishedSchedule.version}`);
         setCurrentEditingSource('published');
         setEditableShifts(currentLoadedPublishedSchedule.shifts ? [...currentLoadedPublishedSchedule.shifts] : []);
         setGeneratedResponseText(currentLoadedPublishedSchedule.responseText || "");
@@ -294,6 +300,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setGeneratedScoreBreakdown(currentLoadedPublishedSchedule.scoreBreakdown ?? null);
         setShowGrid(true);
     } else if (choice === 'use_draft' && currentLoadedDraftSchedule) {
+        console.log(`[handleInitialChoice] Using draft schedule ID: ${currentLoadedDraftSchedule.id}, Version: ${currentLoadedDraftSchedule.version}`);
         setCurrentEditingSource('draft');
         setEditableShifts(currentLoadedDraftSchedule.shifts ? [...currentLoadedDraftSchedule.shifts] : []);
         setGeneratedResponseText(currentLoadedDraftSchedule.responseText || "");
@@ -301,9 +308,10 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         setGeneratedViolations(currentLoadedDraftSchedule.violations ?? null);
         setGeneratedScoreBreakdown(currentLoadedDraftSchedule.scoreBreakdown ?? null);
         setShowGrid(true);
-    } else { 
+    } else { // 'generate_new_draft' or if existing schedules were somehow null
+        console.log(`[handleInitialChoice] Setting up for new draft generation.`);
         setCurrentEditingSource('new');
-        setShowGrid(false); 
+        setShowGrid(false); // Don't show grid yet, user needs to click "Generate"
     }
   };
 
@@ -338,7 +346,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setGeneratedScoreBreakdown(null);
     setError(null);
     setShowGrid(false); 
-    setCurrentEditingSource('new'); 
+    setCurrentEditingSource('new'); // Generating always results in a 'new' unsaved schedule context
+    console.log(`[handleGenerateSubmit] Generating schedule for ${data.year}-${data.month}-${data.serviceId}`);
 
     try {
       const result = await generateAlgorithmicSchedule(
@@ -349,6 +358,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         holidays,
         previousMonthSchedule?.shifts || null 
       );
+      console.log("[handleGenerateSubmit] Algorithmic generation result:", result);
       setGeneratedResponseText(result.responseText);
       setGeneratedScore(result.score);
       setGeneratedViolations(result.violations);
@@ -372,67 +382,104 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const handleConfirmSave = async () => {
     setShowSaveDialog(false);
-    if (!editableShifts || !watchedSelectedService || !watchedYear || !watchedMonth) {
-        setError("Faltan datos para guardar el horario.");
-        toast({ variant: "destructive", title: "Error", description: "Faltan datos para guardar el horario." });
+    if (!editableShifts || !watchedSelectedService || !watchedYear || !watchedMonth || !loadedConfigValues) {
+        setError("Faltan datos para guardar el horario (editableShifts, servicio, mes, año o config cargada).");
+        toast({ variant: "destructive", title: "Error", description: "Faltan datos críticos para guardar el horario." });
         return;
     }
     setIsSaving(true);
     setError(null);
 
     const schedulePayloadBase = {
-        scheduleKey: generateScheduleKey(watchedYear, watchedMonth, watchedServiceId),
-        year: watchedYear,
-        month: watchedMonth,
-        serviceId: watchedServiceId,
+        scheduleKey: generateScheduleKey(loadedConfigValues.year, loadedConfigValues.month, loadedConfigValues.serviceId),
+        year: loadedConfigValues.year,
+        month: loadedConfigValues.month,
+        serviceId: loadedConfigValues.serviceId,
         serviceName: watchedSelectedService.name,
         shifts: editableShifts,
-        responseText: generatedResponseText || (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.responseText) || (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.responseText) || "Horario guardado.",
-        score: generatedScore ?? (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.score) ?? (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.score) ?? 0,
-        violations: generatedViolations ?? (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.violations) ?? (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.violations) ?? [],
-        scoreBreakdown: generatedScoreBreakdown ? {serviceRules: generatedScoreBreakdown.serviceRules, employeeWellbeing: generatedScoreBreakdown.employeeWellbeing } : (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.scoreBreakdown) ? { serviceRules: currentLoadedDraftSchedule.scoreBreakdown.serviceRules, employeeWellbeing: currentLoadedDraftSchedule.scoreBreakdown.employeeWellbeing } : (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.scoreBreakdown) ? { serviceRules: currentLoadedPublishedSchedule.scoreBreakdown.serviceRules, employeeWellbeing: currentLoadedPublishedSchedule.scoreBreakdown.employeeWellbeing } : undefined,
+        responseText: generatedResponseText ?? 
+                      (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.responseText) ?? 
+                      (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.responseText) ?? 
+                      "Horario guardado manualmente.",
+        score: generatedScore ?? 
+               (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.score) ?? 
+               (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.score) ?? 
+               null, // Allow null score if not calculated
+        violations: generatedViolations ?? 
+                    (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.violations) ?? 
+                    (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.violations) ?? 
+                    [],
+        scoreBreakdown: generatedScoreBreakdown ? {serviceRules: generatedScoreBreakdown.serviceRules, employeeWellbeing: generatedScoreBreakdown.employeeWellbeing } : 
+                        (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.scoreBreakdown) ? { serviceRules: currentLoadedDraftSchedule.scoreBreakdown.serviceRules, employeeWellbeing: currentLoadedDraftSchedule.scoreBreakdown.employeeWellbeing } : 
+                        (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.scoreBreakdown) ? { serviceRules: currentLoadedPublishedSchedule.scoreBreakdown.serviceRules, employeeWellbeing: currentLoadedPublishedSchedule.scoreBreakdown.employeeWellbeing } : 
+                        undefined,
     };
+
+    console.log(`[handleConfirmSave] Attempting to save. Action Type: ${saveActionType}, Editing Source: ${currentEditingSource}`);
+    console.log("[handleConfirmSave] schedulePayloadBase:", JSON.stringify(schedulePayloadBase, null, 2));
+    console.log("[handleConfirmSave] currentLoadedDraftSchedule ID:", currentLoadedDraftSchedule?.id);
+    console.log("[handleConfirmSave] currentLoadedPublishedSchedule ID:", currentLoadedPublishedSchedule?.id);
+
 
     try {
         let savedSchedule: MonthlySchedule | null = null;
 
         if (saveActionType === 'save_draft') {
-            const existingDraftIdToUpdate = (currentEditingSource === 'draft' && currentLoadedDraftSchedule) ? currentLoadedDraftSchedule.id : (currentEditingSource === 'published' && currentLoadedDraftSchedule) ? currentLoadedDraftSchedule.id : undefined;
-            savedSchedule = await saveOrUpdateDraftSchedule(schedulePayloadBase, existingDraftIdToUpdate);
-            setCurrentLoadedDraftSchedule(savedSchedule);
+            let draftIdToUpdate: string | undefined = undefined;
+            if (currentEditingSource === 'draft' && currentLoadedDraftSchedule) {
+                draftIdToUpdate = currentLoadedDraftSchedule.id;
+            }
+            // If currentEditingSource is 'published' or 'new', we want to create a new draft (or overwrite by key),
+            // so existingDraftIdToUpdate remains undefined.
+            console.log(`[handleConfirmSave] Calling saveOrUpdateDraftSchedule with draftIdToUpdate: ${draftIdToUpdate}`);
+            savedSchedule = await saveOrUpdateDraftSchedule(schedulePayloadBase, draftIdToUpdate);
+            setCurrentLoadedDraftSchedule(savedSchedule); // Update current draft state
             setCurrentEditingSource('draft'); 
-            toast({ title: "Borrador Guardado", description: `El borrador para ${watchedSelectedService.name} - ${months.find(m=>m.value===watchedMonth)?.label}/${watchedYear} se guardó.` });
+            toast({ title: "Borrador Guardado", description: `El borrador para ${watchedSelectedService.name} - ${months.find(m=>m.value===loadedConfigValues.month)?.label}/${loadedConfigValues.year} se guardó.` });
         } else if (saveActionType === 'publish_draft') { 
+            // This implies we were editing a draft and now want to publish it
             const draftIdToArchive = (currentEditingSource === 'draft' && currentLoadedDraftSchedule) ? currentLoadedDraftSchedule.id : undefined;
+            if (!draftIdToArchive) {
+                throw new Error("No se puede publicar un borrador sin un ID de borrador válido para archivar.");
+            }
+            console.log(`[handleConfirmSave] Calling publishSchedule (from draft). draftIdToArchive: ${draftIdToArchive}`);
             savedSchedule = await publishSchedule(schedulePayloadBase, draftIdToArchive);
             setCurrentLoadedPublishedSchedule(savedSchedule);
             setCurrentLoadedDraftSchedule(null); 
             setCurrentEditingSource('published'); 
             toast({ title: "Borrador Publicado", description: `El horario borrador se publicó como activo.` });
         } else if (saveActionType === 'publish_new_from_scratch') { 
+            // This implies currentEditingSource was 'new' (generated from scratch)
+             console.log(`[handleConfirmSave] Calling publishSchedule (from new).`);
             savedSchedule = await publishSchedule(schedulePayloadBase); 
             setCurrentLoadedPublishedSchedule(savedSchedule);
             setCurrentLoadedDraftSchedule(null);
             setCurrentEditingSource('published');
             toast({ title: "Horario Publicado", description: `El nuevo horario se publicó como activo.` });
         } else if (saveActionType === 'publish_modified_published') { 
-            if (currentLoadedPublishedSchedule) {
-                savedSchedule = await publishSchedule(schedulePayloadBase, undefined); 
-                setCurrentLoadedPublishedSchedule(savedSchedule);
-                setCurrentLoadedDraftSchedule(null); 
-                setCurrentEditingSource('published');
-                toast({ title: "Horario Publicado Actualizado", description: "Se creó una nueva versión del horario publicado." });
-            } else {
+            // This implies currentEditingSource was 'published'
+            if (!currentLoadedPublishedSchedule) {
                  throw new Error("No hay horario publicado cargado para actualizar y republicar.");
             }
+            console.log(`[handleConfirmSave] Calling publishSchedule (from modified published). Archiving old published ID: ${currentLoadedPublishedSchedule.id}`);
+            // `publishSchedule` will archive the existing published one based on scheduleKey
+            savedSchedule = await publishSchedule(schedulePayloadBase, undefined); 
+            setCurrentLoadedPublishedSchedule(savedSchedule);
+            setCurrentLoadedDraftSchedule(null); 
+            setCurrentEditingSource('published');
+            toast({ title: "Horario Publicado Actualizado", description: "Se creó una nueva versión del horario publicado." });
         }
 
         if (savedSchedule) {
-            queryClient.invalidateQueries({ queryKey: ['publishedMonthlySchedule', watchedYear, watchedMonth, watchedServiceId] });
-            queryClient.invalidateQueries({ queryKey: ['draftMonthlySchedule', watchedYear, watchedMonth, watchedServiceId] });
+            console.log("[handleConfirmSave] Save successful, savedSchedule:", savedSchedule);
+            // Invalidate queries to refetch data
+            queryClient.invalidateQueries({ queryKey: ['publishedMonthlySchedule', loadedConfigValues.year, loadedConfigValues.month, loadedConfigValues.serviceId] });
+            queryClient.invalidateQueries({ queryKey: ['draftMonthlySchedule', loadedConfigValues.year, loadedConfigValues.month, loadedConfigValues.serviceId] });
             
-            handleBackToConfig();
-            resetScheduleState();
+            handleBackToConfig(); // Go back to config view
+            resetScheduleState(); // Reset the form and schedule state
+        } else {
+            console.warn("[handleConfirmSave] saveActionType did not match or savedSchedule was null.");
         }
 
     } catch (e) {
@@ -494,11 +541,11 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         });
          options.push({ 
             label: "Guardar Cambios como Borrador Nuevo",
-            action: () => { setSaveActionType('save_draft'); handleConfirmSave(); },
+            action: () => { setSaveActionType('save_draft'); handleConfirmSave(); }, // This will create a new draft
             icon: <FileText className="mr-2 h-4 w-4" />,
             variant: "outline"
         });
-    } else { // currentEditingSource === 'new'
+    } else { // currentEditingSource === 'new' (generated from scratch)
         options.push({
             label: "Guardar como Borrador",
             action: () => { setSaveActionType('save_draft'); handleConfirmSave(); },
@@ -593,9 +640,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                         }
                       </AlertTitle>
                       <AlertDescription>
-                        { userChoiceForExisting === 'modify_published' && currentLoadedPublishedSchedule && `Se cargó el horario publicado. Cualquier guardado creará una nueva versión o un nuevo borrador.`}
-                        { userChoiceForExisting === 'use_draft' && currentLoadedDraftSchedule && `Se cargó el borrador existente. Puede guardarlo o publicarlo.`}
-                        { userChoiceForExisting === 'generate_new_draft' && `Haga clic en "Generar Horario" para crear un nuevo borrador.`}
+                        { userChoiceForExisting === 'modify_published' && currentLoadedPublishedSchedule && `Se cargó el horario publicado. Puede editarlo. Al guardar, se creará una nueva versión publicada o un nuevo borrador.`}
+                        { userChoiceForExisting === 'use_draft' && currentLoadedDraftSchedule && `Se cargó el borrador existente. Puede editarlo y guardarlo, o publicarlo.`}
+                        { userChoiceForExisting === 'generate_new_draft' && `Haga clic en "Generar Nuevo Borrador" para crear un nuevo borrador desde cero.`}
                       </AlertDescription>
                     </Alert>
                   )}
@@ -636,16 +683,17 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             </Form>
         </>
       ) : (
-        editableShifts && watchedMonth && watchedYear && (
+        editableShifts && watchedMonth && watchedYear && loadedConfigValues && ( // Ensure loadedConfigValues is present for grid display
           <InteractiveScheduleGrid
             initialShifts={editableShifts}
             allEmployees={allEmployees}
-            targetService={watchedSelectedService}
-            month={watchedMonth}
-            year={watchedYear}
+            targetService={watchedSelectedService} // This should be based on loadedConfigValues.serviceId
+            month={loadedConfigValues.month}
+            year={loadedConfigValues.year}
             holidays={holidays}
             onShiftsChange={(updatedShifts) => {
                 setEditableShifts(updatedShifts);
+                // Optionally, re-evaluate schedule here if desired on every change
             }}
             onBackToConfig={handleBackToConfig}
           />
@@ -670,7 +718,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         </Alert>
       )}
 
-      {showGrid && editableShifts && configLoaded && (
+      {showGrid && editableShifts && configLoaded && loadedConfigValues && (
         <CardFooter className="flex flex-col items-stretch gap-4 pt-6">
             <Button onClick={handleSaveGeneratedShiftsClick} disabled={isActionDisabled || editableShifts.length === 0} className="w-full">
             {isSaving ? (
@@ -727,7 +775,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Guardado de Horario</AlertDialogTitle>
              <AlertDialogDescription>
-                Seleccione una opción para guardar el horario actual ({editableShifts?.length || 0} turnos) para {watchedSelectedService?.name} ({months.find(m=>m.value===watchedMonth)?.label}/{watchedYear}).
+                Seleccione una opción para guardar el horario actual ({editableShifts?.length || 0} turnos) para {watchedSelectedService?.name} ({loadedConfigValues ? months.find(m=>m.value===loadedConfigValues.month)?.label : watchedMonth}/{loadedConfigValues ? loadedConfigValues.year : watchedYear}).
                 Puntuación actual: {scoreForEvaluation?.toFixed(0) ?? "N/A"}.
              </AlertDialogDescription>
           </AlertDialogHeader>
@@ -740,7 +788,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                     disabled={isSaving}
                     className="w-full justify-start text-left"
                 >
-                    {isSaving && saveActionType === opt.label.toLowerCase().replace(/\s+/g, '_').replace(/[(),]/g, '') ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : opt.icon}
+                    {isSaving && saveActionType === opt.action.name.replace("bound ", "") ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : opt.icon}
                     {opt.label}
                 </Button>
             ))}
@@ -755,3 +803,4 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   );
 }
 
+    
