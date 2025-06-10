@@ -40,6 +40,7 @@ export default function SchedulePage() {
   
   const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
   const [scheduleToArchiveId, setScheduleToArchiveId] = useState<string | null>(null);
+  // viewableScheduleData will hold the data fetched by useQuery to be displayed.
   const [viewableScheduleData, setViewableScheduleData] = useState<MonthlySchedule | null>(null);
 
 
@@ -57,12 +58,14 @@ export default function SchedulePage() {
   });
 
 
+  // Initialize selectedServiceIdView with the first service once services are loaded
   useEffect(() => {
     if (services.length > 0 && !selectedServiceIdView) {
       setSelectedServiceIdView(services[0].id);
     }
   }, [services, selectedServiceIdView]);
 
+  // Fetch the published schedule based on current filters
   const {
     data: fetchedViewableSchedule, 
     isLoading: isLoadingViewableSchedule,
@@ -72,28 +75,35 @@ export default function SchedulePage() {
     queryKey: ['publishedMonthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView],
     queryFn: async () => {
       if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) {
+        // console.log("[SchedulePage] Query not run: Filters incomplete.");
         return null;
       }
+      // console.log(`[SchedulePage] Querying published schedule for ${selectedYearView}-${selectedMonthView}-${selectedServiceIdView}`);
       return getPublishedMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
     },
+    // Enable the query only when all filters are selected
     enabled: !!(selectedServiceIdView && selectedMonthView && selectedYearView), 
   });
   
+  // Effect to update viewableScheduleData when fetchedViewableSchedule changes or filters become incomplete.
   useEffect(() => {
-    // When filters change, clear the currently displayed data
-    setViewableScheduleData(null);
-  }, [selectedServiceIdView, selectedMonthView, selectedYearView]);
-
-  useEffect(() => {
-    // This effect runs when fetchedViewableSchedule (data from query) changes
-    // or if the query is loading (to potentially show loading state or clear old data faster).
-    // If filters are not complete, fetchedViewableSchedule will be undefined due to query being disabled.
     if (selectedServiceIdView && selectedMonthView && selectedYearView) {
+      // If filters are complete, use the fetched data (or null if fetch returned null)
       setViewableScheduleData(fetchedViewableSchedule ?? null);
     } else {
-      setViewableScheduleData(null); // Ensure data is cleared if filters become incomplete
+      // If filters are incomplete, clear the displayed data
+      setViewableScheduleData(null);
     }
   }, [fetchedViewableSchedule, selectedServiceIdView, selectedMonthView, selectedYearView]);
+
+  // Effect to clear displayed data and actively refetch when filters change.
+  useEffect(() => {
+    setViewableScheduleData(null); // Clear old data immediately on filter change
+    if (selectedServiceIdView && selectedMonthView && selectedYearView) {
+      // console.log("[SchedulePage] Filters changed and are complete, refetching...");
+      manualRefetchViewableSchedule(); // Actively refetch when filters are set/changed
+    }
+  }, [selectedServiceIdView, selectedMonthView, selectedYearView, manualRefetchViewableSchedule]);
 
 
   const selectedServiceForView = useMemo(() => {
@@ -105,6 +115,7 @@ export default function SchedulePage() {
 
   const handleLoadRefreshSchedule = () => {
     if (selectedServiceIdView && selectedYearView && selectedMonthView) {
+      // console.log("[SchedulePage] Manual refresh triggered.");
       manualRefetchViewableSchedule();
     } else {
         toast({
@@ -119,8 +130,9 @@ export default function SchedulePage() {
     mutationFn: archiveSchedule,
     onSuccess: () => {
       toast({ title: "Horario Archivado", description: "El horario publicado ha sido archivado exitosamente." });
-      setViewableScheduleData(null); 
+      // Invalidate the query to refetch the (now non-existent or different) published schedule
       queryClient.invalidateQueries({ queryKey: ['publishedMonthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView] });
+      // viewableScheduleData will be updated by the useEffect watching fetchedViewableSchedule
       setIsArchiveDialogOpen(false);
       setScheduleToArchiveId(null);
     },
@@ -223,7 +235,7 @@ export default function SchedulePage() {
                 Cargar/Refrescar Horario
               </Button>
             </CardContent>
-            {viewableScheduleData && (
+            {viewableScheduleData && viewableScheduleData.status === 'published' && (
               <CardFooter className="border-t pt-4">
                 <Button
                   variant="outline"
@@ -281,7 +293,8 @@ export default function SchedulePage() {
               </Alert>
             )
           )}
-          {(!selectedServiceIdView || !selectedMonthView || !selectedYearView && !isLoadingViewableSchedule && !viewableScheduleData) && ( 
+          {/* Mensaje inicial si no se han completado los filtros para la búsqueda */}
+          {(!selectedServiceIdView || !selectedMonthView || !selectedYearView) && !isLoadingViewableSchedule && !viewableScheduleData && ( 
              <Alert variant="default" className="mt-4">
                 <Info className="h-5 w-5 mr-2"/>
                 <AlertTitle>Seleccione Filtros y Cargue</AlertTitle>
