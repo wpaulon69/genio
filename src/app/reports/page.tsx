@@ -12,7 +12,7 @@ import type { Service, Employee, MonthlySchedule, EmployeeReportMetrics, Employe
 import { useQuery } from '@tanstack/react-query';
 import { getServices } from '@/lib/firebase/services';
 import { getEmployees } from '@/lib/firebase/employees';
-import { getActiveMonthlySchedule, getSchedulesInDateRange, generateScheduleKey } from '@/lib/firebase/monthlySchedules';
+import { getPublishedMonthlySchedule, getSchedulesInDateRange, generateScheduleKey } from '@/lib/firebase/monthlySchedules'; // Updated import
 import { getGridShiftTypeFromAIShift } from '@/components/schedule/InteractiveScheduleGrid';
 import { parseISO, getDay, format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -79,6 +79,7 @@ export default function ReportsPage() {
           ? undefined
           : serviceIdForComparison;
 
+        // getSchedulesInDateRange will now fetch 'published' schedules
         const schedulesInRange = await getSchedulesInDateRange(yearFrom, monthFrom, yearTo, monthTo, targetServiceId);
         const metricsByEmployee: Record<string, EmployeeReportMetrics> = {};
 
@@ -169,21 +170,22 @@ export default function ReportsPage() {
           setIsProcessing(false);
           return;
         }
-        const activeSchedule = await getActiveMonthlySchedule(yearForScheduleQuality, monthForScheduleQuality, serviceIdForScheduleQuality);
-        if (activeSchedule) {
+        // getPublishedMonthlySchedule will fetch the 'published' schedule
+        const publishedSchedule = await getPublishedMonthlySchedule(yearForScheduleQuality, monthForScheduleQuality, serviceIdForScheduleQuality);
+        if (publishedSchedule) {
           const service = services.find(s => s.id === serviceIdForScheduleQuality);
           const monthLabel = reportMonths.find(m => m.value === monthForScheduleQuality)?.label || monthForScheduleQuality;
           setScheduleQualityOutput({
             reportType: 'scheduleQuality',
-            scheduleKey: activeSchedule.scheduleKey,
+            scheduleKey: publishedSchedule.scheduleKey,
             serviceName: service?.name || 'Servicio Desconocido',
             dateLabel: `${monthLabel} ${yearForScheduleQuality}`,
-            score: activeSchedule.score,
-            violations: activeSchedule.violations,
-            scoreBreakdown: activeSchedule.scoreBreakdown,
+            score: publishedSchedule.score,
+            violations: publishedSchedule.violations,
+            scoreBreakdown: publishedSchedule.scoreBreakdown,
           });
         } else {
-          setProcessingError(`No se encontró un horario activo para el servicio y fecha seleccionados.`);
+          setProcessingError(`No se encontró un horario publicado para el servicio y fecha seleccionados.`);
         }
       } catch (e) {
         console.error("Error generando el informe de calidad de horario:", e);
@@ -202,7 +204,7 @@ export default function ReportsPage() {
     <div className="container mx-auto">
       <PageHeader
         title="Informes y Analíticas"
-        description="Genere informes de utilización y obtenga resúmenes impulsados por IA o análisis comparativos."
+        description="Genere informes de utilización y obtenga resúmenes impulsados por IA o análisis comparativos de horarios publicados."
       />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <div className="md:col-span-1">
@@ -218,7 +220,7 @@ export default function ReportsPage() {
               onGenerateReport={handleGenerateReport} 
               isLoading={isProcessing}
               services={services}
-              employees={employees} // Pasamos employees aunque no se use directamente para este nuevo filtro
+              employees={employees} 
             />
           )}
         </div>

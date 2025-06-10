@@ -95,7 +95,7 @@ export interface MonthlySchedule {
   serviceId: string;
   serviceName: string;
   shifts: AIShift[];
-  status: 'active' | 'inactive' | 'draft'; // Added 'draft' status
+  status: 'draft' | 'published' | 'archived'; // Updated status types
   version: number;
   responseText?: string;
   score?: number;

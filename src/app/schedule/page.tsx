@@ -11,9 +11,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { getEmployees } from '@/lib/firebase/employees';
 import { getServices } from '@/lib/firebase/services';
-import { getActiveMonthlySchedule, deleteActiveSchedule } from '@/lib/firebase/monthlySchedules';
+import { getPublishedMonthlySchedule, archiveSchedule } from '@/lib/firebase/monthlySchedules'; // Updated imports
 import { getHolidays } from '@/lib/firebase/holidays';
-import { Loader2, CalendarSearch, AlertTriangle, Info, UploadCloud, Trash2 } from 'lucide-react';
+import { Loader2, CalendarSearch, AlertTriangle, Info, UploadCloud, Trash2, ArchiveIcon } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -39,8 +39,8 @@ export default function SchedulePage() {
   const [selectedServiceIdView, setSelectedServiceIdView] = useState<string | undefined>(undefined);
   const [hasAttemptedInitialLoad, setHasAttemptedInitialLoad] = useState(false);
 
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [scheduleToDeleteId, setScheduleToDeleteId] = useState<string | null>(null);
+  const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false); // Renamed from isDeleteDialogOpen
+  const [scheduleToArchiveId, setScheduleToArchiveId] = useState<string | null>(null); // Renamed
   const [viewableScheduleData, setViewableScheduleData] = useState<MonthlySchedule | null>(null);
 
 
@@ -70,13 +70,14 @@ export default function SchedulePage() {
     error: errorViewableSchedule,
     refetch: refetchViewableSchedule,
   } = useQuery<MonthlySchedule | null>({
-    queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView],
+    queryKey: ['publishedMonthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView], // Updated queryKey
     queryFn: async () => {
       if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) {
         setViewableScheduleData(null); 
         return Promise.resolve(null);
       }
-      const schedule = await getActiveMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
+      // Use getPublishedMonthlySchedule now
+      const schedule = await getPublishedMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
       setViewableScheduleData(schedule); 
       return schedule;
     },
@@ -115,32 +116,32 @@ export default function SchedulePage() {
     }
   };
 
-  const deleteScheduleMutation = useMutation({
-    mutationFn: deleteActiveSchedule,
+  const archiveScheduleMutation = useMutation({ // Renamed mutation
+    mutationFn: archiveSchedule, // Use archiveSchedule
     onSuccess: () => {
-      toast({ title: "Horario Eliminado", description: "El horario activo ha sido marcado como inactivo." });
+      toast({ title: "Horario Archivado", description: "El horario publicado ha sido archivado exitosamente." });
       setViewableScheduleData(null); 
-      queryClient.invalidateQueries({ queryKey: ['monthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView] });
-      setIsDeleteDialogOpen(false);
-      setScheduleToDeleteId(null);
+      queryClient.invalidateQueries({ queryKey: ['publishedMonthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView] });
+      setIsArchiveDialogOpen(false);
+      setScheduleToArchiveId(null);
     },
     onError: (error: Error) => {
-      toast({ variant: "destructive", title: "Error al Eliminar", description: error.message });
-      setIsDeleteDialogOpen(false);
-      setScheduleToDeleteId(null);
+      toast({ variant: "destructive", title: "Error al Archivar", description: error.message });
+      setIsArchiveDialogOpen(false);
+      setScheduleToArchiveId(null);
     },
   });
 
-  const handleDeleteClick = () => {
+  const handleArchiveClick = () => { // Renamed handler
     if (viewableScheduleData) {
-      setScheduleToDeleteId(viewableScheduleData.id);
-      setIsDeleteDialogOpen(true);
+      setScheduleToArchiveId(viewableScheduleData.id);
+      setIsArchiveDialogOpen(true);
     }
   };
 
-  const confirmDelete = () => {
-    if (scheduleToDeleteId) {
-      deleteScheduleMutation.mutate(scheduleToDeleteId);
+  const confirmArchive = () => { // Renamed handler
+    if (scheduleToArchiveId) {
+      archiveScheduleMutation.mutate(scheduleToArchiveId);
     }
   };
 
@@ -169,26 +170,26 @@ export default function SchedulePage() {
     <div className="container mx-auto">
       <PageHeader
         title="Horario de Turnos"
-        description="Vea los horarios activos y genere nuevos usando el algoritmo. Los horarios generados y modificados se pueden guardar."
+        description="Vea horarios publicados y genere/edite borradores. Los horarios pueden ser guardados o publicados."
       />
       <Tabs defaultValue="view-schedule" className="w-full">
         <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 md:w-1/2 mb-6">
-          <TabsTrigger value="view-schedule">Ver Horario Activo</TabsTrigger>
-          <TabsTrigger value="generate-shifts">Generar/Editar Horarios</TabsTrigger>
+          <TabsTrigger value="view-schedule">Ver Horario Publicado</TabsTrigger>
+          <TabsTrigger value="generate-shifts">Generar/Editar Borradores</TabsTrigger>
         </TabsList>
 
         <TabsContent 
           value="view-schedule" 
-          className="mt-6" // Removed overflow-y-auto and style
+          className="mt-6"
         >
-          <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow duration-300"> {/* Removed sticky, z-index, bg-background */}
+          <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle className="flex items-center text-xl font-headline">
                 <CalendarSearch className="mr-3 h-6 w-6 text-primary"/>
-                Visualizar Horario Activo
+                Visualizar Horario Publicado
               </CardTitle>
               <CardDescription>
-                Seleccione el servicio, mes y año para cargar el horario guardado.
+                Seleccione el servicio, mes y año para cargar el horario publicado.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -216,7 +217,7 @@ export default function SchedulePage() {
               </div>
               <Button
                 onClick={handleLoadRefreshSchedule}
-                disabled={!selectedServiceIdView || !selectedMonthView || !selectedYearView || isLoadingViewableSchedule || deleteScheduleMutation.isPending}
+                disabled={!selectedServiceIdView || !selectedMonthView || !selectedYearView || isLoadingViewableSchedule || archiveScheduleMutation.isPending}
                 className="w-full md:w-auto mt-2"
               >
                 {isLoadingViewableSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UploadCloud className="mr-2 h-4 w-4" />}
@@ -226,13 +227,13 @@ export default function SchedulePage() {
             {viewableScheduleData && (
               <CardFooter className="border-t pt-4">
                 <Button
-                  variant="destructive"
-                  onClick={handleDeleteClick}
-                  disabled={isLoadingViewableSchedule || deleteScheduleMutation.isPending}
+                  variant="outline" // Changed from destructive to outline for archive action
+                  onClick={handleArchiveClick} // Use new handler
+                  disabled={isLoadingViewableSchedule || archiveScheduleMutation.isPending}
                   className="w-full md:w-auto"
                 >
-                  {deleteScheduleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
-                  Eliminar Horario Activo
+                  {archiveScheduleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ArchiveIcon className="mr-2 h-4 w-4" />}
+                  Archivar Horario Publicado
                 </Button>
               </CardFooter>
             )}
@@ -241,13 +242,13 @@ export default function SchedulePage() {
           {isLoadingViewableSchedule && (
             <div className="flex justify-center items-center py-10">
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <p className="ml-3 text-muted-foreground">Cargando horario...</p>
+              <p className="ml-3 text-muted-foreground">Cargando horario publicado...</p>
             </div>
           )}
           {errorViewableSchedule && (
              <Alert variant="destructive" className="mt-4">
                <AlertTriangle className="h-5 w-5 mr-2"/>
-               <AlertTitle>Error al Cargar Horario</AlertTitle>
+               <AlertTitle>Error al Cargar Horario Publicado</AlertTitle>
                <AlertDescription>{(errorViewableSchedule as Error).message || "No se pudo cargar el horario seleccionado."}</AlertDescription>
              </Alert>
           )}
@@ -273,10 +274,10 @@ export default function SchedulePage() {
             ) : (
               <Alert className="mt-4">
                 <Info className="h-5 w-5 mr-2"/>
-                <AlertTitle>No se encontró un horario activo</AlertTitle>
+                <AlertTitle>No se encontró un horario publicado</AlertTitle>
                 <AlertDescription>
-                  No hay un horario activo para {selectedServiceForView?.name || 'el servicio seleccionado'} en {scheduleMonths.find(m => m.value === selectedMonthView)?.label || ''} {selectedYearView}.
-                  Puede generar uno en la pestaña "Generar/Editar Horarios".
+                  No hay un horario publicado para {selectedServiceForView?.name || 'el servicio seleccionado'} en {scheduleMonths.find(m => m.value === selectedMonthView)?.label || ''} {selectedYearView}.
+                  Puede generar uno en la pestaña "Generar/Editar Borradores".
                 </AlertDescription>
               </Alert>
             )
@@ -285,7 +286,7 @@ export default function SchedulePage() {
              <Alert variant="default" className="mt-4">
                 <Info className="h-5 w-5 mr-2"/>
                 <AlertTitle>Seleccione Filtros y Cargue</AlertTitle>
-                <AlertDescription>Por favor, elija un servicio, mes y año, y luego haga clic en "Cargar/Refrescar Horario" para ver el horario activo.</AlertDescription>
+                <AlertDescription>Por favor, elija un servicio, mes y año, y luego haga clic en "Cargar/Refrescar Horario" para ver el horario publicado.</AlertDescription>
              </Alert>
           )}
         </TabsContent>
@@ -297,20 +298,20 @@ export default function SchedulePage() {
           />
         </TabsContent>
       </Tabs>
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog open={isArchiveDialogOpen} onOpenChange={setIsArchiveDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Está seguro?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción marcará el horario activo de {selectedServiceForView?.name} para {scheduleMonths.find(m => m.value === selectedMonthView)?.label || ''} {selectedYearView} como inactivo.
-              No se podrá ver directamente, pero permanecerá en el historial. ¿Desea continuar?
+              Esta acción marcará el horario publicado de {selectedServiceForView?.name} para {scheduleMonths.find(m => m.value === selectedMonthView)?.label || ''} {selectedYearView} como ARCHIVADO.
+              No se podrá ver directamente en esta vista, pero permanecerá en el historial para auditoría. ¿Desea continuar?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteScheduleMutation.isPending}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} disabled={deleteScheduleMutation.isPending} className="bg-destructive hover:bg-destructive/90">
-              {deleteScheduleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" /> }
-              Sí, Eliminar Horario
+            <AlertDialogCancel disabled={archiveScheduleMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmArchive} disabled={archiveScheduleMutation.isPending} className="bg-orange-600 hover:bg-orange-700">
+              {archiveScheduleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArchiveIcon className="mr-2 h-4 w-4" /> }
+              Sí, Archivar Horario
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
