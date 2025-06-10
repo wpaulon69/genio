@@ -77,7 +77,7 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
 - Permite definir y administrar los diferentes servicios del hospital (ej. Emergencias, Cardiología).
 - Cada servicio tiene reglas de dotación de personal (cuántos empleados por turno en días de semana y fines de semana/feriados), si habilita turno noche, y reglas de consecutividad de trabajo/descanso.
 - **Componentes Clave:** `src/app/services/page.tsx`, `src/components/services/service-form.tsx`, `src/components/services/service-list.tsx`.
-- **Datos Firebase:** Colección `services`.
+- **Datos Firebase:** Colección `services`. Ver `src/lib/firebase/services.ts` para detalles de la interacción.
 
 ### 4.2. Gestión de Empleados
 - Mantiene un directorio del personal del hospital.
@@ -89,12 +89,12 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
     - Turno fijo semanal (días y horario específico, si aplica para Rotación Estándar).
 - **Asignaciones Fijas:** Permite registrar periodos de descanso (D), licencias anuales (LAO) o médicas (LM) para un empleado.
 - **Componentes Clave:** `src/app/employees/page.tsx`, `src/components/employees/employee-form.tsx`, `src/components/employees/employee-list.tsx`.
-- **Datos Firebase:** Colección `employees`.
+- **Datos Firebase:** Colección `employees`. Ver `src/lib/firebase/employees.ts` para detalles de la interacción. Los datos se limpian antes de guardarse y se aplican valores por defecto para campos opcionales.
 
 ### 4.3. Gestión de Feriados
 - Permite definir y organizar los días feriados, que son tenidos en cuenta por el planificador de horarios.
 - **Componentes Clave:** `src/app/holidays/page.tsx`, `src/components/holidays/holiday-form.tsx`, `src/components/holidays/holiday-list.tsx`.
-- **Datos Firebase:** Colección `holidays`.
+- **Datos Firebase:** Colección `holidays`. Ver `src/lib/firebase/holidays.ts` para detalles de la interacción. Los feriados se almacenan con fechas en formato YYYY-MM-DD.
 
 ### 4.4. Generación y Gestión de Horarios
 - **Núcleo de la aplicación.** Permite generar, visualizar y editar horarios de turnos.
@@ -110,7 +110,7 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
 - **Evaluación de Horarios:** El algoritmo también calcula una puntuación para el horario generado y lista cualquier violación de reglas (errores o advertencias).
 - **Edición Manual:** Los horarios (borradores o copias del publicado) se pueden editar manualmente en una grilla interactiva.
 - **Componentes Clave:** `src/app/schedule/page.tsx`, `src/components/schedule/shift-generator-form.tsx`, `src/components/schedule/InteractiveScheduleGrid.tsx`, `src/components/schedule/schedule-evaluation-display.tsx`.
-- **Datos Firebase:** Colección `monthlySchedules`.
+- **Datos Firebase:** Colección `monthlySchedules`. Ver `src/lib/firebase/monthlySchedules.ts` para la lógica de guardado, recuperación y estados de los horarios. Cada horario tiene una `scheduleKey` (YYYY-MM-ServiceID) y una `version`.
 
 ### 4.5. Informes y Analíticas
 - Proporciona información sobre la utilización del personal y las operaciones.
@@ -145,7 +145,8 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
 - Genkit se utiliza para integrar funcionalidades de IA.
 - La configuración se encuentra en `src/ai/genkit.ts`.
 - Los flujos de IA (que definen prompts y lógica de interacción con LLMs) están en `src/ai/flows/`.
-    - Ejemplo: `summarizeShiftReport` para resumir texto.
+    - `summarizeShiftReport`: Resume texto de informes de turno. Ver `src/ai/flows/summarize-shift-report.ts`.
+    - `suggestShiftSchedule`: Sugiere un horario de turnos basado en un prompt detallado. Ver `src/ai/flows/suggest-shift-schedule.ts`. Este flujo es más complejo, manejando la transformación de la salida de la IA a un formato estructurado y asegurando que los campos obligatorios estén presentes.
 - Los flujos se llaman desde componentes de React (Server Components o a través de Server Actions implícitas en el patrón de Next.js).
 
 ## 8. Gestión de Estado

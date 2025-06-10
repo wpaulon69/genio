@@ -1,4 +1,11 @@
 
+/**
+ * @fileOverview Módulo para interactuar con la colección 'monthlySchedules' en Firebase Firestore.
+ * Proporciona funciones para gestionar horarios mensuales, incluyendo la creación, lectura,
+ * actualización de borradores, publicación de horarios, y archivado de versiones anteriores.
+ * Maneja la lógica de estados ('draft', 'published', 'archived') y versionado.
+ */
+
 import {
   collection,
   query,
@@ -21,13 +28,28 @@ import type { MonthlySchedule, AIShift, ScheduleViolation, ScoreBreakdown } from
 import { cleanDataForFirestore } from '@/lib/utils';
 import { format, addMonths } from 'date-fns';
 
-
+/** Nombre de la colección de horarios mensuales en Firestore. */
 const MONTHLY_SCHEDULES_COLLECTION = 'monthlySchedules';
 
+/**
+ * Genera una clave única para un horario basada en el año, mes y ID del servicio.
+ *
+ * @param {string} year - El año del horario (ej. "2024").
+ * @param {string} month - El mes del horario (ej. "1" para Enero, "12" para Diciembre).
+ * @param {string} serviceId - El ID del servicio.
+ * @returns {string} La clave generada en formato `YYYY-MM-ServiceID`.
+ */
 export const generateScheduleKey = (year: string, month: string, serviceId: string): string => {
   return `${year}-${String(month).padStart(2, '0')}-${serviceId}`;
 };
 
+/**
+ * Convierte un documento de Firestore (`QueryDocumentSnapshot`) a un objeto de tipo `MonthlySchedule`.
+ * Maneja la conversión de Timestamps de Firestore a milisegundos y la asignación de valores por defecto.
+ *
+ * @param {QueryDocumentSnapshot<DocumentData>} snapshot - El snapshot del documento de Firestore.
+ * @returns {MonthlySchedule} El objeto de horario mensual convertido.
+ */
 const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): MonthlySchedule => {
     const data = snapshot.data();
     return {
@@ -49,6 +71,17 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): MonthlySc
     } as MonthlySchedule;
 };
 
+/**
+ * Obtiene el horario mensual publicado (activo) para un servicio, mes y año específicos.
+ * Busca el horario con `status: 'published'` y la versión más reciente.
+ *
+ * @async
+ * @param {string} year - El año del horario.
+ * @param {string} month - El mes del horario.
+ * @param {string} serviceId - El ID del servicio.
+ * @returns {Promise<MonthlySchedule | null>} Una promesa que se resuelve con el horario publicado, o `null` si no se encuentra.
+ * @throws {Error} Si ocurre un error durante la obtención de datos.
+ */
 export const getPublishedMonthlySchedule = async (
   year: string,
   month: string,
@@ -80,6 +113,17 @@ export const getPublishedMonthlySchedule = async (
   }
 };
 
+/**
+ * Obtiene el horario mensual en estado de borrador más reciente para un servicio, mes y año específicos.
+ * Busca el horario con `status: 'draft'` y el `updatedAt` más reciente.
+ *
+ * @async
+ * @param {string} year - El año del horario.
+ * @param {string} month - El mes del horario.
+ * @param {string} serviceId - El ID del servicio.
+ * @returns {Promise<MonthlySchedule | null>} Una promesa que se resuelve con el borrador del horario, o `null` si no se encuentra.
+ * @throws {Error} Si ocurre un error durante la obtención de datos.
+ */
 export const getDraftMonthlySchedule = async (
   year: string,
   month: string,
@@ -111,7 +155,18 @@ export const getDraftMonthlySchedule = async (
   }
 };
 
-
+/**
+ * Obtiene todos los horarios publicados dentro de un rango de fechas (mes/año inicio a mes/año fin).
+ * Puede filtrar opcionalmente por un ID de servicio específico.
+ *
+ * @async
+ * @param {string} yearFrom - Año de inicio del rango.
+ * @param {string} monthFrom - Mes de inicio del rango.
+ * @param {string} yearTo - Año de fin del rango.
+ * @param {string} monthTo - Mes de fin del rango.
+ * @param {string} [serviceId] - ID opcional del servicio para filtrar. Si es "__ALL_SERVICES_COMPARISON__" o no se proporciona, se obtienen para todos los servicios.
+ * @returns {Promise<MonthlySchedule[]>} Una promesa que se resuelve con un array de horarios publicados.
+ */
 export const getSchedulesInDateRange = async (
   yearFrom: string,
   monthFrom: string,
@@ -162,7 +217,18 @@ export const getSchedulesInDateRange = async (
   return allSchedules;
 };
 
-
+/**
+ * Guarda o actualiza un horario mensual como borrador.
+ * Si se proporciona `existingDraftIdToUpdate`, actualiza ese borrador.
+ * De lo contrario, busca un borrador existente para la misma `scheduleKey` y lo actualiza,
+ * o crea uno nuevo si no existe.
+ *
+ * @async
+ * @param {Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'>} scheduleData - Los datos del horario a guardar como borrador.
+ * @param {string} [existingDraftIdToUpdate] - El ID opcional de un borrador existente para actualizar directamente.
+ * @returns {Promise<MonthlySchedule>} Una promesa que se resuelve con el horario borrador guardado o actualizado.
+ * @throws {Error} Si falla la operación de guardado/actualización.
+ */
 export const saveOrUpdateDraftSchedule = async (
   scheduleData: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'>,
   existingDraftIdToUpdate?: string
@@ -182,13 +248,12 @@ export const saveOrUpdateDraftSchedule = async (
   let versionToReturn = 1; 
   let createdAtToReturn = Date.now();
 
-
   try {
     if (existingDraftIdToUpdate) {
       const draftDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, existingDraftIdToUpdate);
       const existingDocSnap = await getDoc(draftDocRef);
       if (existingDocSnap.exists()) {
-          versionToReturn = existingDocSnap.data().version || 1; // Keep existing draft's version
+          versionToReturn = existingDocSnap.data().version || 1; 
           createdAtToReturn = existingDocSnap.data().createdAt instanceof Timestamp ? existingDocSnap.data().createdAt.toMillis() : (existingDocSnap.data().createdAt || Date.now());
       }
       const updatePayload = { ...dataToSave, version: versionToReturn, createdAt: existingDocSnap.exists() ? existingDocSnap.data().createdAt : serverTimestamp() }; 
@@ -226,7 +291,18 @@ export const saveOrUpdateDraftSchedule = async (
   }
 };
 
-
+/**
+ * Publica un horario.
+ * 1. Archiva cualquier horario previamente publicado para la misma `scheduleKey`.
+ * 2. Si se proporciona `draftIdBeingPublished`, archiva ese borrador.
+ * 3. Guarda el nuevo horario con `status: 'published'` y una versión incrementada.
+ *
+ * @async
+ * @param {Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'>} scheduleDataToPublish - Los datos del horario a publicar.
+ * @param {string} [draftIdBeingPublished] - El ID opcional del borrador que se está publicando.
+ * @returns {Promise<MonthlySchedule>} Una promesa que se resuelve con el horario recién publicado.
+ * @throws {Error} Si falla la operación de publicación.
+ */
 export const publishSchedule = async (
   scheduleDataToPublish: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'>,
   draftIdBeingPublished?: string 
@@ -263,7 +339,6 @@ export const publishSchedule = async (
   
   if (draftIdBeingPublished) {
     const draftDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, draftIdBeingPublished);
-    // Check if draft exists before trying to update it
     const draftSnap = await getDoc(draftDocRef);
     if (draftSnap.exists()) {
         batch.update(draftDocRef, { status: 'archived', updatedAt: serverTimestamp() });
@@ -302,16 +377,24 @@ export const publishSchedule = async (
   }
 };
 
-
+/**
+ * Actualiza un horario publicado existente directamente.
+ * Esto implica archivar la versión actual y crear una nueva versión publicada con los cambios.
+ * Esencialmente, es una forma de "republicar" con modificaciones.
+ *
+ * @async
+ * @param {string} scheduleId - El ID del horario publicado a actualizar.
+ * @param {Partial<Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'scheduleKey' | 'year' | 'month' | 'serviceId' | 'serviceName'>>} scheduleData - Los datos a actualizar.
+ * @returns {Promise<MonthlySchedule>} Una promesa que se resuelve con la nueva versión del horario publicado.
+ * @throws {Error} Si el horario no se encuentra, no está publicado, o si falla la actualización.
+ */
 export const updatePublishedScheduleDirectly = async ( 
   scheduleId: string, 
   scheduleData: Partial<Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'scheduleKey' | 'year' | 'month' | 'serviceId' | 'serviceName'>>
 ): Promise<MonthlySchedule> => {
   const batch = writeBatch(db);
-  const schedulesCol = collection(db, MONTHLY_SCHEDULES_COLLECTION);
   const publishedDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, scheduleId);
-
-  const publishedDocSnap = await getDoc(publishedDocRef); // Use getDoc instead of query for a single doc by ID
+  const publishedDocSnap = await getDoc(publishedDocRef);
   
   if (!publishedDocSnap.exists() || publishedDocSnap.data().status !== 'published') {
       throw new Error(`Schedule with ID ${scheduleId} not found or is not published.`);
@@ -334,7 +417,6 @@ export const updatePublishedScheduleDirectly = async (
     createdAt: oldPublishedDataFirestore.createdAt instanceof Timestamp ? oldPublishedDataFirestore.createdAt.toMillis() : (oldPublishedDataFirestore.createdAt || 0),
     updatedAt: oldPublishedDataFirestore.updatedAt instanceof Timestamp ? oldPublishedDataFirestore.updatedAt.toMillis() : (oldPublishedDataFirestore.updatedAt || 0),
   };
-
 
   batch.update(publishedDocRef, { status: 'archived', updatedAt: serverTimestamp() });
 
@@ -371,7 +453,15 @@ export const updatePublishedScheduleDirectly = async (
   }
 };
 
-
+/**
+ * Cambia el estado de un horario existente a 'archived'.
+ * Esto se puede usar para archivar borradores o horarios publicados que ya no son relevantes.
+ *
+ * @async
+ * @param {string} scheduleId - El ID del horario a archivar.
+ * @returns {Promise<void>} Una promesa que se resuelve cuando el horario se ha archivado.
+ * @throws {Error} Si falla la actualización.
+ */
 export const archiveSchedule = async (scheduleId: string): Promise<void> => {
   const scheduleDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, scheduleId);
   try {
@@ -384,4 +474,3 @@ export const archiveSchedule = async (scheduleId: string): Promise<void> => {
     throw new Error(`Failed to archive schedule ${scheduleId}: ${(error as Error).message}`);
   }
 };
-

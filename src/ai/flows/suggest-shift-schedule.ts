@@ -7,68 +7,115 @@
  *
  * El flujo toma un prompt que describe los requisitos para el horario de turnos y devuelve un horario sugerido
  * en formato estructurado (array de objetos de turno) y un texto legible por humanos.
+ * También incluye lógica para manejar respuestas incompletas de la IA y asegurar que la salida
+ * del flujo cumpla con un esquema estricto.
  *
  * @interface SuggestShiftScheduleInput - Define el esquema de entrada para la función suggestShiftSchedule.
- * @interface AIShift - Define la estructura de un turno devuelto por la IA (forma final y estricta).
- * @interface RawAIShift - Define una estructura más laxa de un turno como podría ser devuelto por la IA.
- * @interface SuggestShiftScheduleOutput - Define el esquema de salida para la función suggestShiftSchedule.
- * @function suggestShiftSchedule - La función principal que desencadena el flujo de generación de horarios de turnos.
+ * @interface AIShift - Define la estructura de un turno devuelto por la IA (forma final y estricta esperada por la aplicación).
+ * @interface RawAIShift - Define una estructura más laxa de un turno como podría ser devuelto inicialmente por la IA.
+ * @interface SuggestShiftScheduleOutput - Define el esquema de salida final para la función suggestShiftSchedule.
+ * @function suggestShiftSchedule - La función principal exportada que desencadena el flujo de generación de horarios de turnos.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+/**
+ * Esquema de entrada para el flujo de sugerencia de horarios de turnos.
+ */
 const SuggestShiftScheduleInputSchema = z.object({
+  /** Un prompt detallado que describe los requisitos del horario de turnos, incluyendo reglas del servicio, preferencias de los empleados y disponibilidad. */
   prompt: z.string().describe('Un prompt detallado que describe los requisitos del horario de turnos, incluyendo reglas del servicio, preferencias de los empleados y disponibilidad.'),
 });
+/** Tipo TypeScript inferido del esquema `SuggestShiftScheduleInputSchema`. */
 export type SuggestShiftScheduleInput = z.infer<typeof SuggestShiftScheduleInputSchema>;
 
-// Esquema estricto para un turno (lo que la aplicación espera al final)
+/**
+ * Esquema estricto para un turno individual, tal como se espera en la salida final del flujo
+ * y para ser utilizado por la aplicación.
+ */
 const AIShiftSchema = z.object({
+  /** La fecha del turno en formato YYYY-MM-DD. */
   date: z.string().describe('La fecha del turno en formato YYYY-MM-DD.'),
+  /** La hora de inicio del turno en formato HH:MM (24 horas). */
   startTime: z.string().describe('La hora de inicio del turno en formato HH:MM (24 horas).'),
+  /** La hora de finalización del turno en formato HH:MM (24 horas). */
   endTime: z.string().describe('La hora de finalización del turno en formato HH:MM (24 horas).'),
+  /** El nombre completo del empleado asignado al turno. */
   employeeName: z.string().describe('El nombre completo del empleado asignado al turno.'),
+  /** El nombre del servicio para el turno. */
   serviceName: z.string().describe('El nombre del servicio para el turno.'),
+  /** Cualquier nota opcional para el turno. */
   notes: z.string().optional().describe('Cualquier nota opcional para el turno.'),
 });
+/** Tipo TypeScript inferido del esquema `AIShiftSchema`. */
 export type AIShift = z.infer<typeof AIShiftSchema>;
 
-// Esquema más laxo para un turno, como podría venir directamente de la IA (para el output del prompt)
+/**
+ * Esquema más laxo para un turno, como podría venir directamente de la IA.
+ * Permite campos opcionales que luego se validarán o completarán en el flujo.
+ */
 const RawAIShiftSchema = z.object({
+  /** La fecha del turno en formato YYYY-MM-DD. */
   date: z.string().describe('La fecha del turno en formato YYYY-MM-DD.'),
+  /** El nombre completo del empleado asignado al turno. */
   employeeName: z.string().describe('El nombre completo del empleado asignado al turno.'),
+  /** La hora de inicio del turno en formato HH:MM (24 horas). Opcional en la respuesta cruda. */
   startTime: z.string().optional().describe('La hora de inicio del turno en formato HH:MM (24 horas).'),
+  /** La hora de finalización del turno en formato HH:MM (24 horas). Opcional en la respuesta cruda. */
   endTime: z.string().optional().describe('La hora de finalización del turno en formato HH:MM (24 horas).'),
+  /** El nombre del servicio para el turno. Opcional en la respuesta cruda. */
   serviceName: z.string().optional().describe('El nombre del servicio para el turno.'),
+  /** Cualquier nota opcional para el turno. */
   notes: z.string().optional().describe('Cualquier nota opcional para el turno.'),
 });
+/** Tipo TypeScript inferido del esquema `RawAIShiftSchema`. */
 export type RawAIShift = z.infer<typeof RawAIShiftSchema>;
 
 
-// Esquema para la SALIDA del PROMPT (usa RawAIShiftSchema y responseText opcional)
+/**
+ * Esquema para la salida del PROMPT de Genkit.
+ * Utiliza `RawAIShiftSchema` para los turnos, ya que la IA podría devolver datos incompletos.
+ * `responseText` es opcional en este punto.
+ */
 const PromptOutputSchema = z.object({
+  /** Un array de objetos de turno generados según el prompt. Puede ser indefinido o contener turnos incompletos. */
   generatedShifts: z.array(RawAIShiftSchema).optional().describe('Un array de objetos de turno generados según el prompt.'),
+  /** Un resumen legible por humanos del horario generado o cualquier comentario relevante. Puede ser indefinido. */
   responseText: z.string().optional().describe('Un resumen legible por humanos del horario generado o cualquier comentario relevante.'),
 });
 
-// Esquema para la SALIDA del FLOW (usa AIShiftSchema estricto y responseText REQUERIDO)
+/**
+ * Esquema para la salida final del FLOW de Genkit.
+ * Utiliza `AIShiftSchema` (estricto) para los turnos, asegurando que solo se devuelvan turnos completos.
+ * `responseText` es obligatorio en la salida final.
+ */
 const FlowOutputSchema = z.object({
+  /** Un array de objetos de turno generados y validados según el prompt. */
   generatedShifts: z.array(AIShiftSchema).describe('Un array de objetos de turno generados según el prompt.'),
+  /** Un resumen legible por humanos del horario generado o cualquier comentario relevante. Siempre debe estar presente. */
   responseText: z.string().describe('Un resumen legible por humanos del horario generado o cualquier comentario relevante.'),
 });
+/** Tipo TypeScript inferido del esquema `FlowOutputSchema`. */
 export type SuggestShiftScheduleOutput = z.infer<typeof FlowOutputSchema>;
 
 
 /**
- * La función principal para sugerir un horario de turnos basado en la entrada proporcionada.
- * @param input - La entrada que contiene el prompt para la generación del horario de turnos.
- * @returns Una promesa que se resuelve con el horario de turnos generado (tanto estructurado como texto).
+ * La función principal exportada para sugerir un horario de turnos basado en la entrada proporcionada.
+ * Invoca el flujo de Genkit `suggestShiftScheduleFlow`.
+ *
+ * @async
+ * @param {SuggestShiftScheduleInput} input - La entrada que contiene el prompt para la generación del horario de turnos.
+ * @returns {Promise<SuggestShiftScheduleOutput>} Una promesa que se resuelve con el horario de turnos generado (tanto estructurado como texto).
  */
 export async function suggestShiftSchedule(input: SuggestShiftScheduleInput): Promise<SuggestShiftScheduleOutput> {
   return suggestShiftScheduleFlow(input);
 }
 
+/**
+ * Define el prompt de Genkit para la tarea de sugerencia de horarios.
+ * Configura el modelo de IA, los esquemas de entrada/salida y el texto del prompt.
+ */
 const suggestShiftSchedulePrompt = ai.definePrompt({
   name: 'suggestShiftSchedulePrompt',
   input: {schema: SuggestShiftScheduleInputSchema},
@@ -107,6 +154,15 @@ const suggestShiftSchedulePrompt = ai.definePrompt({
   El campo 'responseText' en el nivel raíz del JSON es SIEMPRE OBLIGATORIO.`,
 });
 
+/**
+ * Define el flujo de Genkit (`suggestShiftScheduleFlow`).
+ * Este flujo toma la entrada, la pasa al prompt definido, procesa la salida del prompt
+ * para asegurar la completitud de los datos y devuelve la salida estructurada final.
+ *
+ * @param {SuggestShiftScheduleInput} input - La entrada para el flujo.
+ * @returns {Promise<SuggestShiftScheduleOutput>} Una promesa que se resuelve con la salida del flujo,
+ *                                               conteniendo turnos validados y un texto de respuesta.
+ */
 const suggestShiftScheduleFlow = ai.defineFlow(
   {
     name: 'suggestShiftScheduleFlow',
@@ -166,4 +222,3 @@ const suggestShiftScheduleFlow = ai.defineFlow(
     };
   }
 );
-

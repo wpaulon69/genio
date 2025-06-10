@@ -1,11 +1,23 @@
 
+/**
+ * @fileOverview Módulo para interactuar con la colección 'employees' en Firebase Firestore.
+ * Proporciona funciones CRUD (Crear, Leer, Actualizar, Eliminar) para la gestión de empleados.
+ * También maneja la normalización de datos y la aplicación de valores por defecto para
+ * estructuras anidadas como `preferences` y `fixedAssignments`.
+ */
+
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from './config';
 import type { Employee, EmployeePreferences, FixedAssignment, WorkPattern } from '@/lib/types';
 import { cleanDataForFirestore } from '@/lib/utils';
 
+/** Nombre de la colección de empleados en Firestore. */
 const EMPLOYEES_COLLECTION = 'employees';
 
+/**
+ * Valores por defecto para las preferencias de un empleado.
+ * Se utilizan si no se especifican al crear o actualizar un empleado.
+ */
 const defaultPreferences: EmployeePreferences = {
   eligibleForDayOffAfterDuty: false,
   prefersWeekendWork: false,
@@ -14,7 +26,14 @@ const defaultPreferences: EmployeePreferences = {
   workPattern: 'standardRotation', // Default work pattern
 };
 
-// Helper to convert Firestore doc to Employee type
+/**
+ * Convierte un documento de Firestore (`QueryDocumentSnapshot`) a un objeto de tipo `Employee`.
+ * Asegura que las propiedades anidadas como `preferences` y `fixedAssignments`
+ * tengan valores por defecto si no están presentes o están incompletas en Firestore.
+ *
+ * @param {QueryDocumentSnapshot<DocumentData>} snapshot - El snapshot del documento de Firestore.
+ * @returns {Employee} El objeto de empleado convertido.
+ */
 const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee => {
   const data = snapshot.data();
 
@@ -48,9 +67,14 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Employee 
   } as Employee;
 };
 
-// Helper function to clean individual fixed assignment for Firestore
-// It returns Partial<FixedAssignment> but ensures type and startDate are present.
-// This is compatible with FixedAssignment if endDate/description are optional in FixedAssignment.
+/**
+ * Prepara una asignación fija para ser guardada en Firestore.
+ * Se asegura de que solo los campos relevantes y con valor se incluyan.
+ * `endDate` y `description` se omiten si están vacíos o no definidos.
+ *
+ * @param {FixedAssignment} assignment - La asignación fija a procesar.
+ * @returns {Partial<FixedAssignment>} Un objeto parcial de asignación fija, listo para ser limpiado y guardado.
+ */
 const cleanFixedAssignmentForFirestore = (assignment: FixedAssignment): Partial<FixedAssignment> => {
   const cleanedAssignment: Partial<FixedAssignment> = {
     type: assignment.type,
@@ -59,13 +83,18 @@ const cleanFixedAssignmentForFirestore = (assignment: FixedAssignment): Partial<
   if (assignment.endDate && typeof assignment.endDate === 'string' && assignment.endDate.trim() !== "") {
     cleanedAssignment.endDate = assignment.endDate;
   }
-  // Only include description if it's a non-empty string, otherwise let it be undefined (and thus removed by cleanDataForFirestore)
   if (assignment.description && typeof assignment.description === 'string' && assignment.description.trim() !== "") {
     cleanedAssignment.description = assignment.description;
   }
   return cleanedAssignment;
 };
 
+/**
+ * Obtiene todos los empleados de la base de datos, ordenados por nombre.
+ *
+ * @async
+ * @returns {Promise<Employee[]>} Una promesa que se resuelve con un array de objetos `Employee`.
+ */
 export const getEmployees = async (): Promise<Employee[]> => {
   const employeesCol = collection(db, EMPLOYEES_COLLECTION);
   const q = query(employeesCol, orderBy('name'));
@@ -73,6 +102,14 @@ export const getEmployees = async (): Promise<Employee[]> => {
   return snapshot.docs.map(fromFirestore);
 };
 
+/**
+ * Añade un nuevo empleado a la base de datos.
+ * Normaliza y limpia los datos antes de guardarlos, aplicando valores por defecto donde sea necesario.
+ *
+ * @async
+ * @param {Omit<Employee, 'id'>} employeeData - Los datos del empleado a añadir (sin el `id`).
+ * @returns {Promise<Employee>} Una promesa que se resuelve con el objeto `Employee` recién creado, incluyendo su `id`.
+ */
 export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<Employee> => {
   const employeesCol = collection(db, EMPLOYEES_COLLECTION);
 
@@ -100,39 +137,42 @@ export const addEmployee = async (employeeData: Omit<Employee, 'id'>): Promise<E
   const cleanedData = cleanDataForFirestore(dataToSave);
   const docRef = await addDoc(employeesCol, cleanedData);
 
-  // Explicitly construct the returned object to match the Employee type
   const returnedEmployee: Employee = {
     id: docRef.id,
-    name: cleanedData.name as string, // employeeData ensures this is string
-    contact: cleanedData.contact as string, // employeeData ensures this is string
-    serviceIds: cleanedData.serviceIds as string[], // employeeData ensures this is string[]
-    roles: cleanedData.roles as string[], // employeeData ensures this is string[]
-    availability: cleanedData.availability as string, // employeeData ensures this is string
-    constraints: cleanedData.constraints as string, // employeeData ensures this is string
-    preferences: cleanedData.preferences as EmployeePreferences, // preferencesToSave ensures this is EmployeePreferences
-    fixedAssignments: (cleanedData.fixedAssignments || []) as FixedAssignment[], // cleanFixedAssignmentForFirestore ensures type/startDate
+    name: cleanedData.name as string,
+    contact: cleanedData.contact as string,
+    serviceIds: cleanedData.serviceIds as string[],
+    roles: cleanedData.roles as string[],
+    availability: cleanedData.availability as string,
+    constraints: cleanedData.constraints as string,
+    preferences: cleanedData.preferences as EmployeePreferences,
+    fixedAssignments: (cleanedData.fixedAssignments || []) as FixedAssignment[],
   };
 
-  // Ensure fixedAssignments is undefined if the array is empty, to match `?: FixedAssignment[]`
   if (returnedEmployee.fixedAssignments && returnedEmployee.fixedAssignments.length === 0) {
     returnedEmployee.fixedAssignments = undefined;
   }
   
-  // Ensure preferences matches the optional nature if it's equivalent to default and no other part of it is set
-  // However, `preferencesToSave` always creates a full EmployeePreferences object.
-  // The type `Employee` has `preferences?: EmployeePreferences;` which is fine.
-
   return returnedEmployee;
 };
 
+/**
+ * Actualiza un empleado existente en la base de datos.
+ * Maneja la actualización de campos anidados como `preferences` y `fixedAssignments`,
+ * aplicando valores por defecto y limpiando los datos antes de guardarlos.
+ *
+ * @async
+ * @param {string} employeeId - El ID del empleado a actualizar.
+ * @param {Partial<Omit<Employee, 'id'>>} employeeData - Los datos del empleado a actualizar. Pueden ser parciales.
+ * @returns {Promise<void>} Una promesa que se resuelve cuando la actualización se completa.
+ */
 export const updateEmployee = async (employeeId: string, employeeData: Partial<Omit<Employee, 'id'>>): Promise<void> => {
   const employeeDoc = doc(db, EMPLOYEES_COLLECTION, employeeId);
 
   let dataToUpdate: Partial<Omit<Employee, 'id'>> = { ...employeeData };
 
   if (employeeData.hasOwnProperty('preferences')) {
-    const newPrefs = employeeData.preferences || {}; // newPrefs can be Partial<EmployeePreferences> or undefined
-    // Construct a full EmployeePreferences object, ensuring all fields are present or default
+    const newPrefs = employeeData.preferences || {};
     dataToUpdate.preferences = {
         eligibleForDayOffAfterDuty: newPrefs.eligibleForDayOffAfterDuty ?? defaultPreferences.eligibleForDayOffAfterDuty,
         prefersWeekendWork: newPrefs.prefersWeekendWork ?? defaultPreferences.prefersWeekendWork,
@@ -142,17 +182,21 @@ export const updateEmployee = async (employeeId: string, employeeData: Partial<O
     };
   }
 
-
   if (employeeData.hasOwnProperty('fixedAssignments')) {
-    // Ensure that even if an empty array is passed, it's stored as such (or omitted if that's the desired behavior)
     dataToUpdate.fixedAssignments = (employeeData.fixedAssignments || []).map(cleanFixedAssignmentForFirestore);
   }
 
   await updateDoc(employeeDoc, cleanDataForFirestore(dataToUpdate));
 };
 
+/**
+ * Elimina un empleado de la base de datos.
+ *
+ * @async
+ * @param {string} employeeId - El ID del empleado a eliminar.
+ * @returns {Promise<void>} Una promesa que se resuelve cuando la eliminación se completa.
+ */
 export const deleteEmployee = async (employeeId: string): Promise<void> => {
   const employeeDoc = doc(db, EMPLOYEES_COLLECTION, employeeId);
   await deleteDoc(employeeDoc);
 };
-
