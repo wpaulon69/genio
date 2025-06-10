@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   type DocumentData,
   type QueryDocumentSnapshot,
+  getDoc,
 } from 'firebase/firestore';
 import { db } from './config';
 import type { MonthlySchedule, AIShift, ScheduleViolation, ScoreBreakdown } from '@/lib/types';
@@ -37,7 +38,7 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): MonthlySc
         serviceId: data.serviceId,
         serviceName: data.serviceName,
         shifts: data.shifts || [],
-        status: data.status || 'archived', // Default to archived if status is missing or invalid
+        status: data.status || 'archived', 
         version: data.version || 0,
         responseText: data.responseText,
         score: data.score,
@@ -63,7 +64,7 @@ export const getPublishedMonthlySchedule = async (
     schedulesCol,
     where('scheduleKey', '==', scheduleKey),
     where('status', '==', 'published'),
-    orderBy('version', 'desc'), // Get the latest published version if multiple (shouldn't happen with correct logic)
+    orderBy('version', 'desc'), 
     limit(1)
   );
 
@@ -74,7 +75,7 @@ export const getPublishedMonthlySchedule = async (
     }
     return fromFirestore(snapshot.docs[0]);
   } catch (error) {
-    console.error("Error fetching published monthly schedule:", { scheduleKey, error });
+    console.error("Error fetching published monthly schedule for key:", scheduleKey, "Actual error:", error);
     throw new Error(`Error fetching published schedule for ${scheduleKey}: ${(error as Error).message}`);
   }
 };
@@ -94,7 +95,7 @@ export const getDraftMonthlySchedule = async (
     schedulesCol,
     where('scheduleKey', '==', scheduleKey),
     where('status', '==', 'draft'),
-    orderBy('updatedAt', 'desc'), // Get the most recently updated draft
+    orderBy('updatedAt', 'desc'), 
     limit(1)
   );
 
@@ -105,7 +106,7 @@ export const getDraftMonthlySchedule = async (
     }
     return fromFirestore(snapshot.docs[0]);
   } catch (error) {
-    console.error("Error fetching draft monthly schedule:", { scheduleKey, error });
+    console.error("Error fetching draft monthly schedule for key:", scheduleKey, "Actual error:", error);
     throw new Error(`Error fetching draft schedule for ${scheduleKey}: ${(error as Error).message}`);
   }
 };
@@ -127,7 +128,7 @@ export const getSchedulesInDateRange = async (
 
   while (currentDate <= endDate) {
     const currentYearStr = format(currentDate, 'yyyy');
-    const currentMonthStr = format(currentDate, 'M'); // 'M' for month without leading zero
+    const currentMonthStr = format(currentDate, 'M'); 
 
     let q;
     if (serviceId && serviceId !== "__ALL_SERVICES_COMPARISON__") {
@@ -135,7 +136,7 @@ export const getSchedulesInDateRange = async (
       q = query(
         schedulesCol,
         where('scheduleKey', '==', scheduleKey),
-        where('status', '==', 'published'), // Reports should generally use published schedules
+        where('status', '==', 'published'), 
         orderBy('version', 'desc'),
         limit(1)
       );
@@ -144,19 +145,17 @@ export const getSchedulesInDateRange = async (
         schedulesCol,
         where('year', '==', currentYearStr),
         where('month', '==', currentMonthStr),
-        where('status', '==', 'published') // Reports should generally use published schedules
+        where('status', '==', 'published') 
       );
     }
 
     try {
       const snapshot = await getDocs(q);
       snapshot.forEach(doc => {
-        // If not filtering by serviceId, there might be multiple services, add them all.
-        // If filtering by serviceId, limit(1) already handles it.
         allSchedules.push(fromFirestore(doc));
       });
     } catch (error) {
-      console.error("Error fetching schedules in date range for", { currentYearStr, currentMonthStr, serviceId, error });
+      console.error("Error fetching schedules in date range for year:", currentYearStr, "month:", currentMonthStr, "serviceId:", serviceId, "Actual error:", error);
     }
     currentDate = addMonths(currentDate, 1);
   }
@@ -175,36 +174,40 @@ export const saveOrUpdateDraftSchedule = async (
       ...scheduleData,
       scheduleKey,
       scoreBreakdown: scheduleData.scoreBreakdown ? { serviceRules: scheduleData.scoreBreakdown.serviceRules, employeeWellbeing: scheduleData.scoreBreakdown.employeeWellbeing } : undefined,
-      status: 'draft' as const, // Explicitly set status to draft
+      status: 'draft' as const, 
       updatedAt: serverTimestamp(),
   };
   
   let draftIdToReturn = existingDraftIdToUpdate;
-  let versionToReturn = scheduleData.version || 1; 
-  let createdAtToReturn = scheduleData.createdAt || Date.now();
+  let versionToReturn = 1; 
+  let createdAtToReturn = Date.now();
 
 
   try {
     if (existingDraftIdToUpdate) {
       const draftDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, existingDraftIdToUpdate);
-      const updatePayload = { ...dataToSave, version: versionToReturn }; 
+      const existingDocSnap = await getDoc(draftDocRef);
+      if (existingDocSnap.exists()) {
+          versionToReturn = existingDocSnap.data().version || 1; // Keep existing draft's version
+          createdAtToReturn = existingDocSnap.data().createdAt instanceof Timestamp ? existingDocSnap.data().createdAt.toMillis() : (existingDocSnap.data().createdAt || Date.now());
+      }
+      const updatePayload = { ...dataToSave, version: versionToReturn, createdAt: existingDocSnap.exists() ? existingDocSnap.data().createdAt : serverTimestamp() }; 
       await updateDoc(draftDocRef, cleanDataForFirestore(updatePayload));
     } else {
-      // Check if a draft already exists for this key, if no ID was provided for update
       const q = query(schedulesCol, where('scheduleKey', '==', scheduleKey), where('status', '==', 'draft'), limit(1));
       const snapshot = await getDocs(q);
 
-      if (!snapshot.empty) { // A draft exists, update it
+      if (!snapshot.empty) { 
         const existingDoc = snapshot.docs[0];
         draftIdToReturn = existingDoc.id;
-        versionToReturn = existingDoc.data().version || 1; // Use existing draft's version
+        versionToReturn = existingDoc.data().version || 1; 
         createdAtToReturn = existingDoc.data().createdAt instanceof Timestamp ? existingDoc.data().createdAt.toMillis() : (existingDoc.data().createdAt || Date.now());
-        await updateDoc(existingDoc.ref, cleanDataForFirestore({ ...dataToSave, version: versionToReturn }));
-      } else { // No draft exists, create a new one
+        await updateDoc(existingDoc.ref, cleanDataForFirestore({ ...dataToSave, version: versionToReturn, createdAt: existingDoc.data().createdAt }));
+      } else { 
         const newDocRef = await addDoc(schedulesCol, cleanDataForFirestore({ ...dataToSave, version: 1, createdAt: serverTimestamp() }));
         draftIdToReturn = newDocRef.id;
         versionToReturn = 1;
-        createdAtToReturn = Date.now(); // Approximate for return object
+        createdAtToReturn = Date.now(); 
       }
     }
 
@@ -214,7 +217,7 @@ export const saveOrUpdateDraftSchedule = async (
       status: 'draft',
       version: versionToReturn,
       createdAt: createdAtToReturn,
-      updatedAt: Date.now(), // Approximate for return object
+      updatedAt: Date.now(), 
     };
 
   } catch (error) {
@@ -226,7 +229,7 @@ export const saveOrUpdateDraftSchedule = async (
 
 export const publishSchedule = async (
   scheduleDataToPublish: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'>,
-  draftIdBeingPublished?: string // ID of the draft being published, if applicable
+  draftIdBeingPublished?: string 
 ): Promise<MonthlySchedule> => {
   const batch = writeBatch(db);
   const schedulesCol = collection(db, MONTHLY_SCHEDULES_COLLECTION);
@@ -234,7 +237,6 @@ export const publishSchedule = async (
 
   let newVersion = 1;
 
-  // 1. Archive any existing 'published' schedule for this key
   const publishedQuery = query(
     schedulesCol,
     where('scheduleKey', '==', scheduleKey),
@@ -247,7 +249,6 @@ export const publishSchedule = async (
     newVersion = (oldPublishedDoc.data().version || 0) + 1;
     batch.update(oldPublishedDoc.ref, { status: 'archived', updatedAt: serverTimestamp() });
   } else {
-    // If no previous published, check for highest version among archived to continue sequence, or start at 1
      const versionQuery = query(
         schedulesCol,
         where('scheduleKey', '==', scheduleKey),
@@ -260,22 +261,17 @@ export const publishSchedule = async (
     }
   }
   
-  // 2. If a specific draft is being published, archive it.
-  // (If not, and another draft exists for this key, it will be implicitly archived if the user chose to overwrite,
-  // or this publish action might be blocked by UI if a different draft exists and user didn't choose to overwrite)
   if (draftIdBeingPublished) {
     const draftDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, draftIdBeingPublished);
-    // We assume this draft exists and needs to be archived. Check existence if necessary.
-    batch.update(draftDocRef, { status: 'archived', updatedAt: serverTimestamp() });
-  } else {
-    // If no specific draft ID is given, we might still want to archive any *other* draft for this key
-    // to ensure only one "active work" (the one being published) exists.
-    // However, this could be risky if the UI doesn't manage this flow well.
-    // For now, only archive the explicitly provided draftId.
+    // Check if draft exists before trying to update it
+    const draftSnap = await getDoc(draftDocRef);
+    if (draftSnap.exists()) {
+        batch.update(draftDocRef, { status: 'archived', updatedAt: serverTimestamp() });
+    } else {
+        console.warn(`Draft with ID ${draftIdBeingPublished} not found while trying to archive it during publish.`);
+    }
   }
 
-
-  // 3. Create the new 'published' schedule
   const newPublishedDocRef = doc(collection(db, MONTHLY_SCHEDULES_COLLECTION));
   const newScheduleForDb = {
     ...scheduleDataToPublish,
@@ -297,8 +293,8 @@ export const publishSchedule = async (
       ...scheduleDataToPublish,
       status: 'published',
       version: newVersion,
-      createdAt: nowMillis, // Approximate
-      updatedAt: nowMillis, // Approximate
+      createdAt: nowMillis, 
+      updatedAt: nowMillis, 
     };
   } catch (error) {
     console.error("Error publishing schedule:", error);
@@ -307,40 +303,55 @@ export const publishSchedule = async (
 };
 
 
-export const updatePublishedScheduleDirectly = async ( // Renamed for clarity
-  scheduleId: string, // ID of the published schedule to update
+export const updatePublishedScheduleDirectly = async ( 
+  scheduleId: string, 
   scheduleData: Partial<Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'scheduleKey' | 'year' | 'month' | 'serviceId' | 'serviceName'>>
 ): Promise<MonthlySchedule> => {
   const batch = writeBatch(db);
   const schedulesCol = collection(db, MONTHLY_SCHEDULES_COLLECTION);
   const publishedDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, scheduleId);
 
-  const publishedDocSnap = await getDocs(query(schedulesCol, where('__name__', '==', scheduleId), limit(1)));
+  const publishedDocSnap = await getDoc(publishedDocRef); // Use getDoc instead of query for a single doc by ID
   
-  if (publishedDocSnap.empty || publishedDocSnap.docs[0].data().status !== 'published') {
+  if (!publishedDocSnap.exists() || publishedDocSnap.data().status !== 'published') {
       throw new Error(`Schedule with ID ${scheduleId} not found or is not published.`);
   }
-  const oldPublishedData = fromFirestore(publishedDocSnap.docs[0]);
+  const oldPublishedDataFirestore = publishedDocSnap.data();
+   const oldPublishedData: MonthlySchedule = {
+    id: publishedDocSnap.id,
+    scheduleKey: oldPublishedDataFirestore.scheduleKey,
+    year: oldPublishedDataFirestore.year,
+    month: oldPublishedDataFirestore.month,
+    serviceId: oldPublishedDataFirestore.serviceId,
+    serviceName: oldPublishedDataFirestore.serviceName,
+    shifts: oldPublishedDataFirestore.shifts || [],
+    status: oldPublishedDataFirestore.status,
+    version: oldPublishedDataFirestore.version || 0,
+    responseText: oldPublishedDataFirestore.responseText,
+    score: oldPublishedDataFirestore.score,
+    violations: oldPublishedDataFirestore.violations || [],
+    scoreBreakdown: oldPublishedDataFirestore.scoreBreakdown ? { serviceRules: oldPublishedDataFirestore.scoreBreakdown.serviceRules, employeeWellbeing: oldPublishedDataFirestore.scoreBreakdown.employeeWellbeing } : undefined,
+    createdAt: oldPublishedDataFirestore.createdAt instanceof Timestamp ? oldPublishedDataFirestore.createdAt.toMillis() : (oldPublishedDataFirestore.createdAt || 0),
+    updatedAt: oldPublishedDataFirestore.updatedAt instanceof Timestamp ? oldPublishedDataFirestore.updatedAt.toMillis() : (oldPublishedDataFirestore.updatedAt || 0),
+  };
 
-  // 1. Archive the current published version
+
   batch.update(publishedDocRef, { status: 'archived', updatedAt: serverTimestamp() });
 
-  // 2. Create a new published version with updated data and incremented version
   const newVersion = (oldPublishedData.version || 0) + 1;
   const newPublishedDocRef = doc(collection(db, MONTHLY_SCHEDULES_COLLECTION));
 
   const dataForNewPublishedVersion = {
-    ...oldPublishedData, // Start with old data to preserve fields not being updated
-    ...scheduleData,     // Override with new data
-    id: newPublishedDocRef.id, // Ensure new ID is used for the new document
+    ...oldPublishedData, 
+    ...scheduleData,     
+    id: newPublishedDocRef.id, 
     status: 'published' as const,
     version: newVersion,
     scoreBreakdown: scheduleData.scoreBreakdown ? { serviceRules: scheduleData.scoreBreakdown.serviceRules, employeeWellbeing: scheduleData.scoreBreakdown.employeeWellbeing } : (oldPublishedData.scoreBreakdown ? { serviceRules: oldPublishedData.scoreBreakdown.serviceRules, employeeWellbeing: oldPublishedData.scoreBreakdown.employeeWellbeing } : undefined),
-    createdAt: oldPublishedData.createdAt, // Preserve original creation timestamp
+    createdAt: oldPublishedData.createdAt, 
     updatedAt: serverTimestamp(),
   };
   
-  // Remove the original id from the payload before setting the new document
   const { id, ...payloadWithoutId } = dataForNewPublishedVersion;
 
   batch.set(newPublishedDocRef, cleanDataForFirestore(payloadWithoutId));
@@ -352,7 +363,7 @@ export const updatePublishedScheduleDirectly = async ( // Renamed for clarity
       ...payloadWithoutId,
       id: newPublishedDocRef.id,
       createdAt: oldPublishedData.createdAt,
-      updatedAt: nowMillis, // Approximate
+      updatedAt: nowMillis, 
     } as MonthlySchedule;
   } catch (error) {
     console.error("Error updating published schedule directly:", error);
@@ -369,7 +380,8 @@ export const archiveSchedule = async (scheduleId: string): Promise<void> => {
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
-    console.error("Error archiving schedule:", { scheduleId, error });
+    console.error("Error archiving schedule with ID:", scheduleId, "Actual error:", error);
     throw new Error(`Failed to archive schedule ${scheduleId}: ${(error as Error).message}`);
   }
 };
+
