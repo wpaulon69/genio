@@ -27,8 +27,7 @@ import {
     getDraftMonthlySchedule, 
     saveOrUpdateDraftSchedule, 
     publishSchedule,
-    // updatePublishedScheduleDirectly, // This function might be used differently or not directly from form
-    // archiveSchedule, // Archiving a published schedule is handled from the schedule view page
+    updatePublishedScheduleDirectly,
     generateScheduleKey 
 } from '@/lib/firebase/monthlySchedules';
 import { useToast } from '@/hooks/use-toast';
@@ -216,7 +215,6 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setGeneratedScore(null);
     setGeneratedViolations(null);
     setGeneratedScoreBreakdown(null);
-    // setShowGrid(false); // This will be handled by handleBackToConfig if called separately
     setUserChoiceForExisting(null);
     setCurrentLoadedPublishedSchedule(null);
     setCurrentLoadedDraftSchedule(null);
@@ -387,14 +385,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         responseText: generatedResponseText || (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.responseText) || (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.responseText) || "Horario guardado.",
         score: generatedScore ?? (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.score) ?? (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.score) ?? 0,
         violations: generatedViolations ?? (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.violations) ?? (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.violations) ?? [],
-        scoreBreakdown: generatedScoreBreakdown ?? (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.scoreBreakdown) ?? (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.scoreBreakdown),
+        scoreBreakdown: generatedScoreBreakdown ? {serviceRules: generatedScoreBreakdown.serviceRules, employeeWellbeing: generatedScoreBreakdown.employeeWellbeing } : (currentEditingSource === 'draft' && currentLoadedDraftSchedule?.scoreBreakdown) ? { serviceRules: currentLoadedDraftSchedule.scoreBreakdown.serviceRules, employeeWellbeing: currentLoadedDraftSchedule.scoreBreakdown.employeeWellbeing } : (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.scoreBreakdown) ? { serviceRules: currentLoadedPublishedSchedule.scoreBreakdown.serviceRules, employeeWellbeing: currentLoadedPublishedSchedule.scoreBreakdown.employeeWellbeing } : undefined,
     };
 
     try {
         let savedSchedule: MonthlySchedule | null = null;
 
         if (saveActionType === 'save_draft') {
-            const existingDraftIdToUpdate = (currentEditingSource === 'draft' && currentLoadedDraftSchedule) ? currentLoadedDraftSchedule.id : undefined;
+            const existingDraftIdToUpdate = (currentEditingSource === 'draft' && currentLoadedDraftSchedule) ? currentLoadedDraftSchedule.id : (currentEditingSource === 'published' && currentLoadedDraftSchedule) ? currentLoadedDraftSchedule.id : undefined;
             savedSchedule = await saveOrUpdateDraftSchedule(schedulePayloadBase, existingDraftIdToUpdate);
             setCurrentLoadedDraftSchedule(savedSchedule);
             setCurrentEditingSource('draft'); 
@@ -414,13 +412,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             toast({ title: "Horario Publicado", description: `El nuevo horario se publicó como activo.` });
         } else if (saveActionType === 'publish_modified_published') { 
             if (currentLoadedPublishedSchedule) {
-                savedSchedule = await publishSchedule(schedulePayloadBase, undefined); 
+                 // This effectively creates a new published version, archiving the old one.
+                savedSchedule = await publishSchedule(schedulePayloadBase, undefined);
                 setCurrentLoadedPublishedSchedule(savedSchedule);
                 setCurrentLoadedDraftSchedule(null); 
                 setCurrentEditingSource('published');
                 toast({ title: "Horario Publicado Actualizado", description: "Se creó una nueva versión del horario publicado." });
             } else {
-                 throw new Error("No hay horario publicado cargado para actualizar.");
+                 throw new Error("No hay horario publicado cargado para actualizar y republicar.");
             }
         }
 
@@ -430,15 +429,13 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             setGeneratedScore(savedSchedule.score ?? null);
             setGeneratedViolations(savedSchedule.violations ?? null);
             setGeneratedScoreBreakdown(savedSchedule.scoreBreakdown ?? null);
-            setLoadedConfigValues({serviceId: watchedServiceId, month: watchedMonth, year: watchedYear});
+            
             queryClient.invalidateQueries({ queryKey: ['publishedMonthlySchedule', watchedYear, watchedMonth, watchedServiceId] });
             queryClient.invalidateQueries({ queryKey: ['draftMonthlySchedule', watchedYear, watchedMonth, watchedServiceId] });
             
-            // Reset UI as per request
             handleBackToConfig();
             resetScheduleState();
         }
-        // setShowGrid(true); // No longer needed here due to UI reset
 
     } catch (e) {
         console.error("Error guardando el horario:", e);
@@ -497,13 +494,13 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             action: () => { setSaveActionType('publish_modified_published'); handleConfirmSave(); },
             icon: <UploadCloud className="mr-2 h-4 w-4" />
         });
-         options.push({
+         options.push({ // Guardar modificaciones del publicado como un nuevo borrador
             label: "Guardar Cambios como Borrador Nuevo",
             action: () => { setSaveActionType('save_draft'); handleConfirmSave(); },
             icon: <FileText className="mr-2 h-4 w-4" />,
             variant: "outline"
         });
-    } else { // currentEditingSource === 'new' or nothing specific loaded for editing
+    } else { // currentEditingSource === 'new'
         options.push({
             label: "Guardar como Borrador",
             action: () => { setSaveActionType('save_draft'); handleConfirmSave(); },

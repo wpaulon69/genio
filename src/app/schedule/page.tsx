@@ -11,9 +11,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { getEmployees } from '@/lib/firebase/employees';
 import { getServices } from '@/lib/firebase/services';
-import { getPublishedMonthlySchedule, archiveSchedule } from '@/lib/firebase/monthlySchedules'; // Updated imports
+import { getPublishedMonthlySchedule, archiveSchedule } from '@/lib/firebase/monthlySchedules';
 import { getHolidays } from '@/lib/firebase/holidays';
-import { Loader2, CalendarSearch, AlertTriangle, Info, UploadCloud, Trash2, ArchiveIcon } from 'lucide-react';
+import { Loader2, CalendarSearch, AlertTriangle, Info, UploadCloud, ArchiveIcon } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -37,10 +37,9 @@ export default function SchedulePage() {
   const [selectedYearView, setSelectedYearView] = useState<string>(currentYear.toString());
   const [selectedMonthView, setSelectedMonthView] = useState<string>((new Date().getMonth() + 1).toString());
   const [selectedServiceIdView, setSelectedServiceIdView] = useState<string | undefined>(undefined);
-  const [hasAttemptedInitialLoad, setHasAttemptedInitialLoad] = useState(false);
-
-  const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false); // Renamed from isDeleteDialogOpen
-  const [scheduleToArchiveId, setScheduleToArchiveId] = useState<string | null>(null); // Renamed
+  
+  const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
+  const [scheduleToArchiveId, setScheduleToArchiveId] = useState<string | null>(null);
   const [viewableScheduleData, setViewableScheduleData] = useState<MonthlySchedule | null>(null);
 
 
@@ -68,33 +67,33 @@ export default function SchedulePage() {
     data: fetchedViewableSchedule, 
     isLoading: isLoadingViewableSchedule,
     error: errorViewableSchedule,
-    refetch: refetchViewableSchedule,
+    refetch: manualRefetchViewableSchedule,
   } = useQuery<MonthlySchedule | null>({
-    queryKey: ['publishedMonthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView], // Updated queryKey
+    queryKey: ['publishedMonthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView],
     queryFn: async () => {
       if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) {
-        setViewableScheduleData(null); 
-        return Promise.resolve(null);
+        return null;
       }
-      // Use getPublishedMonthlySchedule now
-      const schedule = await getPublishedMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
-      setViewableScheduleData(schedule); 
-      return schedule;
+      return getPublishedMonthlySchedule(selectedYearView, selectedMonthView, selectedServiceIdView);
     },
-    enabled: false, 
+    enabled: !!(selectedServiceIdView && selectedMonthView && selectedYearView), 
   });
   
   useEffect(() => {
-    setViewableScheduleData(fetchedViewableSchedule ?? null);
-  }, [fetchedViewableSchedule]);
-
+    // When filters change, clear the currently displayed data
+    setViewableScheduleData(null);
+  }, [selectedServiceIdView, selectedMonthView, selectedYearView]);
 
   useEffect(() => {
-    if (selectedServiceIdView && selectedMonthView && selectedYearView && !hasAttemptedInitialLoad) {
-      refetchViewableSchedule();
-      setHasAttemptedInitialLoad(true);
+    // This effect runs when fetchedViewableSchedule (data from query) changes
+    // or if the query is loading (to potentially show loading state or clear old data faster).
+    // If filters are not complete, fetchedViewableSchedule will be undefined due to query being disabled.
+    if (selectedServiceIdView && selectedMonthView && selectedYearView) {
+      setViewableScheduleData(fetchedViewableSchedule ?? null);
+    } else {
+      setViewableScheduleData(null); // Ensure data is cleared if filters become incomplete
     }
-  }, [selectedServiceIdView, selectedMonthView, selectedYearView, hasAttemptedInitialLoad, refetchViewableSchedule]);
+  }, [fetchedViewableSchedule, selectedServiceIdView, selectedMonthView, selectedYearView]);
 
 
   const selectedServiceForView = useMemo(() => {
@@ -106,7 +105,7 @@ export default function SchedulePage() {
 
   const handleLoadRefreshSchedule = () => {
     if (selectedServiceIdView && selectedYearView && selectedMonthView) {
-      refetchViewableSchedule();
+      manualRefetchViewableSchedule();
     } else {
         toast({
             variant: "destructive",
@@ -116,8 +115,8 @@ export default function SchedulePage() {
     }
   };
 
-  const archiveScheduleMutation = useMutation({ // Renamed mutation
-    mutationFn: archiveSchedule, // Use archiveSchedule
+  const archiveScheduleMutation = useMutation({
+    mutationFn: archiveSchedule,
     onSuccess: () => {
       toast({ title: "Horario Archivado", description: "El horario publicado ha sido archivado exitosamente." });
       setViewableScheduleData(null); 
@@ -132,14 +131,14 @@ export default function SchedulePage() {
     },
   });
 
-  const handleArchiveClick = () => { // Renamed handler
+  const handleArchiveClick = () => {
     if (viewableScheduleData) {
       setScheduleToArchiveId(viewableScheduleData.id);
       setIsArchiveDialogOpen(true);
     }
   };
 
-  const confirmArchive = () => { // Renamed handler
+  const confirmArchive = () => {
     if (scheduleToArchiveId) {
       archiveScheduleMutation.mutate(scheduleToArchiveId);
     }
@@ -227,8 +226,8 @@ export default function SchedulePage() {
             {viewableScheduleData && (
               <CardFooter className="border-t pt-4">
                 <Button
-                  variant="outline" // Changed from destructive to outline for archive action
-                  onClick={handleArchiveClick} // Use new handler
+                  variant="outline"
+                  onClick={handleArchiveClick}
                   disabled={isLoadingViewableSchedule || archiveScheduleMutation.isPending}
                   className="w-full md:w-auto"
                 >
@@ -252,7 +251,7 @@ export default function SchedulePage() {
                <AlertDescription>{(errorViewableSchedule as Error).message || "No se pudo cargar el horario seleccionado."}</AlertDescription>
              </Alert>
           )}
-          {!isLoadingViewableSchedule && !errorViewableSchedule && selectedServiceIdView && hasAttemptedInitialLoad && (
+          {!isLoadingViewableSchedule && !errorViewableSchedule && selectedServiceIdView && selectedMonthView && selectedYearView && (
             viewableScheduleData ? (
               <>
                 <InteractiveScheduleGrid
@@ -282,7 +281,7 @@ export default function SchedulePage() {
               </Alert>
             )
           )}
-          {(!selectedServiceIdView || !hasAttemptedInitialLoad && !isLoadingViewableSchedule && !viewableScheduleData) && ( 
+          {(!selectedServiceIdView || !selectedMonthView || !selectedYearView && !isLoadingViewableSchedule && !viewableScheduleData) && ( 
              <Alert variant="default" className="mt-4">
                 <Info className="h-5 w-5 mr-2"/>
                 <AlertTitle>Seleccione Filtros y Cargue</AlertTitle>
