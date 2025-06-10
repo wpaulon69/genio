@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, UploadCloud, FileText, Edit3, BookMarked } from 'lucide-react';
+import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, UploadCloud, FileText, Edit3, BookMarked, Trash2 } from 'lucide-react';
 import { generateAlgorithmicSchedule } from '@/lib/scheduler/algorithmic-scheduler';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -27,9 +27,13 @@ import {
     getDraftMonthlySchedule, 
     saveOrUpdateDraftSchedule, 
     publishSchedule,
-    generateScheduleKey 
+    generateScheduleKey,
+    dangerouslyDeleteAllSchedulesForKey 
 } from '@/lib/firebase/monthlySchedules';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
 
 const shiftGenerationConfigSchema = z.object({
   serviceId: z.string().min(1, "Debe seleccionar un servicio."),
@@ -53,6 +57,8 @@ const months = Array.from({ length: 12 }, (_, i) => ({
   value: (i + 1).toString(),
   label: format(new Date(currentYear, i), 'MMMM', { locale: es }),
 }));
+
+const TEST_DELETE_PASSWORD = "eliminarTEST123"; // Hardcoded for testing
 
 export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftGeneratorFormProps) {
   const { toast } = useToast();
@@ -85,6 +91,12 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const [configLoaded, setConfigLoaded] = useState(false);
   const [loadedConfigValues, setLoadedConfigValues] = useState<ShiftGenerationConfigFormData | null>(null);
   const [currentEditingSource, setCurrentEditingSource] = useState<'none' | 'published' | 'draft' | 'new'>('none');
+
+  // State for Delete Schedules Dialog
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
+  const [isDeletingSchedules, setIsDeletingSchedules] = useState(false);
 
 
   const { data: holidays = [], isLoading: isLoadingHolidays, error: errorHolidays } = useQuery<Holiday[]>({
@@ -389,6 +401,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     }
     setIsSaving(true);
     setError(null);
+    console.log(`[handleConfirmSave] Action: ${action}, Editing Source: ${currentEditingSource}`);
+    console.log(`[handleConfirmSave] currentLoadedDraftSchedule ID: ${currentLoadedDraftSchedule?.id}`);
+    console.log(`[handleConfirmSave] currentLoadedPublishedSchedule ID: ${currentLoadedPublishedSchedule?.id}`);
 
     const schedulePayloadBase = {
         scheduleKey: generateScheduleKey(loadedConfigValues.year, loadedConfigValues.month, loadedConfigValues.serviceId),
@@ -414,21 +429,19 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                         (currentEditingSource === 'published' && currentLoadedPublishedSchedule?.scoreBreakdown) ? { serviceRules: currentLoadedPublishedSchedule.scoreBreakdown.serviceRules, employeeWellbeing: currentLoadedPublishedSchedule.scoreBreakdown.employeeWellbeing } : 
                         undefined,
     };
-
-    console.log(`[handleConfirmSave] Action Type: ${action}, Editing Source: ${currentEditingSource}`);
-    console.log("[handleConfirmSave] currentLoadedDraftSchedule ID:", currentLoadedDraftSchedule?.id);
-    console.log("[handleConfirmSave] currentLoadedPublishedSchedule ID:", currentLoadedPublishedSchedule?.id);
-    // console.log("[handleConfirmSave] schedulePayloadBase:", JSON.stringify(schedulePayloadBase, null, 2));
+     console.log("[handleConfirmSave] schedulePayloadBase:", JSON.stringify(schedulePayloadBase.scheduleKey, null, 2));
 
     let savedSchedule: MonthlySchedule | null = null;
     try {
+        let draftIdToUseForUpdate: string | undefined = undefined;
         if (action === 'save_draft') {
-            let draftIdToUpdate: string | undefined = undefined;
             if (currentEditingSource === 'draft' && currentLoadedDraftSchedule) {
-                draftIdToUpdate = currentLoadedDraftSchedule.id;
+                draftIdToUseForUpdate = currentLoadedDraftSchedule.id;
             }
-            console.log(`[handleConfirmSave] Calling saveOrUpdateDraftSchedule with draftIdToUpdate: ${draftIdToUpdate}`);
-            savedSchedule = await saveOrUpdateDraftSchedule(schedulePayloadBase, draftIdToUpdate);
+            // If currentEditingSource is 'published' or 'new', draftIdToUseForUpdate remains undefined,
+            // so saveOrUpdateDraftSchedule will create a new draft or overwrite based on key.
+            console.log(`[handleConfirmSave] Calling saveOrUpdateDraftSchedule with draftIdToUseForUpdate: ${draftIdToUseForUpdate}`);
+            savedSchedule = await saveOrUpdateDraftSchedule(schedulePayloadBase, draftIdToUseForUpdate);
             setCurrentLoadedDraftSchedule(savedSchedule); 
             setCurrentEditingSource('draft'); 
             toast({ title: "Borrador Guardado", description: `El borrador para ${watchedSelectedService.name} - ${months.find(m=>m.value===loadedConfigValues.month)?.label}/${loadedConfigValues.year} se guardó.` });
@@ -480,7 +493,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         handleBackToConfig(); 
         resetScheduleState(); 
     } else {
-        console.warn("[handleConfirmSave] savedSchedule was null after try/catch. This implies an error occurred OR action type did not match.");
+        console.warn("[handleConfirmSave] savedSchedule was null after try/catch or action type did not match.");
     }
   };
 
@@ -501,8 +514,8 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
            currentFormValues.month !== loadedConfigValues.month ||
            currentFormValues.year !== loadedConfigValues.year;
   };
-
-  const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingConfig;
+  
+  const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingConfig || isDeletingSchedules;
   
   const canGenerate = configLoaded && (userChoiceForExisting === 'generate_new_draft' || (!currentLoadedPublishedSchedule && !currentLoadedDraftSchedule)) && !isFormSelectionChanged();
 
@@ -536,7 +549,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             icon: <FileText className="mr-2 h-4 w-4" />,
             variant: "outline"
         });
-    } else { 
+    } else { // currentEditingSource === 'new' or cases where loaded schedules are null
         options.push({
             label: "Guardar como Borrador",
             action: () => handleConfirmSave('save_draft'),
@@ -562,6 +575,65 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     }
     desc += "¿Qué desea hacer?";
     return desc;
+  };
+
+  const handleDeleteSchedulesRequest = () => {
+    if (!configLoaded || !loadedConfigValues) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Primero cargue una configuración (servicio, mes, año) para definir qué horarios eliminar."
+      });
+      return;
+    }
+    setDeletePassword('');
+    setDeleteErrorMessage(null);
+    setIsDeleteDialogOpen(true);
+  };
+  
+  const handleConfirmDeleteSchedules = async () => {
+    if (deletePassword !== TEST_DELETE_PASSWORD) {
+      setDeleteErrorMessage("Contraseña incorrecta.");
+      return;
+    }
+    if (!loadedConfigValues) { 
+      setDeleteErrorMessage("Configuración no cargada.");
+      return;
+    }
+  
+    setIsDeletingSchedules(true);
+    setDeleteErrorMessage(null);
+  
+    const { serviceId, month, year } = loadedConfigValues;
+    const scheduleKey = generateScheduleKey(year, month, serviceId);
+  
+    try {
+      const count = await dangerouslyDeleteAllSchedulesForKey(scheduleKey);
+      toast({
+        title: "Eliminación Exitosa (Test)",
+        description: `Se eliminaron ${count} horarios para la clave ${scheduleKey}.`
+      });
+      queryClient.invalidateQueries({ queryKey: ['publishedMonthlySchedule', year, month, serviceId] });
+      queryClient.invalidateQueries({ queryKey: ['draftMonthlySchedule', year, month, serviceId] });
+      
+      resetScheduleState(); 
+      if (showGrid) {
+          handleBackToConfig(); 
+      }
+  
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Ocurrió un error desconocido.";
+      toast({
+        variant: "destructive",
+        title: "Error al Eliminar Horarios (Test)",
+        description: message
+      });
+      setDeleteErrorMessage(message);
+    } finally {
+      setIsDeletingSchedules(false);
+      setIsDeleteDialogOpen(false);
+      setDeletePassword(''); 
+    }
   };
 
 
@@ -669,6 +741,18 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                         </CardContent>
                     </Card>
                 )}
+                {configLoaded && !showInitialChoiceDialog && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleDeleteSchedulesRequest}
+                    disabled={isActionDisabled}
+                    className="w-full mt-2"
+                  >
+                    {isDeletingSchedules ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    Eliminar Horarios (TEST)
+                  </Button>
+                )}
               </CardFooter>
               </form>
             </Form>
@@ -727,7 +811,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
          </CardFooter>
       )}
 
-      <AlertDialog open={showInitialChoiceDialog} onOpenChange={(open) => { if (!open && (isSaving || isGenerating || isLoadingConfig)) return; setShowInitialChoiceDialog(open); if(!open && userChoiceForExisting === null) { resetScheduleState(); }}}>
+      <AlertDialog open={showInitialChoiceDialog} onOpenChange={(open) => { if (!open && (isSaving || isGenerating || isLoadingConfig || isDeletingSchedules)) return; setShowInitialChoiceDialog(open); if(!open && userChoiceForExisting === null) { resetScheduleState(); }}}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Horario(s) Existente(s) Encontrado(s)</AlertDialogTitle>
@@ -778,7 +862,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
                     disabled={isSaving}
                     className="w-full justify-start text-left"
                 >
-                    {isSaving && getSaveDialogOptions().find(o => o.label === opt.label)?.action === opt.action  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : opt.icon}
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : opt.icon}
                     {opt.label}
                 </Button>
             ))}
@@ -789,8 +873,47 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar Horarios (Modo Test)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará PERMANENTEMENTE todos los horarios (borradores, publicados, archivados) para el servicio
+              <strong> {loadedConfigValues ? allServices.find(s => s.id === loadedConfigValues.serviceId)?.name : ''}</strong> para
+              <strong> {loadedConfigValues ? (months.find(m => m.value === loadedConfigValues.month)?.label + ' ' + loadedConfigValues.year) : ''}</strong>.
+              <br />
+              Esta operación no se puede deshacer. Ingrese la contraseña de prueba para continuar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="delete-password">Contraseña de Prueba</Label>
+            <Input
+              id="delete-password"
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              placeholder="Ingrese la contraseña"
+              disabled={isDeletingSchedules}
+            />
+            {deleteErrorMessage && (
+              <p className="text-sm text-destructive">{deleteErrorMessage}</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingSchedules}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteSchedules}
+              disabled={isDeletingSchedules || !deletePassword || deletePassword !== TEST_DELETE_PASSWORD}
+              variant="destructive"
+            >
+              {isDeletingSchedules ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Confirmar Eliminación
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </Card>
   );
 }
-
     

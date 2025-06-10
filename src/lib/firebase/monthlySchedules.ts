@@ -239,7 +239,7 @@ export const saveOrUpdateDraftSchedule = async (
   scheduleData: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'>,
   existingDraftIdToUpdate?: string
 ): Promise<MonthlySchedule> => {
-  console.log("[saveOrUpdateDraftSchedule] Called with data:", JSON.stringify(scheduleData, null, 2), "existingDraftIdToUpdate:", existingDraftIdToUpdate);
+  console.log("[saveOrUpdateDraftSchedule] Called with data:", JSON.stringify(scheduleData.scheduleKey, null, 2), "existingDraftIdToUpdate:", existingDraftIdToUpdate);
   const schedulesCol = collection(db, MONTHLY_SCHEDULES_COLLECTION);
   const scheduleKey = generateScheduleKey(scheduleData.year, scheduleData.month, scheduleData.serviceId);
 
@@ -257,13 +257,13 @@ export const saveOrUpdateDraftSchedule = async (
 
   try {
     if (existingDraftIdToUpdate) {
-      console.log(`[saveOrUpdateDraftSchedule] Updating existing draft ID: ${existingDraftIdToUpdate}`);
+      console.log(`[saveOrUpdateDraftSchedule] Attempting to update existing draft ID: ${existingDraftIdToUpdate}`);
       const draftDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, existingDraftIdToUpdate);
       const existingDocSnap = await getDoc(draftDocRef);
       if (existingDocSnap.exists()) {
           versionToReturn = existingDocSnap.data().version || 1; 
           createdAtToReturn = existingDocSnap.data().createdAt || serverTimestamp(); 
-          console.log(`[saveOrUpdateDraftSchedule] Existing draft found. Version: ${versionToReturn}, CreatedAt preserved.`);
+          console.log(`[saveOrUpdateDraftSchedule] Existing draft found. Version: ${versionToReturn}, CreatedAt preserved. Updating it.`);
       } else {
           console.warn(`[saveOrUpdateDraftSchedule] existingDraftIdToUpdate ${existingDraftIdToUpdate} provided, but doc not found. Will create new.`);
           draftIdToReturn = undefined; // Clear it so a new doc is created
@@ -288,9 +288,10 @@ export const saveOrUpdateDraftSchedule = async (
         await updateDoc(existingDoc.ref, cleanDataForFirestore({ ...dataToSave, version: versionToReturn, createdAt: createdAtToReturn }));
       } else { 
         console.log(`[saveOrUpdateDraftSchedule] No existing draft by key. Creating new draft with version 1.`);
-        const newDocRef = await addDoc(schedulesCol, cleanDataForFirestore({ ...dataToSave, version: 1, createdAt: serverTimestamp() }));
+        versionToReturn = 1; // Ensure new draft starts at v1 if no other versions exist for this key
+        createdAtToReturn = serverTimestamp();
+        const newDocRef = await addDoc(schedulesCol, cleanDataForFirestore({ ...dataToSave, version: versionToReturn, createdAt: createdAtToReturn }));
         draftIdToReturn = newDocRef.id;
-        versionToReturn = 1;
       }
     }
 
@@ -327,7 +328,7 @@ export const publishSchedule = async (
   scheduleDataToPublish: Omit<MonthlySchedule, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'status'>,
   draftIdBeingPublished?: string 
 ): Promise<MonthlySchedule> => {
-  console.log("[publishSchedule] Called with data:", JSON.stringify(scheduleDataToPublish, null, 2), "draftIdBeingPublished:", draftIdBeingPublished);
+  console.log("[publishSchedule] Called with data for key:", JSON.stringify(scheduleDataToPublish.scheduleKey, null, 2), "draftIdBeingPublished:", draftIdBeingPublished);
   const batch = writeBatch(db);
   const schedulesCol = collection(db, MONTHLY_SCHEDULES_COLLECTION);
   const scheduleKey = generateScheduleKey(scheduleDataToPublish.year, scheduleDataToPublish.month, scheduleDataToPublish.serviceId);
@@ -339,7 +340,7 @@ export const publishSchedule = async (
     schedulesCol,
     where('scheduleKey', '==', scheduleKey),
     where('status', '==', 'published'),
-    orderBy('version', 'desc'), // Ensure we get the latest if multiple somehow exist
+    orderBy('version', 'desc'), 
     limit(1)
   );
   const publishedSnapshot = await getDocs(publishedQuery);
@@ -368,7 +369,7 @@ export const publishSchedule = async (
   if (draftIdBeingPublished) {
     console.log(`[publishSchedule] Archiving draft ID: ${draftIdBeingPublished}`);
     const draftDocRef = doc(db, MONTHLY_SCHEDULES_COLLECTION, draftIdBeingPublished);
-    const draftSnap = await getDoc(draftDocRef); // Check if draft exists before trying to update
+    const draftSnap = await getDoc(draftDocRef); 
     if (draftSnap.exists()) {
         batch.update(draftDocRef, { status: 'archived', updatedAt: serverTimestamp() });
     } else {
@@ -508,4 +509,41 @@ export const archiveSchedule = async (scheduleId: string): Promise<void> => {
   }
 };
 
+
+/**
+ * Elimina PERMANENTEMENTE todos los horarios (borradores, publicados, archivados)
+ * que coincidan con una `scheduleKey` específica.
+ * Esta es una operación peligrosa y solo debe usarse con fines de prueba/desarrollo.
+ *
+ * @async
+ * @param {string} scheduleKey - La clave del horario (YYYY-MM-ServiceID) para la cual se eliminarán todos los documentos.
+ * @returns {Promise<number>} Una promesa que se resuelve con el número de horarios eliminados.
+ * @throws {Error} Si falla la operación de eliminación.
+ */
+export const dangerouslyDeleteAllSchedulesForKey = async (scheduleKey: string): Promise<number> => {
+  console.warn(`[DANGEROUS_OPERATION] Attempting to delete all schedules for key: ${scheduleKey}`);
+  const schedulesCol = collection(db, MONTHLY_SCHEDULES_COLLECTION);
+  const q = query(schedulesCol, where('scheduleKey', '==', scheduleKey));
+
+  try {
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      console.log(`[DANGEROUS_OPERATION] No schedules found for key ${scheduleKey} to delete.`);
+      return 0;
+    }
+
+    const batch = writeBatch(db);
+    snapshot.docs.forEach(document => { // Changed doc to document to avoid conflict with outer scope
+      console.log(`[DANGEROUS_OPERATION] Adding deletion of doc ID: ${document.id} (Status: ${document.data().status}, Version: ${document.data().version}) to batch.`);
+      batch.delete(document.ref);
+    });
+
+    await batch.commit();
+    console.log(`[DANGEROUS_OPERATION] Successfully deleted ${snapshot.docs.length} schedules for key ${scheduleKey}.`);
+    return snapshot.docs.length;
+  } catch (error) {
+    console.error(`[DANGEROUS_OPERATION] Error deleting schedules for key ${scheduleKey}:`, error);
+    throw new Error(`Failed to delete schedules for key ${scheduleKey}: ${(error as Error).message}`);
+  }
+};
     
