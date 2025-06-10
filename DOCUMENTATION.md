@@ -1,3 +1,4 @@
+
 # ShiftFlow - Documentación del Proyecto
 
 ## 1. Introducción
@@ -75,18 +76,26 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
 
 ### 4.1. Gestión de Servicios
 - Permite definir y administrar los diferentes servicios del hospital (ej. Emergencias, Cardiología).
-- Cada servicio tiene reglas de dotación de personal (cuántos empleados por turno en días de semana y fines de semana/feriados), si habilita turno noche, y reglas de consecutividad de trabajo/descanso.
+- Cada servicio tiene reglas de dotación de personal (cuántos empleados por turno en días de semana y fines de semana/feriados), si habilita turno noche, reglas de consecutividad de trabajo/descanso, y un objetivo de fines de semana completos de descanso al mes.
 - **Componentes Clave:** `src/app/services/page.tsx`, `src/components/services/service-form.tsx`, `src/components/services/service-list.tsx`.
 - **Datos Firebase:** Colección `services`. Ver `src/lib/firebase/services.ts` para detalles de la interacción.
+- **Campos del Servicio:**
+    - `name`: Nombre del servicio.
+    - `description`: Descripción.
+    - `enableNightShift`: Booleano que indica si se habilita el turno noche (N).
+    - `staffingNeeds`: Objeto con la dotación requerida para turnos Mañana/Tarde/Noche en días de semana y fines de semana/feriados.
+    - `consecutivenessRules`: Objeto con reglas sobre máximos/preferidos días de trabajo/descanso consecutivos y mínimo de descansos antes de volver a trabajar.
+    - `targetCompleteWeekendsOff`: Número objetivo de fines de semana completos (Sábado + Domingo) de descanso que se busca dar a los empleados de este servicio por mes.
+    - `additionalNotes`: Notas adicionales o reglas específicas del servicio.
 
 ### 4.2. Gestión de Empleados
 - Mantiene un directorio del personal del hospital.
 - Cada empleado tiene información de contacto, roles, servicios a los que puede ser asignado.
 - **Preferencias del Empleado:**
-    - **Elegibilidad para día libre post-guardia (D/D):** Esta preferencia se registra para cada empleado. Sin embargo, es importante notar que el algoritmo de generación de horarios actual (`src/lib/scheduler/algorithmic-scheduler.ts`) **no utiliza explícitamente esta preferencia** para forzar un día de descanso después de un turno específico (ej. Noche). La asignación de descansos se basa en las reglas generales de consecutividad del servicio, las asignaciones fijas y la necesidad de cubrir turnos. Esta podría ser un área de mejora futura para el algoritmo.
-    - Preferencia por trabajar fines de semana.
-    - Patrón de trabajo general (Rotación Estándar, L-V Mañana Fijo, L-V Tarde Fijo).
-    - Turno fijo semanal (días y horario específico, si aplica para Rotación Estándar).
+    - **Elegibilidad para día libre post-guardia (D/D):** Esta preferencia (`eligibleForDayOffAfterDuty`) se registra para cada empleado. Sin embargo, es importante notar que el algoritmo de generación de horarios actual (`src/lib/scheduler/algorithmic-scheduler.ts`) **no utiliza explícitamente esta preferencia** para forzar un día de descanso después de un turno específico (ej. Noche). La asignación de descansos se basa en las reglas generales de consecutividad del servicio, las asignaciones fijas y la necesidad de cubrir turnos. Esta podría ser un área de mejora futura para el algoritmo.
+    - Preferencia por trabajar fines de semana (`prefersWeekendWork`).
+    - Patrón de trabajo general (`workPattern`: Rotación Estándar, L-V Mañana Fijo, L-V Tarde Fijo).
+    - Turno fijo semanal (`fixedWeeklyShiftDays`, `fixedWeeklyShiftTiming`): Días y horario específico, si aplica para Rotación Estándar.
 - **Asignaciones Fijas:** Permite registrar periodos de descanso (D), licencias anuales (LAO) o médicas (LM) para un empleado.
 - **Componentes Clave:** `src/app/employees/page.tsx`, `src/components/employees/employee-form.tsx`, `src/components/employees/employee-list.tsx`.
 - **Datos Firebase:** Colección `employees`. Ver `src/lib/firebase/employees.ts` para detalles de la interacción. Los datos se limpian antes de guardarse y se aplican valores por defecto para campos opcionales.
@@ -103,7 +112,7 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
     - Un borrador puede ser **publicado** (`published`), convirtiéndose en el horario activo para un servicio/mes/año. Solo puede haber un horario publicado.
     - Al publicar un nuevo horario, la versión publicada anterior (si existía) se **archiva** (`archived`). Los borradores también se archivan si se publican o se sobrescriben por un nuevo borrador.
 - **Generación Algorítmica:** Utiliza un planificador algorítmico (`src/lib/scheduler/algorithmic-scheduler.ts`) para crear horarios basándose en:
-    - Reglas del servicio.
+    - Reglas del servicio (incluyendo `targetCompleteWeekendsOff`, aunque su lógica de aplicación en el algoritmo está pendiente).
     - Preferencias y asignaciones fijas de los empleados.
     - Feriados.
     - Continuidad con el horario del mes anterior.
@@ -137,18 +146,18 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
 
 ### 5.2. Componentes de UI Genéricos (ShadCN)
 La aplicación utiliza una variedad de componentes de `src/components/ui/` que son en su mayoría componentes estilizados de ShadCN UI. Algunos de los más utilizados son:
-- **`Button`**: Para acciones del usuario.
-- **`Card`**: Para agrupar contenido relacionado.
-- **`Dialog`**: Para modales y formularios emergentes.
-- **`Select`**: Para menús desplegables.
-- **`Table`**: Para mostrar datos tabulares.
+- **`Button`**: Para acciones del usuario. (Ver documentación en `src/components/ui/button.tsx`)
+- **`Card`**: Para agrupar contenido relacionado. (Ver documentación en `src/components/ui/card.tsx`)
+- **`Dialog`**: Para modales y formularios emergentes. (Ver documentación en `src/components/ui/dialog.tsx`)
+- **`Select`**: Para menús desplegables. (Ver documentación en `src/components/ui/select.tsx`)
+- **`Table`**: Para mostrar datos tabulares. (Ver documentación en `src/components/ui/table.tsx`)
 - **`Input`**, **`Textarea`**, **`Checkbox`**: Para formularios.
 - **`Alert`**: Para mostrar mensajes importantes.
 - **`Toast`**: Para notificaciones no intrusivas.
-- La documentación detallada de cada uno de estos componentes se encuentra en la [documentación oficial de ShadCN UI](https://ui.shadcn.com/docs).
+- La documentación detallada de cada uno de estos componentes se encuentra en la [documentación oficial de ShadCN UI](https://ui.shadcn.com/docs) y en los comentarios JSDoc dentro de cada archivo de componente en `src/components/ui/`.
 
 ### 5.3. Componentes Específicos de la Aplicación
-Los componentes específicos de cada módulo (ej. `service-form.tsx`, `employee-list.tsx`, `InteractiveScheduleGrid.tsx`) se encuentran en sus respectivas carpetas dentro de `src/components/`. Estos combinan componentes de ShadCN UI y lógica de React para implementar las funcionalidades requeridas.
+Los componentes específicos de cada módulo (ej. `service-form.tsx`, `employee-list.tsx`, `InteractiveScheduleGrid.tsx`) se encuentran en sus respectivas carpetas dentro de `src/components/`. Estos combinan componentes de ShadCN UI y lógica de React para implementar las funcionalidades requeridas. Los comentarios JSDoc en cada archivo proporcionan más detalles.
 
 ## 6. Firebase
 - **Firestore:** Utilizado como base de datos principal. Las colecciones principales son:
@@ -180,8 +189,10 @@ Los componentes específicos de cada módulo (ej. `service-form.tsx`, `employee-
 - Notificaciones (ej. cuando un horario está por vencer, o cuando se publica uno nuevo).
 - Más tipos de informes y analíticas avanzadas.
 - Integración con calendarios externos.
-- Mejora del algoritmo de generación de horarios para considerar más preferencias de forma explícita (ej. `eligibleForDayOffAfterDuty`).
+- Mejora del algoritmo de generación de horarios para considerar más preferencias de forma explícita (ej. `eligibleForDayOffAfterDuty`, `targetCompleteWeekendsOff`).
 
 ---
 
 _Este documento se actualizará a medida que la aplicación evolucione._
+
+    

@@ -340,6 +340,10 @@ export interface Service {
   staffingNeeds: StaffingNeeds;
   /** Reglas de consecutividad de trabajo y descanso. */
   consecutivenessRules?: ConsecutivenessRules;
+  /** Objetivo numérico de fines de semana completos (Sáb+Dom) de descanso por mes para los empleados. */
+  targetCompleteWeekendsOff?: number;
   /** Notas adicionales o reglas específicas del servicio. */
   additionalNotes?: string;
 }
+
+    

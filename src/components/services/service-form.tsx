@@ -13,7 +13,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-// ScrollArea ya no se usará aquí, se usará overflow-y-auto
 import { Separator } from '@/components/ui/separator';
 
 /** Esquema de validación para las necesidades de personal. */
@@ -48,6 +47,7 @@ const serviceSchema = z.object({
   enableNightShift: z.boolean(),
   staffingNeeds: staffingNeedsSchema,
   consecutivenessRules: consecutivenessRulesSchema.optional(),
+  targetCompleteWeekendsOff: z.coerce.number().int().min(0, { message: "Debe ser 0 o más." }).max(5, { message: "No puede ser más de 5."}).optional(),
   additionalNotes: z.string().optional(),
 });
 
@@ -87,6 +87,8 @@ const defaultStaffingNeeds: StaffingNeeds = {
   nightWeekendHoliday: 0,
 };
 
+const defaultTargetCompleteWeekendsOff = 1;
+
 /**
  * `ServiceForm` es un componente de diálogo modal utilizado para crear o editar servicios.
  * Utiliza `react-hook-form` para la gestión del formulario y `zod` para la validación.
@@ -107,6 +109,7 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
       enableNightShift: false,
       staffingNeeds: { ...defaultStaffingNeeds },
       consecutivenessRules: { ...defaultConsecutivenessRules },
+      targetCompleteWeekendsOff: defaultTargetCompleteWeekendsOff,
       additionalNotes: '',
     },
   });
@@ -123,6 +126,7 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
           enableNightShift: service.enableNightShift || false,
           staffingNeeds: service.staffingNeeds || { ...defaultStaffingNeeds },
           consecutivenessRules: service.consecutivenessRules || { ...defaultConsecutivenessRules },
+          targetCompleteWeekendsOff: service.targetCompleteWeekendsOff === undefined ? defaultTargetCompleteWeekendsOff : service.targetCompleteWeekendsOff,
           additionalNotes: service.additionalNotes || '',
         });
       } else {
@@ -132,6 +136,7 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
           enableNightShift: false,
           staffingNeeds: { ...defaultStaffingNeeds },
           consecutivenessRules: { ...defaultConsecutivenessRules },
+          targetCompleteWeekendsOff: defaultTargetCompleteWeekendsOff,
           additionalNotes: '',
         });
       }
@@ -152,6 +157,7 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
       finalData.staffingNeeds.nightWeekendHoliday = 0;
     }
     finalData.consecutivenessRules = data.consecutivenessRules || { ...defaultConsecutivenessRules };
+    finalData.targetCompleteWeekendsOff = data.targetCompleteWeekendsOff === undefined ? defaultTargetCompleteWeekendsOff : data.targetCompleteWeekendsOff;
     
     onSubmit({
       id: service?.id || '',
@@ -248,7 +254,7 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
                   
                   <Separator className="my-6" />
 
-                  <h3 className="text-lg font-medium">Reglas de Consecutividad</h3>
+                  <h3 className="text-lg font-medium">Reglas de Planificación</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                       <div className="space-y-3 p-4 border rounded-md">
                           <FormField control={form.control} name="consecutivenessRules.maxConsecutiveWorkDays" render={({ field }) => (
@@ -266,9 +272,18 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
                               <FormItem><FormLabel>Días Descanso Consecutivos Preferidos</FormLabel><FormControl><Input type="number" placeholder="2" {...field} disabled={isLoading} /></FormControl><FormMessage /></FormItem>
                           )} />
                       </div>
-                       <div className="space-y-3 p-4 border rounded-md md:col-span-2">
+                       <div className="space-y-3 p-4 border rounded-md">
                            <FormField control={form.control} name="consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork" render={({ field }) => (
                               <FormItem><FormLabel>Mín. Descansos Requeridos Antes de Trabajar</FormLabel><FormControl><Input type="number" placeholder="1" {...field} disabled={isLoading} /></FormControl><FormMessage /></FormItem>
+                          )} />
+                      </div>
+                      <div className="space-y-3 p-4 border rounded-md">
+                          <FormField control={form.control} name="targetCompleteWeekendsOff" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>FDS Descanso Completos Objetivo (Mensual)</FormLabel>
+                              <FormControl><Input type="number" placeholder="1" {...field} disabled={isLoading} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
                           )} />
                       </div>
                   </div>
@@ -310,3 +325,4 @@ export default function ServiceForm({ isOpen, onClose, onSubmit, service, isLoad
   );
 }
 
+    

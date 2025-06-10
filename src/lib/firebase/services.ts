@@ -38,8 +38,13 @@ const defaultConsecutivenessRules: ConsecutivenessRules = {
 };
 
 /**
+ * Valor por defecto para el objetivo de fines de semana completos de descanso.
+ */
+const defaultTargetCompleteWeekendsOff = 1;
+
+/**
  * Convierte un documento de Firestore (`QueryDocumentSnapshot`) a un objeto de tipo `Service`.
- * Aplica valores por defecto para `staffingNeeds` y `consecutivenessRules` si no están presentes en el documento.
+ * Aplica valores por defecto para `staffingNeeds`, `consecutivenessRules` y `targetCompleteWeekendsOff` si no están presentes en el documento.
  *
  * @param {QueryDocumentSnapshot<DocumentData>} snapshot - El snapshot del documento de Firestore.
  * @returns {Service} El objeto de servicio convertido.
@@ -54,6 +59,7 @@ const fromFirestore = (snapshot: QueryDocumentSnapshot<DocumentData>): Service =
     enableNightShift: data.enableNightShift || false,
     staffingNeeds: { ...defaultStaffingNeeds, ...data.staffingNeeds },
     consecutivenessRules: { ...defaultConsecutivenessRules, ...rulesFromServer },
+    targetCompleteWeekendsOff: data.targetCompleteWeekendsOff === undefined ? defaultTargetCompleteWeekendsOff : data.targetCompleteWeekendsOff,
     additionalNotes: data.additionalNotes || '',
   } as Service;
 };
@@ -86,6 +92,7 @@ export const addService = async (serviceData: Omit<Service, 'id'>): Promise<Serv
     ...serviceData,
     staffingNeeds: { ...defaultStaffingNeeds, ...serviceData.staffingNeeds },
     consecutivenessRules: { ...defaultConsecutivenessRules, ...serviceData.consecutivenessRules },
+    targetCompleteWeekendsOff: serviceData.targetCompleteWeekendsOff === undefined ? defaultTargetCompleteWeekendsOff : serviceData.targetCompleteWeekendsOff,
   };
   const cleanedData = cleanDataForFirestore(dataWithDefaults);
   const docRef = await addDoc(servicesCol, cleanedData);
@@ -96,6 +103,7 @@ export const addService = async (serviceData: Omit<Service, 'id'>): Promise<Serv
  * Actualiza un servicio existente en la base de datos.
  * Si se proporcionan `staffingNeeds` o `consecutivenessRules` parciales, se fusionan con los valores por defecto
  * para evitar borrar campos no especificados dentro de estos objetos anidados.
+ * Lo mismo aplica para `targetCompleteWeekendsOff`.
  * Limpia los datos antes de enviarlos a Firestore.
  *
  * @async
@@ -105,20 +113,20 @@ export const addService = async (serviceData: Omit<Service, 'id'>): Promise<Serv
  */
 export const updateService = async (serviceId: string, serviceData: Partial<Omit<Service, 'id'>>): Promise<void> => {
   const serviceDoc = doc(db, SERVICES_COLLECTION, serviceId);
-  // Ensure defaults are not accidentally wiped if partial data is sent for nested objects
   const updateData = { ...serviceData };
   if (serviceData.staffingNeeds) {
-    // It's important to fetch the existing service's staffingNeeds if we want to merge,
-    // or decide that partial updates to nested objects mean applying defaults for missing fields.
-    // For simplicity here, if serviceData.staffingNeeds is provided, it might overwrite the whole object.
-    // A more robust merge would fetch the document first.
-    // However, the current form sends the complete staffingNeeds object, so merging with default should be okay
-    // if some fields were somehow cleared in the form before sending.
     updateData.staffingNeeds = { ...defaultStaffingNeeds, ...serviceData.staffingNeeds };
   }
   if (serviceData.consecutivenessRules) {
     updateData.consecutivenessRules = { ...defaultConsecutivenessRules, ...serviceData.consecutivenessRules };
   }
+  if (serviceData.hasOwnProperty('targetCompleteWeekendsOff')) { // Check if the property itself is present, even if undefined
+    updateData.targetCompleteWeekendsOff = serviceData.targetCompleteWeekendsOff === undefined ? defaultTargetCompleteWeekendsOff : serviceData.targetCompleteWeekendsOff;
+  }
+  // Note: If targetCompleteWeekendsOff is not in serviceData, it won't be updated, existing value preserved.
+  // If it IS in serviceData and is explicitly undefined, it will be set to default.
+  // If it's in serviceData with a value, that value will be used.
+
   await updateDoc(serviceDoc, cleanDataForFirestore(updateData));
 };
 
@@ -133,3 +141,5 @@ export const deleteService = async (serviceId: string): Promise<void> => {
   const serviceDoc = doc(db, SERVICES_COLLECTION, serviceId);
   await deleteDoc(serviceDoc);
 };
+
+    
