@@ -14,15 +14,32 @@ import { cn } from "@/lib/utils"
 const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
->(({ className, children, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
-      {...props}
-    >{children}</table>
-  </div>
-))
+>(({ className, children, ...props }, ref) => {
+  // Filter out any children that are just whitespace or null/undefined
+  // to prevent hydration errors with <table>.
+  const validChildren = React.Children.toArray(children).filter(child => {
+    if (React.isValidElement(child)) {
+      return true;
+    }
+    // Filter out strings that are only whitespace
+    if (typeof child === 'string' && child.trim() === '') {
+      return false;
+    }
+    // Keep other primitive children like numbers if any, but filter null/undefined.
+    // This also effectively keeps non-empty strings.
+    return child != null;
+  });
+
+  return (
+    <div className="relative w-full overflow-auto">
+      <table
+        ref={ref}
+        className={cn("w-full caption-bottom text-sm", className)}
+        {...props}
+      >{validChildren}</table>
+    </div>
+  );
+});
 Table.displayName = "Table"
 
 /**
