@@ -85,7 +85,7 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
     - `enableNightShift`: Booleano que indica si se habilita el turno noche (N).
     - `staffingNeeds`: Objeto con la dotación requerida para turnos Mañana/Tarde/Noche en días de semana y fines de semana/feriados.
     - `consecutivenessRules`: Objeto con reglas sobre máximos/preferidos días de trabajo/descanso consecutivos y mínimo de descansos antes de volver a trabajar.
-    - `targetCompleteWeekendsOff`: Número objetivo de fines de semana completos (Sábado + Domingo) de descanso que se busca dar a los empleados de este servicio por mes.
+    - `targetCompleteWeekendsOff`: Número objetivo de fines de semana completos (Sábado + Domingo) de descanso que se busca dar a los empleados de este servicio por mes. El algoritmo de generación de horarios evalúa el cumplimiento de este objetivo y lo refleja en la puntuación y violaciones. También intenta suavemente favorecer este objetivo durante la asignación de turnos de fin de semana.
     - `additionalNotes`: Notas adicionales o reglas específicas del servicio.
 
 ### 4.2. Gestión de Empleados
@@ -112,7 +112,7 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
     - Un borrador puede ser **publicado** (`published`), convirtiéndose en el horario activo para un servicio/mes/año. Solo puede haber un horario publicado.
     - Al publicar un nuevo horario, la versión publicada anterior (si existía) se **archiva** (`archived`). Los borradores también se archivan si se publican o se sobrescriben por un nuevo borrador.
 - **Generación Algorítmica:** Utiliza un planificador algorítmico (`src/lib/scheduler/algorithmic-scheduler.ts`) para crear horarios basándose en:
-    - Reglas del servicio (incluyendo `targetCompleteWeekendsOff`, aunque su lógica de aplicación en el algoritmo está pendiente).
+    - Reglas del servicio (incluyendo `targetCompleteWeekendsOff`, cuyo cumplimiento se evalúa y se intenta favorecer suavemente durante la asignación).
     - Preferencias y asignaciones fijas de los empleados.
     - Feriados.
     - Continuidad con el horario del mes anterior.
@@ -189,10 +189,9 @@ Los componentes específicos de cada módulo (ej. `service-form.tsx`, `employee-
 - Notificaciones (ej. cuando un horario está por vencer, o cuando se publica uno nuevo).
 - Más tipos de informes y analíticas avanzadas.
 - Integración con calendarios externos.
-- Mejora del algoritmo de generación de horarios para considerar más preferencias de forma explícita (ej. `eligibleForDayOffAfterDuty`, `targetCompleteWeekendsOff`).
+- Mejora del algoritmo de generación de horarios para considerar más preferencias de forma explícita (ej. `eligibleForDayOffAfterDuty`).
+- Mejorar el algoritmo para que intente *activamente* cumplir con el objetivo `targetCompleteWeekendsOff` durante la asignación de turnos, no solo evaluarlo (esto ya se ha empezado a favorecer suavemente en la asignación actual).
 
 ---
 
 _Este documento se actualizará a medida que la aplicación evolucione._
-
-    
