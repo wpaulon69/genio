@@ -219,10 +219,15 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setCurrentLoadedPublishedSchedule(null);
     setCurrentLoadedDraftSchedule(null);
     setPreviousMonthSchedule(null);
-    setConfigLoaded(false);
-    setLoadedConfigValues(null);
+    // setConfigLoaded(false); // Resetting configLoaded to require explicit load action
+    // setLoadedConfigValues(null);
     setCurrentEditingSource('none');
     setError(null); 
+    
+    // Keep configLoaded and loadedConfigValues if we want the user to be able to immediately generate again for the same period
+    // For now, reset them to ensure a clean state for new operations.
+    setConfigLoaded(false);
+    setLoadedConfigValues(null);
   };
 
   const handleLoadConfiguration = async () => {
@@ -412,8 +417,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             toast({ title: "Horario Publicado", description: `El nuevo horario se publicó como activo.` });
         } else if (saveActionType === 'publish_modified_published') { 
             if (currentLoadedPublishedSchedule) {
-                 // This effectively creates a new published version, archiving the old one.
-                savedSchedule = await publishSchedule(schedulePayloadBase, undefined);
+                savedSchedule = await publishSchedule(schedulePayloadBase, undefined); 
                 setCurrentLoadedPublishedSchedule(savedSchedule);
                 setCurrentLoadedDraftSchedule(null); 
                 setCurrentEditingSource('published');
@@ -424,12 +428,6 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         }
 
         if (savedSchedule) {
-            setEditableShifts([...savedSchedule.shifts]);
-            setGeneratedResponseText(savedSchedule.responseText ?? null);
-            setGeneratedScore(savedSchedule.score ?? null);
-            setGeneratedViolations(savedSchedule.violations ?? null);
-            setGeneratedScoreBreakdown(savedSchedule.scoreBreakdown ?? null);
-            
             queryClient.invalidateQueries({ queryKey: ['publishedMonthlySchedule', watchedYear, watchedMonth, watchedServiceId] });
             queryClient.invalidateQueries({ queryKey: ['draftMonthlySchedule', watchedYear, watchedMonth, watchedServiceId] });
             
@@ -494,7 +492,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             action: () => { setSaveActionType('publish_modified_published'); handleConfirmSave(); },
             icon: <UploadCloud className="mr-2 h-4 w-4" />
         });
-         options.push({ // Guardar modificaciones del publicado como un nuevo borrador
+         options.push({ 
             label: "Guardar Cambios como Borrador Nuevo",
             action: () => { setSaveActionType('save_draft'); handleConfirmSave(); },
             icon: <FileText className="mr-2 h-4 w-4" />,
@@ -756,3 +754,4 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
+
