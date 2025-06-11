@@ -31,7 +31,7 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
   // Prioriza notas específicas para tipos no laborables
   if (note === 'C' || note === 'C (FRANCO COMP.)' || note?.includes('FRANCO COMP')) return 'C';
   if (note?.startsWith('F') || note?.includes('FERIADO')) return 'F';
-  if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO') || note === 'D (FIJO SEMANAL)') return 'D';
+  if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO') || note === 'D (FIJO SEMANAL)' || note === 'D (FDS OBJETIVO)') return 'D';
   if (note?.startsWith('LAO')) return 'LAO';
   if (note?.startsWith('LM')) return 'LM';
 
@@ -51,6 +51,29 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
   
   return ''; // Retorna vacío si no se puede determinar
 }
+
+/**
+ * Obtiene la clase CSS de Tailwind para el color de fondo de una celda de turno.
+ * @param {GridShiftType} shiftType - El tipo de turno (ej. 'M', 'T', 'D').
+ * @returns {string} La clase CSS correspondiente.
+ */
+const getShiftCellColorClass = (shiftType: GridShiftType): string => {
+  switch (shiftType) {
+    case 'M': return 'shift-m';
+    case 'T': return 'shift-t';
+    case 'N': return 'shift-n';
+    case 'D': return 'shift-d';
+    case 'F': return 'shift-f';
+    case 'C': return 'shift-c';
+    case 'LAO': return 'shift-lao';
+    case 'LM': return 'shift-lm';
+    case '_EMPTY_':
+    case '':
+    default:
+      return 'shift-empty';
+  }
+};
+
 
 /**
  * `InteractiveScheduleGrid` es un componente que muestra una grilla de horarios editable.
@@ -382,7 +405,12 @@ export default function InteractiveScheduleGrid({
                           onValueChange={(value) => handleShiftChange(employeeName, header.dayNumber, value as GridShiftType)}
                           disabled={isReadOnly}
                         >
-                          <SelectTrigger className="h-8 w-full text-xs px-2">
+                          <SelectTrigger 
+                            className={cn(
+                              "h-8 w-full text-xs px-2 font-medium rounded-sm",
+                              getShiftCellColorClass(currentShiftType)
+                            )}
+                          >
                             <SelectValue placeholder="-">
                               { (currentShiftType === '' || currentShiftType === '_EMPTY_' ? SHIFT_OPTIONS.find(opt => opt.value === "_EMPTY_") : selectedOption)
                                 ? (currentShiftType === '' || currentShiftType === '_EMPTY_' ? SHIFT_OPTIONS.find(opt => opt.value === "_EMPTY_")!.displayValue : selectedOption!.displayValue)
@@ -393,7 +421,7 @@ export default function InteractiveScheduleGrid({
                           <SelectContent>
                             {SHIFT_OPTIONS.map(opt => (
                               <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                                {opt.displayValue}
+                                {opt.displayValue} - {opt.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -459,3 +487,4 @@ export default function InteractiveScheduleGrid({
     </Card>
   );
 }
+    

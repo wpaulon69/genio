@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -30,8 +31,8 @@
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
 
-    /* Sidebar specific colors, can be adjusted if needed, defaults derived from theme */
-    --sidebar-background: 213 30% 92%; /* Slightly darker than main bg */
+    /* Sidebar specific colors */
+    --sidebar-background: 213 30% 92%; 
     --sidebar-foreground: 215 25% 27%;
     --sidebar-primary: 207 86% 65%;
     --sidebar-primary-foreground: 207 50% 15%;
@@ -39,6 +40,26 @@
     --sidebar-accent-foreground: 120 50% 15%;
     --sidebar-border: 213 25% 85%;
     --sidebar-ring: 207 86% 65%;
+
+    /* Shift specific colors - Light Theme */
+    --shift-m-background: 250 100% 90%; /* Light Lavender */
+    --shift-m-foreground: 250 50% 30%;
+    --shift-t-background: 30 100% 88%; /* Light Orange */
+    --shift-t-foreground: 30 60% 30%;
+    --shift-n-background: 210 60% 88%; /* Light Steel Blue */
+    --shift-n-foreground: 210 40% 25%;
+    --shift-d-background: 120 5% 90%;  /* Very Light Gray-Green */
+    --shift-d-foreground: 120 20% 30%;
+    --shift-f-background: 50 100% 85%; /* Light Yellow */
+    --shift-f-foreground: 50 50% 25%;
+    --shift-c-background: 300 50% 90%; /* Light Pink/Purple */
+    --shift-c-foreground: 300 30% 30%;
+    --shift-lao-background: 180 50% 88%; /* Light Cyan */
+    --shift-lao-foreground: 180 40% 28%;
+    --shift-lm-background: 0 50% 90%;   /* Light Red/Pink */
+    --shift-lm-foreground: 0 40% 30%;
+    --shift-empty-background: 213 20% 97%; /* Even Lighter Gray for empty */
+    --shift-empty-foreground: 215 15% 50%;
   }
 
   .dark {
@@ -68,7 +89,7 @@
     --chart-5: 340 75% 55%;
 
     /* Dark Sidebar specific colors */
-    --sidebar-background: 213 20% 10%; /* Darker than main dark bg */
+    --sidebar-background: 213 20% 10%; 
     --sidebar-foreground: 213 30% 88%;
     --sidebar-primary: 207 80% 65%;
     --sidebar-primary-foreground: 210 40% 98%;
@@ -76,6 +97,26 @@
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 213 20% 18%;
     --sidebar-ring: 207 80% 65%;
+
+    /* Shift specific colors - Dark Theme */
+    --shift-m-background: 250 30% 25%; /* Darker Lavender */
+    --shift-m-foreground: 250 80% 85%;
+    --shift-t-background: 30 40% 22%;  /* Darker Orange */
+    --shift-t-foreground: 30 90% 80%;
+    --shift-n-background: 210 35% 20%; /* Darker Steel Blue */
+    --shift-n-foreground: 210 70% 85%;
+    --shift-d-background: 120 10% 18%; /* Dark Gray-Green */
+    --shift-d-foreground: 120 40% 75%;
+    --shift-f-background: 50 40% 20%;  /* Dark Yellow */
+    --shift-f-foreground: 50 90% 78%;
+    --shift-c-background: 300 25% 23%; /* Dark Pink/Purple */
+    --shift-c-foreground: 300 70% 83%;
+    --shift-lao-background: 180 30% 20%; /* Dark Cyan */
+    --shift-lao-foreground: 180 70% 82%;
+    --shift-lm-background: 0 30% 22%;   /* Dark Red/Pink */
+    --shift-lm-foreground: 0 70% 83%;
+    --shift-empty-background: 213 15% 15%; /* Darker Gray for empty */
+    --shift-empty-foreground: 213 25% 65%;
   }
 }
 
@@ -85,6 +126,18 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* font-family is set by Inter in layout.tsx and tailwind.config.ts */
   }
 }
+
+@layer components {
+  .shift-m { @apply bg-[hsl(var(--shift-m-background))] text-[hsl(var(--shift-m-foreground))]; }
+  .shift-t { @apply bg-[hsl(var(--shift-t-background))] text-[hsl(var(--shift-t-foreground))]; }
+  .shift-n { @apply bg-[hsl(var(--shift-n-background))] text-[hsl(var(--shift-n-foreground))]; }
+  .shift-d { @apply bg-[hsl(var(--shift-d-background))] text-[hsl(var(--shift-d-foreground))]; }
+  .shift-f { @apply bg-[hsl(var(--shift-f-background))] text-[hsl(var(--shift-f-foreground))]; }
+  .shift-c { @apply bg-[hsl(var(--shift-c-background))] text-[hsl(var(--shift-c-foreground))]; }
+  .shift-lao { @apply bg-[hsl(var(--shift-lao-background))] text-[hsl(var(--shift-lao-foreground))]; }
+  .shift-lm { @apply bg-[hsl(var(--shift-lm-background))] text-[hsl(var(--shift-lm-foreground))]; }
+  .shift-empty { @apply bg-[hsl(var(--shift-empty-background))] text-[hsl(var(--shift-empty-foreground))]; }
+}
+    
