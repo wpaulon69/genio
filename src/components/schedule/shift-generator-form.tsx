@@ -1,5 +1,5 @@
 
-// Unique comment to force re-evaluation: 2024-08-01-ULTRA-PERSISTENT-FIX-SIMPLIFY-MORE-JSX-TEST
+// Unique comment for final re-evaluation check: 2024-08-01-SIMPLIFY-MORE-JSX-TEST-FINAL
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -131,31 +131,31 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       setDisplayInfoText('Cargando feriados...');
       return;
     }
-    if (errorHolidays) {
+    if (errorHolidays && errorHolidays instanceof Error) {
       setDisplayInfoText('Error cargando feriados. Detalles en consola.');
-      console.error("Error cargando feriados:", (errorHolidays as Error).message);
+      console.error("Error cargando feriados:", errorHolidays.message);
       return;
     }
 
     if (configLoaded && loadedConfigValues && watchedSelectedService) {
-      let info = 'Config cargada: ' + watchedSelectedService.name + ' (' + (months.find(m => m.value === loadedConfigValues.month)?.label || loadedConfigValues.month) + '/' + loadedConfigValues.year + ').' + NL;
-      info += 'Publicado: ' + (currentLoadedPublishedSchedule ? 'Sí' : 'No') + '. ';
-      info += 'Borrador: ' + (currentLoadedDraftSchedule ? 'Sí' : 'No') + '.' + NL;
+        let info = 'Config cargada: ' + watchedSelectedService.name + ' (' + (months.find(m => m.value === loadedConfigValues.month)?.label || loadedConfigValues.month) + '/' + loadedConfigValues.year + ').' + NL;
+        info += 'Publicado: ' + (currentLoadedPublishedSchedule ? 'Sí' : 'No') + '. ';
+        info += 'Borrador: ' + (currentLoadedDraftSchedule ? 'Sí' : 'No') + '.' + NL;
 
-      if (showInitialChoiceDialog) {
-        info += "Esperando selección...";
-      } else if (userChoiceForExisting === 'modify_published') {
-        info += "Modificando Publicado.";
-      } else if (userChoiceForExisting === 'use_draft') {
-        info += "Modificando Borrador.";
-      } else if (userChoiceForExisting === 'generate_new_draft') {
-        info += "Listo para Generar Nuevo.";
-      }
-      setDisplayInfoText(info);
+        if (showInitialChoiceDialog) {
+          info += "Esperando selección...";
+        } else if (userChoiceForExisting === 'modify_published') {
+          info += "Modificando Publicado.";
+        } else if (userChoiceForExisting === 'use_draft') {
+          info += "Modificando Borrador.";
+        } else if (userChoiceForExisting === 'generate_new_draft') {
+          info += "Listo para Generar Nuevo.";
+        }
+        setDisplayInfoText(info);
     } else if (watchedSelectedService && watchedMonth && watchedYear) {
-      setDisplayInfoText('Config: ' + watchedSelectedService.name + ' - ' + (months.find(m => m.value === watchedMonth)?.label || watchedMonth) + '/' + watchedYear + '. Cargar config.');
+        setDisplayInfoText('Config: ' + watchedSelectedService.name + ' - ' + (months.find(m => m.value === watchedMonth)?.label || watchedMonth) + '/' + watchedYear + '. Cargar config.');
     } else {
-      setDisplayInfoText('Seleccione servicio, mes y año, y cargue configuración.');
+        setDisplayInfoText('Seleccione servicio, mes y año, y cargue configuración.');
     }
   }, [
     configLoaded, loadedConfigValues, watchedSelectedService, watchedMonth, watchedYear,
@@ -424,7 +424,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             toast({ title: "Horario Publicado", description: `El nuevo horario se publicó como activo.` });
         } else if (action === 'publish_modified_published') {
             if (!currentLoadedPublishedSchedule) throw new Error("No hay horario publicado cargado para modificar y republicar.");
-            savedSchedule = await publishSchedule(schedulePayloadBase, undefined);
+            savedSchedule = await publishSchedule(schedulePayloadBase, undefined); // No specific draft ID needed, it archives old published
             setCurrentLoadedPublishedSchedule(savedSchedule);
             setCurrentLoadedDraftSchedule(null);
             setCurrentEditingSource('published');
@@ -457,7 +457,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   };
 
   const isFormSelectionChanged = () => {
-    if (!loadedConfigValues) return false;
+    if (!loadedConfigValues) return false; // If no config loaded yet, assume selection can change
     const currentFormValues = form.getValues();
     return currentFormValues.serviceId !== loadedConfigValues.serviceId ||
            currentFormValues.month !== loadedConfigValues.month ||
@@ -473,7 +473,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     } else if (currentEditingSource === 'published' && currentLoadedPublishedSchedule) {
         options.push({ label: "Publicar como Nueva Versión", action: () => handleConfirmSave('publish_modified_published'), icon: <UploadCloud className="mr-2 h-4 w-4" /> });
         options.push({ label: "Guardar Cambios como Borrador", action: () => handleConfirmSave('save_draft'), icon: <FileText className="mr-2 h-4 w-4" />, variant: "outline" });
-    } else {
+    } else { // 'new' or no specific source (e.g., after algo generation)
         options.push({ label: "Guardar como Borrador", action: () => handleConfirmSave('save_draft'), icon: <FileText className="mr-2 h-4 w-4" />, variant: "outline" });
         options.push({ label: "Guardar y Publicar", action: () => handleConfirmSave('publish_new_from_scratch'), icon: <UploadCloud className="mr-2 h-4 w-4" /> });
     }
@@ -481,12 +481,14 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   };
 
   const getInitialChoiceDialogDescription = () => {
-    let desc = "Horarios existentes encontrados. ";
+    let desc = "Horarios existentes encontrados para " +
+               `${watchedSelectedService?.name || 'Servicio Desconocido'} - ` +
+               `${months.find(m => m.value === loadedConfigValues?.month)?.label || loadedConfigValues?.month}/${loadedConfigValues?.year}. `;
     if (currentLoadedPublishedSchedule) {
-      desc += `Publicado (v${currentLoadedPublishedSchedule.version}). `;
+      desc += `Hay un horario PUBLICADO (v${currentLoadedPublishedSchedule.version}). `;
     }
     if (currentLoadedDraftSchedule) {
-      desc += `Borrador (v${currentLoadedDraftSchedule.version}). `;
+      desc += `Hay un BORRADOR (v${currentLoadedDraftSchedule.version}). `;
     }
     desc += "¿Qué acción desea realizar?";
     return desc;
@@ -521,9 +523,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       toast({ title: "Eliminación Exitosa (Test)", description: `Se eliminaron ${count} horarios para la clave ${scheduleKey}.` });
       queryClient.invalidateQueries({ queryKey: ['publishedMonthlySchedule', localYear, localMonth, serviceId] });
       queryClient.invalidateQueries({ queryKey: ['draftMonthlySchedule', localYear, localMonth, serviceId] });
-      resetScheduleState();
+      resetScheduleState(); // Resetea todo
       if (showGrid) {
-        handleBackToConfig();
+        handleBackToConfig(); // Vuelve a la vista de config si estaba en la grilla
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido.";
@@ -565,10 +567,264 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     violationsToDisplayInEval = currentLoadedPublishedSchedule.violations;
     breakdownToDisplayInEval = currentLoadedPublishedSchedule.scoreBreakdown;
   }
-
+  
   console.log("Preparing to render ShiftGeneratorForm");
   return (
-    <div>Test</div>
+    <Card className="w-full">
+      {!showGrid ? (
+        <>
+          <CardHeader>
+            <CardTitle className="font-headline">Configuración de Generación de Horario</CardTitle>
+            <CardDescription>
+              Seleccione el servicio, mes y año. Cargue la configuración para ver/editar borradores, horarios publicados o generar uno nuevo.
+            </CardDescription>
+          </CardHeader>
+          <Form {...form}>
+            <form> {/* No onSubmit aquí, los botones de acción manejan la lógica */}
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <FormField control={form.control} name="serviceId" render={({ field }) => (
+                    <FormItem> <FormLabel>Servicio</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingConfig}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar Servicio" /></SelectTrigger></FormControl>
+                        <SelectContent>{allServices.map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>)} />
+                  <FormField control={form.control} name="month" render={({ field }) => (
+                    <FormItem> <FormLabel>Mes</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingConfig}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger></FormControl>
+                        <SelectContent>{months.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>)} />
+                  <FormField control={form.control} name="year" render={({ field }) => (
+                    <FormItem> <FormLabel>Año</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingConfig}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Año" /></SelectTrigger></FormControl>
+                        <SelectContent>{years.map(y => (<SelectItem key={y} value={y}>{y}</SelectItem>))}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>)} />
+                </div>
+                <Button type="button" onClick={handleLoadConfiguration} className="w-full md:w-auto" disabled={isActionDisabled || !form.formState.isValid || isFormSelectionChanged()}>
+                  {isLoadingConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FilePlus2 className="mr-2 h-4 w-4" />}
+                  Cargar Configuración
+                </Button>
+                 {configLoaded && (
+                     <Button type="button" onClick={handleDeleteSchedulesRequest} variant="destructive" className="w-full md:w-auto ml-2" disabled={isActionDisabled || !configLoaded}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Eliminar Horarios (TEST)
+                    </Button>
+                 )}
+
+                {isFormSelectionChanged() && configLoaded && (
+                    <Alert variant="default" className="mt-2">
+                        <Info className="h-4 w-4" />
+                        <AlertTitle>Cambios en Selección</AlertTitle>
+                        <AlertDescription>
+                        La selección de servicio, mes o año ha cambiado. Recargue la configuración para aplicar.
+                        </AlertDescription>
+                    </Alert>
+                )}
+
+                {configLoaded && !showInitialChoiceDialog && (
+                  <div className="mt-4">
+                    <h3 className="font-semibold text-lg mb-2">Acciones Disponibles:</h3>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                       {(userChoiceForExisting === 'generate_new_draft' || (!currentLoadedPublishedSchedule && !currentLoadedDraftSchedule)) && (
+                        <Button
+                          type="button"
+                          onClick={() => handleGenerateSubmit(form.getValues())}
+                          className="flex-1"
+                          disabled={isActionDisabled || !canGenerate}
+                          variant="default"
+                        >
+                          {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                          Generar Nuevo Horario Algorítmico
+                        </Button>
+                       )}
+                        {(currentLoadedPublishedSchedule || currentLoadedDraftSchedule) && (
+                           <Alert variant="default" className="w-full">
+                                <BookMarked className="h-4 w-4"/>
+                                <AlertTitle>Horario Existente Cargado</AlertTitle>
+                                <AlertDescription>
+                                    {currentEditingSource === 'published' && 'Estás viendo/editando el horario PUBLICADO. '}
+                                    {currentEditingSource === 'draft' && 'Estás viendo/editando un BORRADOR. '}
+                                    {(currentEditingSource !== 'published' && currentEditingSource !== 'draft' && (userChoiceForExisting === 'generate_new_draft' || (!currentLoadedPublishedSchedule && !currentLoadedDraftSchedule))) && 'Puedes generar uno nuevo, o recargar la configuración si los filtros cambiaron.'}
+                                    Usa el botón "Ver/Editar Grilla" para modificarlo.
+                                </AlertDescription>
+                           </Alert>
+                        )}
+                    </div>
+                  </div>
+                )}
+
+                {error && <Alert variant="destructive" className="mt-4"><AlertTriangle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+                {generatedResponseText && !error && !showGrid && (
+                    <Alert variant="default" className="mt-4">
+                        <ClipboardCheck className="h-4 w-4"/>
+                        <AlertTitle>{generatedResponseText.startsWith("Evaluación") ? "Evaluación" : "Respuesta del Generador"}</AlertTitle>
+                        <AlertDescription className="whitespace-pre-wrap">{generatedResponseText}</AlertDescription>
+                    </Alert>
+                )}
+                 {displayInfoText && (
+                    <Alert variant="default" className="mt-4">
+                        <Info className="h-4 w-4"/>
+                        <AlertTitle>Estado Actual</AlertTitle>
+                        <AlertDescription className="whitespace-pre-wrap">{displayInfoText}</AlertDescription>
+                    </Alert>
+                )}
+
+              </CardContent>
+              <CardFooter className="flex-col items-start space-y-2 md:flex-row md:justify-between md:space-y-0">
+                <div>
+                {(editableShifts || algorithmGeneratedShifts) && configLoaded && (
+                    <Button type="button" onClick={() => setShowGrid(true)} variant="outline" disabled={isActionDisabled || !(editableShifts || algorithmGeneratedShifts)}>
+                        <Eye className="mr-2 h-4 w-4" /> Ver/Editar Grilla
+                    </Button>
+                )}
+                </div>
+                 <div>
+                {(editableShifts) && configLoaded && !showGrid && (
+                  <Button type="button" onClick={handleSaveGeneratedShiftsClick} variant="default" disabled={isActionDisabled || !editableShifts || editableShifts.length === 0}>
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Guardar Horario Actual
+                  </Button>
+                )}
+                </div>
+              </CardFooter>
+            </form>
+          </Form>
+        </>
+      ) : ( // Show Grid is true
+        <>
+          {editableShifts && watchedSelectedService && loadedConfigValues && (
+            <>
+              <InteractiveScheduleGrid
+                initialShifts={editableShifts}
+                allEmployees={allEmployees}
+                targetService={watchedSelectedService}
+                month={loadedConfigValues.month}
+                year={loadedConfigValues.year}
+                holidays={holidays}
+                onShiftsChange={setEditableShifts}
+                onBackToConfig={handleBackToConfig}
+              />
+              <div className="mt-4 flex flex-col sm:flex-row justify-between gap-2">
+                <Button onClick={handleReevaluateSchedule} variant="outline" disabled={isActionDisabled || isReevaluating}>
+                  {isReevaluating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Re-evaluar Horario
+                </Button>
+                <Button onClick={handleSaveGeneratedShiftsClick} variant="default" disabled={isActionDisabled || !editableShifts || editableShifts.length === 0}>
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Guardar Cambios del Horario
+                </Button>
+              </div>
+            </>
+          )}
+          {(scoreToDisplayInEval !== null || (violationsToDisplayInEval && violationsToDisplayInEval.length > 0) || breakdownToDisplayInEval) && (
+             <ScheduleEvaluationDisplay
+                score={scoreToDisplayInEval}
+                violations={violationsToDisplayInEval}
+                scoreBreakdown={breakdownToDisplayInEval}
+                context="generator"
+             />
+          )}
+          {error && <Alert variant="destructive" className="mt-4"><AlertTriangle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+          {generatedResponseText && !error && (
+            <Alert variant="default" className="mt-4">
+                <ClipboardCheck className="h-4 w-4"/>
+                <AlertTitle>{generatedResponseText.startsWith("Evaluación") ? "Resultado de Evaluación" : "Respuesta del Generador"}</AlertTitle>
+                <AlertDescription className="whitespace-pre-wrap">{generatedResponseText}</AlertDescription>
+            </Alert>
+          )}
+        </>
+      )}
+
+      <AlertDialog open={showInitialChoiceDialog} onOpenChange={setShowInitialChoiceDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Horario Existente Encontrado</AlertDialogTitle>
+            <AlertDialogDescription>{getInitialChoiceDialogDescription()}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => handleInitialChoice('generate_new_draft')} className="w-full sm:w-auto">
+                <FilePlus2 className="mr-2 h-4 w-4" /> Generar Borrador Nuevo
+            </Button>
+            {currentLoadedDraftSchedule && (
+              <Button variant="outline" onClick={() => handleInitialChoice('use_draft')} className="w-full sm:w-auto">
+                <Edit3 className="mr-2 h-4 w-4" /> Usar/Editar Borrador
+              </Button>
+            )}
+            {currentLoadedPublishedSchedule && (
+              <Button variant="default" onClick={() => handleInitialChoice('modify_published')} className="w-full sm:w-auto">
+                 <Edit className="mr-2 h-4 w-4" /> Cargar y Modificar Publicado
+              </Button>
+            )}
+            <AlertDialogCancel onClick={() => { setShowInitialChoiceDialog(false); resetScheduleState(); }} className="mt-2 sm:mt-0 w-full sm:w-auto">Cancelar</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Acción de Guardado</AlertDialogTitle>
+            <AlertDialogDescription>
+              Seleccione cómo desea guardar el horario actual para {watchedSelectedService?.name} - {months.find(m=>m.value===loadedConfigValues?.month)?.label}/{loadedConfigValues?.year}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col space-y-2 mt-4">
+            {getSaveDialogOptions().map(opt => (
+              <Button key={opt.label} variant={opt.variant || "default"} onClick={opt.action} disabled={isSaving}>
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : opt.icon}
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+          <AlertDialogFooter className="mt-4">
+            <AlertDialogCancel disabled={isSaving}>Cancelar</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>¡ADVERTENCIA! Eliminar Horarios (Solo Pruebas)</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Esta acción eliminará PERMANENTEMENTE <strong>TODOS</strong> los horarios (publicados, borradores, archivados) para
+                    la clave: <strong className="text-destructive">{loadedConfigValues ? generateScheduleKey(loadedConfigValues.year, loadedConfigValues.month, loadedConfigValues.serviceId) : 'N/A'}</strong>.
+                    Esta acción no se puede deshacer y es solo para fines de prueba.
+                    Escriba <code className="bg-muted px-1 py-0.5 rounded text-destructive font-mono">{TEST_DELETE_PASSWORD}</code> para confirmar.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-2">
+                <Label htmlFor="delete-password">Contraseña de Confirmación:</Label>
+                <Input
+                    id="delete-password"
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className={deleteErrorMessage ? "border-destructive focus-visible:ring-destructive" : ""}
+                    disabled={isDeletingSchedules}
+                />
+                {deleteErrorMessage && <p className="text-sm text-destructive">{deleteErrorMessage}</p>}
+            </div>
+            <AlertDialogFooter className="mt-4">
+                <AlertDialogCancel disabled={isDeletingSchedules}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                    onClick={handleConfirmDeleteSchedules}
+                    disabled={deletePassword !== TEST_DELETE_PASSWORD || isDeletingSchedules}
+                    className="bg-destructive hover:bg-destructive/90"
+                >
+                    {isDeletingSchedules ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    Sí, Eliminar TODO para esta Clave
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+
+    </Card>
   );
 }
-// Unique comment for final re-evaluation check: 2024-08-01-SIMPLIFY-MORE-JSX-TEST-FINAL
+// Unique comment to force re-evaluation: 2024-08-01-ULTRA-PERSISTENT-FIX-SIMPLIFY-MORE-JSX-TEST-FINAL-RESTORED
