@@ -59,6 +59,7 @@ const months = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 const TEST_DELETE_PASSWORD = "eliminarTEST123";
+const NL = '\n'; // Newline constant
 
 export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftGeneratorFormProps) {
   const { toast } = useToast();
@@ -130,44 +131,44 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       const monthStart = startOfMonth(monthDate);
       const monthEnd = endOfMonth(monthDate);
 
-      let info = `Resumen para generar horario para el servicio: ${watchedSelectedService.name}\n`;
-      info += `Mes: ${months.find(m => m.value === watchedMonth)?.label || watchedMonth}, Año: ${watchedYear}\n\n`;
-      info += "Reglas del Servicio:\n";
-      info += `- Dotación Días de Semana: Mañana=${watchedSelectedService.staffingNeeds.morningWeekday}, Tarde=${watchedSelectedService.staffingNeeds.afternoonWeekday}${watchedSelectedService.enableNightShift ? `, Noche=${watchedSelectedService.staffingNeeds.nightWeekday}` : ''}\n`;
-      info += `- Dotación Fin de Semana/Feriados: Mañana=${watchedSelectedService.staffingNeeds.morningWeekendHoliday}, Tarde=${watchedSelectedService.staffingNeeds.afternoonWeekendHoliday}${watchedSelectedService.enableNightShift ? `, Noche=${watchedSelectedService.staffingNeeds.nightWeekendHoliday}` : ''}\n`;
-      info += `- Turno Noche (N) Habilitado: ${watchedSelectedService.enableNightShift ? 'Sí' : 'No'}\n`;
+      let info = `Resumen para generar horario para el servicio: ${watchedSelectedService.name}${NL}`;
+      info += `Mes: ${months.find(m => m.value === watchedMonth)?.label || watchedMonth}, Año: ${watchedYear}${NL}${NL}`;
+      info += `Reglas del Servicio:${NL}`;
+      info += `- Dotación Días de Semana: Mañana=${watchedSelectedService.staffingNeeds.morningWeekday}, Tarde=${watchedSelectedService.staffingNeeds.afternoonWeekday}${watchedSelectedService.enableNightShift ? `, Noche=${watchedSelectedService.staffingNeeds.nightWeekday}` : ''}${NL}`;
+      info += `- Dotación Fin de Semana/Feriados: Mañana=${watchedSelectedService.staffingNeeds.morningWeekendHoliday}, Tarde=${watchedSelectedService.staffingNeeds.afternoonWeekendHoliday}${watchedSelectedService.enableNightShift ? `, Noche=${watchedSelectedService.staffingNeeds.nightWeekendHoliday}` : ''}${NL}`;
+      info += `- Turno Noche (N) Habilitado: ${watchedSelectedService.enableNightShift ? 'Sí' : 'No'}${NL}`;
       if (watchedSelectedService.consecutivenessRules) {
-        info += `- Consecutividad Trabajo: Máx=${watchedSelectedService.consecutivenessRules.maxConsecutiveWorkDays}, Pref=${watchedSelectedService.consecutivenessRules.preferredConsecutiveWorkDays}\n`;
-        info += `- Consecutividad Descanso: Máx=${watchedSelectedService.consecutivenessRules.maxConsecutiveDaysOff}, Pref=${watchedSelectedService.consecutivenessRules.preferredConsecutiveDaysOff}\n`;
+        info += `- Consecutividad Trabajo: Máx=${watchedSelectedService.consecutivenessRules.maxConsecutiveWorkDays}, Pref=${watchedSelectedService.consecutivenessRules.preferredConsecutiveWorkDays}${NL}`;
+        info += `- Consecutividad Descanso: Máx=${watchedSelectedService.consecutivenessRules.maxConsecutiveDaysOff}, Pref=${watchedSelectedService.consecutivenessRules.preferredConsecutiveDaysOff}${NL}`;
         if (watchedSelectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork) {
-          info += `- Mín. Descansos Antes de Trabajar: ${watchedSelectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork}\n`;
+          info += `- Mín. Descansos Antes de Trabajar: ${watchedSelectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork}${NL}`;
         }
       }
       if (watchedSelectedService.additionalNotes) {
-        info += `- Notas Adicionales del Servicio: ${watchedSelectedService.additionalNotes}\n`;
+        info += `- Notas Adicionales del Servicio: ${watchedSelectedService.additionalNotes}${NL}`;
       }
-      info += "\n";
+      info += NL;
       const holidaysInMonth = holidays.filter(h => {
         const holidayDate = parseISO(h.date);
         return isValid(holidayDate) && getYearFromDate(holidayDate) === yearInt && getMonthFromDate(holidayDate) === monthIdx;
       });
       if (holidaysInMonth.length > 0) {
-        info += `Feriados en ${months.find(m => m.value === watchedMonth)?.label || watchedMonth} ${watchedYear}:\n`;
-        holidaysInMonth.forEach(h => { info += `  - ${format(parseISO(h.date), 'dd/MM/yyyy')}: ${h.name}\n`; });
-        info += "\n";
-      } else { info += `No hay feriados registrados para ${months.find(m => m.value === watchedMonth)?.label || watchedMonth} ${watchedYear}.\n\n`; }
+        info += `Feriados en ${months.find(m => m.value === watchedMonth)?.label || watchedMonth} ${watchedYear}:${NL}`;
+        holidaysInMonth.forEach(h => { info += `  - ${format(parseISO(h.date), 'dd/MM/yyyy')}: ${h.name}${NL}`; });
+        info += NL;
+      } else { info += `No hay feriados registrados para ${months.find(m => m.value === watchedMonth)?.label || watchedMonth} ${watchedYear}.${NL}${NL}`; }
       const employeesInService = allEmployees.filter(emp => emp.serviceIds.includes(watchedSelectedService.id));
-      info += `Empleados Asignados a ${watchedSelectedService.name} (${employeesInService.length}):\n`;
-      if (employeesInService.length === 0) { info += "- Ninguno\n"; } else {
+      info += `Empleados Asignados a ${watchedSelectedService.name} (${employeesInService.length}):${NL}`;
+      if (employeesInService.length === 0) { info += `- Ninguno${NL}`; } else {
         employeesInService.forEach(emp => {
-          info += `\n- ${emp.name} (Roles: ${emp.roles.join(', ') || 'N/A'})\n`;
+          info += `${NL}- ${emp.name} (Roles: ${emp.roles.join(', ') || 'N/A'})${NL}`;
           if (emp.preferences) {
             const workPatternLabel = emp.preferences.workPattern === 'mondayToFridayMorning' ? 'L-V Mañana Fijo' : emp.preferences.workPattern === 'mondayToFridayAfternoon' ? 'L-V Tarde Fijo' : 'Rotación Estándar';
-            info += `  - Patrón General: ${workPatternLabel}\n`;
-            info += `  - Prefiere FDS: ${emp.preferences.prefersWeekendWork ? 'Sí' : 'No'}\n`;
-            info += `  - Elegible D/D: ${emp.preferences.eligibleForDayOffAfterDuty ? 'Sí' : 'No'}\n`;
+            info += `  - Patrón General: ${workPatternLabel}${NL}`;
+            info += `  - Prefiere FDS: ${emp.preferences.prefersWeekendWork ? 'Sí' : 'No'}${NL}`;
+            info += `  - Elegible D/D: ${emp.preferences.eligibleForDayOffAfterDuty ? 'Sí' : 'No'}${NL}`;
             if ((!emp.preferences.workPattern || emp.preferences.workPattern === 'standardRotation') && emp.preferences.fixedWeeklyShiftDays && emp.preferences.fixedWeeklyShiftDays.length > 0) {
-              info += `  - Turno Fijo Semanal: Días=[${emp.preferences.fixedWeeklyShiftDays.join(', ')}], Horario=${emp.preferences.fixedWeeklyShiftTiming || 'No especificado'}\n`;
+              info += `  - Turno Fijo Semanal: Días=[${emp.preferences.fixedWeeklyShiftDays.join(', ')}], Horario=${emp.preferences.fixedWeeklyShiftTiming || 'No especificado'}${NL}`;
             }
           }
           const relevantAssignments = (emp.fixedAssignments || []).filter(assign => {
@@ -179,20 +180,20 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             return isWithinInterval(monthStart, currentAssignmentInterval) || isWithinInterval(monthEnd, currentAssignmentInterval) || (assignmentStartDate < monthStart && assignmentEndDate > monthEnd);
           });
           if (relevantAssignments.length > 0) {
-            info += `  - Asignaciones Fijas en ${months.find(m => m.value === watchedMonth)?.label || watchedMonth}:\n`;
+            info += `  - Asignaciones Fijas en ${months.find(m => m.value === watchedMonth)?.label || watchedMonth}:${NL}`;
             relevantAssignments.forEach(assign => {
               const startDateFormatted = format(parseISO(assign.startDate), 'dd/MM/yyyy');
               const endDateFormatted = assign.endDate && assign.endDate !== assign.startDate ? format(parseISO(assign.endDate), 'dd/MM/yyyy') : startDateFormatted;
-              info += `    - ${assign.type}: ${startDateFormatted}${assign.endDate && assign.endDate !== assign.startDate ? ' a ' + endDateFormatted : ''} ${assign.description ? '('+assign.description+')' : ''}\n`;
+              info += `    - ${assign.type}: ${startDateFormatted}${assign.endDate && assign.endDate !== assign.startDate ? ' a ' + endDateFormatted : ''} ${assign.description ? '('+assign.description+')' : ''}${NL}`;
             });
           }
         });
       }
       setDisplayInfoText(info);
-    } else if (isLoadingHolidays) { 
-      setDisplayInfoText("Cargando lista de feriados..."); 
-    } else { 
-      setDisplayInfoText("Seleccione un servicio, mes y año para ver el resumen y luego haga clic en 'Cargar Configuración'. Asegúrese de que los feriados estén cargados."); 
+    } else if (isLoadingHolidays) {
+      setDisplayInfoText("Cargando lista de feriados...");
+    } else {
+      setDisplayInfoText("Seleccione un servicio, mes y año para ver el resumen y luego haga clic en 'Cargar Configuración'. Asegúrese de que los feriados estén cargados.");
     }
   }, [watchedServiceId, watchedMonth, watchedYear, allServices, allEmployees, watchedSelectedService, holidays, isLoadingHolidays]);
 
@@ -352,7 +353,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         let draftIdToUseForUpdate: string | undefined = undefined;
         if (action === 'save_draft') {
             if (currentEditingSource === 'draft' && currentLoadedDraftSchedule) { draftIdToUseForUpdate = currentLoadedDraftSchedule.id; }
-            else if (currentEditingSource === 'published') { draftIdToUseForUpdate = undefined; } // When modifying published and saving as new draft
+            else if (currentEditingSource === 'published') { draftIdToUseForUpdate = undefined; }
             savedSchedule = await saveOrUpdateDraftSchedule(schedulePayloadBase, draftIdToUseForUpdate);
             setCurrentLoadedDraftSchedule(savedSchedule); setCurrentEditingSource('draft');
             toast({ title: "Borrador Guardado", description: `Borrador para ${watchedSelectedService.name} - ${months.find(m=>m.value===loadedConfigValues.month)?.label}/${loadedConfigValues.year} guardado.` });
@@ -368,7 +369,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             toast({ title: "Horario Publicado", description: `El nuevo horario se publicó como activo.` });
         } else if (action === 'publish_modified_published') {
             if (!currentLoadedPublishedSchedule) throw new Error("No hay horario publicado cargado para modificar.");
-            savedSchedule = await publishSchedule(schedulePayloadBase, undefined); // Pass undefined to archive current published and create new
+            savedSchedule = await publishSchedule(schedulePayloadBase, undefined);
             setCurrentLoadedPublishedSchedule(savedSchedule); setCurrentLoadedDraftSchedule(null); setCurrentEditingSource('published');
             toast({ title: "Horario Publicado Actualizado", description: "Nueva versión publicada." });
         }
@@ -397,7 +398,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   };
 
   const isFormSelectionChanged = () => {
-    if (!loadedConfigValues) return false; // If no config is loaded, nothing has changed *from a loaded state*
+    if (!loadedConfigValues) return false;
     const currentFormValues = form.getValues();
     return currentFormValues.serviceId !== loadedConfigValues.serviceId || currentFormValues.month !== loadedConfigValues.month || currentFormValues.year !== loadedConfigValues.year;
   };
@@ -410,7 +411,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     } else if (currentEditingSource === 'published' && currentLoadedPublishedSchedule) {
         options.push({ label: "Guardar como Nueva Versión Publicada", action: () => handleConfirmSave('publish_modified_published'), icon: <UploadCloud className="mr-2 h-4 w-4" /> });
         options.push({ label: "Guardar Cambios como Borrador Nuevo", action: () => handleConfirmSave('save_draft'), icon: <FileText className="mr-2 h-4 w-4" />, variant: "outline" });
-    } else { // currentEditingSource is 'new' or 'none'
+    } else {
         options.push({ label: "Guardar como Borrador", action: () => handleConfirmSave('save_draft'), icon: <FileText className="mr-2 h-4 w-4" />, variant: "outline" });
         options.push({ label: "Guardar y Publicar Directamente", action: () => handleConfirmSave('publish_new_from_scratch'), icon: <UploadCloud className="mr-2 h-4 w-4" /> });
     }
@@ -459,11 +460,11 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
 
   const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingConfig || isDeletingSchedules || isReevaluating;
   const canGenerate = configLoaded && (userChoiceForExisting === 'generate_new_draft' || (!currentLoadedPublishedSchedule && !currentLoadedDraftSchedule)) && !isFormSelectionChanged();
-  
+
   const scoreForEvaluation = showGrid && editableShifts ? (generatedScore) : (algorithmGeneratedShifts ? generatedScore : null);
   const violationsForEvaluation = showGrid && editableShifts ? (generatedViolations) : (algorithmGeneratedShifts ? generatedViolations : null);
   const breakdownForEvaluation = showGrid && editableShifts ? (generatedScoreBreakdown) : (algorithmGeneratedShifts ? generatedScoreBreakdown : null);
-
+  
   return (
     <Card className="w-full">
       {!showGrid ? (
