@@ -28,28 +28,32 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
 
   const note = aiShift.notes?.toUpperCase();
 
-  // Prioriza notas específicas para tipos no laborables
+  // Explicit non-work types from notes (highest priority)
   if (note === 'C' || note === 'C (FRANCO COMP.)' || note?.includes('FRANCO COMP')) return 'C';
   if (note?.startsWith('F') || note?.includes('FERIADO')) return 'F';
   if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO') || note === 'D (FIJO SEMANAL)' || note === 'D (FDS OBJETIVO)') return 'D';
   if (note?.startsWith('LAO')) return 'LAO';
   if (note?.startsWith('LM')) return 'LM';
 
-  // Si hay startTime, intenta inferir M, T, N
-  if (aiShift.startTime) {
+  // Work shifts based on startTime (if notes didn't specify a non-work type)
+  if (aiShift.startTime && aiShift.startTime.trim() !== '') {
     if (aiShift.startTime.startsWith('07:') || aiShift.startTime.startsWith('08:')) return 'M';
     if (aiShift.startTime.startsWith('14:') || aiShift.startTime.startsWith('15:')) return 'T';
     if (aiShift.startTime.startsWith('22:') || aiShift.startTime.startsWith('23:')) return 'N';
   }
   
-  // Como fallback, si hay startTime y endTime, revisa las notas por indicadores M, T, N
-  if (aiShift.startTime && aiShift.endTime) {
-    if (note?.includes('MAÑANA') || note?.includes('(M)')) return 'M';
-    if (note?.includes('TARDE') || note?.includes('(T)')) return 'T';
-    if (note?.includes('NOCHE') || note?.includes('(N)')) return 'N';
+  // Work shifts based on notes (if startTime didn't match or if startTime was empty but notes indicate M,T,N)
+  if (note?.includes('MAÑANA') || note?.includes('(M)')) return 'M';
+  if (note?.includes('TARDE') || note?.includes('(T)')) return 'T';
+  if (note?.includes('NOCHE') || note?.includes('(N)')) return 'N';
+  
+  // Fallback: If startTime is empty AND notes are also empty or non-indicative of any known type,
+  // then consider it a rest day ('D').
+  if ((!aiShift.startTime || aiShift.startTime.trim() === '') && (!note || note.trim() === '')) {
+    return 'D';
   }
   
-  return ''; // Retorna vacío si no se puede determinar
+  return ''; 
 }
 
 /**
