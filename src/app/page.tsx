@@ -66,7 +66,7 @@ export default function DashboardPage() {
   return (
     <div className="container mx-auto">
       <PageHeader
-        title="Bienvenido a ShiftFlow"
+        title="Bienvenido al Genio del horario"
         description="Su solución inteligente para la planificación de turnos en hospitales."
       />
       
