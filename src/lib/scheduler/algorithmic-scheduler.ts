@@ -178,33 +178,31 @@ const normalizeDayName = (dayName: string): string => {
 
 /**
  * Obtiene el tipo de turno ('M', 'T', 'N', 'D', etc.) a partir de un objeto AIShift para evaluación.
+ * Si el turno no coincide con un tipo de trabajo o licencia explícito, se asume 'D' (Descanso).
  * @param {AIShift} shift - El turno a evaluar.
- * @returns {'M' | 'T' | 'N' | 'D' | 'LAO' | 'LM' | 'C' | 'F' | null} El tipo de turno, o null si no se puede determinar.
+ * @returns {'M' | 'T' | 'N' | 'D' | 'LAO' | 'LM' | 'C' | 'F'} El tipo de turno.
  */
-const getShiftTypeForEval = (shift: AIShift): 'M' | 'T' | 'N' | 'D' | 'LAO' | 'LM' | 'C' | 'F' | null => {
+const getShiftTypeForEval = (shift: AIShift): 'M' | 'T' | 'N' | 'D' | 'LAO' | 'LM' | 'C' | 'F' => {
     const note = shift.notes?.trim().toUpperCase();
+    const startTime = shift.startTime?.trim();
 
-    // Prioridad 1: Tipos no laborables explícitos en las notas
+    // Priority 1: Explicit non-work types from notes
     if (note?.startsWith('LAO')) return 'LAO';
     if (note?.startsWith('LM')) return 'LM';
     if (note === 'C' || note === 'C (FRANCO COMP.)' || note?.includes('FRANCO COMP')) return 'C';
     if (note === 'F' || note === 'F (FERIADO)' || note?.includes('FERIADO')) return 'F';
+    // Specific 'D' notes
     if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO') || note === 'D (FIJO SEMANAL)' || note === 'D (FDS OBJETIVO)') return 'D';
 
-    // Prioridad 2: Turnos de trabajo identificados por notas o startTime
-    const startTime = shift.startTime?.trim();
+    // Priority 2: Work shifts identified by notes or startTime
     if (note?.includes('(M)') || note?.includes('MAÑANA') || startTime?.startsWith('07:') || startTime?.startsWith('08:')) return 'M';
     if (note?.includes('(T)') || note?.includes('TARDE') || startTime?.startsWith('14:') || startTime?.startsWith('15:')) return 'T';
     if (note?.includes('(N)') || note?.includes('NOCHE') || startTime?.startsWith('22:') || startTime?.startsWith('23:')) return 'N';
-
-    // Prioridad 3: Si el turno existe (es un objeto AIShift) pero no tiene notas ni startTime indicativo,
-    // se considera un día de descanso 'D'. Esto cubre ranuras vacías o marcadores de descanso implícitos.
-    if ((!note || note.trim() === '') && (!startTime || startTime.trim() === '')) {
-      return 'D';
-    }
     
-    // Si hay notas pero no coinciden con nada, y startTime tampoco es claro, no se puede determinar.
-    return null;
+    // Priority 3: If none of the above specific types are matched, and a shift object exists, assume it's a Rest Day ('D').
+    // This catches empty shifts, shifts with unrecognised notes, or non-standard start/end times
+    // that aren't explicitly defined as another leave type or a work shift.
+    return 'D';
 };
 
 
