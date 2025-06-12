@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Save, CalendarDays, Eye, Bot, Info, AlertTriangle, Edit, FilePlus2, UploadCloud, FileText, Edit3, BookMarked, Trash2, RefreshCw, ClipboardCheck } from 'lucide-react';
-import { generateAlgorithmicSchedule, evaluateScheduleMetrics } from '@/lib/scheduler/algorithmic-scheduler'; // Import evaluateScheduleMetrics
+import { generateAlgorithmicSchedule, evaluateScheduleMetrics } from '@/lib/scheduler/algorithmic-scheduler';
 import type { AIShift } from '@/ai/flows/suggest-shift-schedule';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -67,12 +67,10 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
-  const [isReevaluating, setIsReevaluating] = useState(false); // New state for re-evaluation
+  const [isReevaluating, setIsReevaluating] = useState(false);
 
   const [generatedResponseText, setGeneratedResponseText] = useState<string | null>(null);
-  // algorithmGeneratedShifts will hold the direct output of the generation algorithm.
   const [algorithmGeneratedShifts, setAlgorithmGeneratedShifts] = useState<AIShift[] | null>(null);
-  // editableShifts is what's shown in the grid and can be modified.
   const [editableShifts, setEditableShifts] = useState<AIShift[] | null>(null);
   
   const [generatedScore, setGeneratedScore] = useState<number | null>(null);
@@ -282,7 +280,6 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     setCurrentEditingSource('new'); 
     try {
       const result = await generateAlgorithmicSchedule( watchedSelectedService, data.month, data.year, allEmployees, holidays, previousMonthSchedule?.shifts || null );
-      // The result now directly contains score, violations, and breakdown from evaluateScheduleMetrics
       setGeneratedResponseText(result.responseText);
       setGeneratedScore(result.score);
       setGeneratedViolations(result.violations);
@@ -313,7 +310,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             watchedSelectedService,
             loadedConfigValues.month,
             loadedConfigValues.year,
-            employeesInService, // Pass filtered employees
+            employeesInService,
             holidays,
             previousMonthSchedule?.shifts || null
         );
@@ -544,5 +541,4 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
-    
 
