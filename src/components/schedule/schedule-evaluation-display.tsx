@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { BadgeCheck, CircleAlert, CircleHelp, ShieldCheck, HeartHandshake, Info } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 interface ScheduleEvaluationDisplayProps {
   score: number | null | undefined;
@@ -108,8 +109,15 @@ export default function ScheduleEvaluationDisplay({ score, violations, scoreBrea
                                   {v.rule}
                                 </span>
                                 {((v.category === 'serviceRule') || (v.category === 'employeeWellbeing')) &&
-                                   <Badge variant="outline" className={`mr-1 mt-1 text-xs ${v.category === 'serviceRule' ? 'border-blue-500 text-blue-700' : 'border-green-500 text-green-700'}`}>
-                                    {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
+                                   <Badge
+                                      className={cn(
+                                        "mr-1 mt-1 text-xs px-2 py-0.5 rounded-md border font-medium", // Asegura padding y borde base
+                                        v.category === 'serviceRule'
+                                          ? "bg-primary/20 text-primary-foreground border-primary/40"
+                                          : "bg-accent/20 text-accent-foreground border-accent/40"
+                                      )}
+                                    >
+                                      {v.category === 'serviceRule' ? 'Regla Servicio' : 'Bienestar Personal'}
                                    </Badge>
                                 }
                                 <p className="text-xs opacity-90 mt-1">
