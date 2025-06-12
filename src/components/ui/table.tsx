@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils"
 
 /**
  * Contenedor principal de la tabla.
- * Se renderiza como un `div` con `overflow-auto` que envuelve un elemento `<table>`.
+ * Se renderiza como un `div` que envuelve un elemento `<table>`.
+ * Se ha modificado para quitar `overflow-auto` y permitir que `ScrollArea` lo maneje.
  *
  * @param {React.HTMLAttributes<HTMLTableElement>} props - Props estándar de HTML table.
  * @param {React.Ref<HTMLTableElement>} ref - Ref para el elemento table subyacente.
@@ -31,7 +32,8 @@ const Table = React.forwardRef<
   });
 
   return (
-    <div className="relative w-full overflow-auto">
+    // Modificado: removido overflow-auto. ScrollArea lo manejará.
+    <div className="relative w-full"> 
       <table
         ref={ref}
         className={cn("w-full caption-bottom text-sm", className)}

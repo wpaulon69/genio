@@ -48,7 +48,7 @@ export function getGridShiftTypeFromAIShift(aiShift: AIShift | null | undefined)
   if (note?.includes('NOCHE') || note?.includes('(N)')) return 'N';
   
   // Fallback: If startTime is empty AND notes are also empty or non-indicative of any known type,
-  // then consider it a rest day ('D').
+  // then consider it a rest day ('D'). This was refined.
   if ((!aiShift.startTime || aiShift.startTime.trim() === '') && (!note || note.trim() === '')) {
     return 'D';
   }
@@ -323,8 +323,8 @@ export default function InteractiveScheduleGrid({
   
   const monthName = format(monthDate, 'MMMM', { locale: es });
   const currentYearStr = format(monthDate, 'yyyy');
-  const employeeColumnWidth = "180px"; // Ancho fijo para la columna de empleados
-  const totalDColumnWidth = "80px"; // Ancho fijo para la columna "Total D"
+  const employeeColumnWidth = "180px"; 
+  const totalDColumnWidth = "80px"; 
 
   return (
     <Card className="mt-6 w-full">
@@ -356,7 +356,7 @@ export default function InteractiveScheduleGrid({
         )}
         {relevantEmployeeNames.length > 0 && (
         <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-          <Table className="min-w-max"> {/* min-w-max asegura que la tabla tome el ancho necesario */}
+          <Table className="min-w-max">
             <TableHeader>
               <TableRow>
                 <TableHead 
@@ -436,48 +436,48 @@ export default function InteractiveScheduleGrid({
                 </TableRow>
               ))}
               {/* Filas de Totales */}
-              <TableRow className="bg-muted/50 font-semibold">
+              <TableRow className="bg-muted font-semibold">
                 <TableCell 
-                  className="sticky left-0 bg-muted/50 z-10 truncate"
+                  className="sticky left-0 bg-muted z-10 truncate"
                   style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                 >Total Mañana (M)</TableCell>
                  <TableCell 
-                    className="sticky bg-muted/50 z-10 text-center" 
+                    className="sticky bg-muted z-10 text-center" 
                     style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                   ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-m-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].M}</TableCell>)}
               </TableRow>
-              <TableRow className="bg-muted/50 font-semibold">
+              <TableRow className="bg-muted font-semibold">
                 <TableCell 
-                  className="sticky left-0 bg-muted/50 z-10 truncate"
+                  className="sticky left-0 bg-muted z-10 truncate"
                    style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                 >Total Tarde (T)</TableCell>
                  <TableCell 
-                    className="sticky bg-muted/50 z-10 text-center"
+                    className="sticky bg-muted z-10 text-center"
                     style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                   ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-t-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].T}</TableCell>)}
               </TableRow>
               {targetService?.enableNightShift && (
-                <TableRow className="bg-muted/50 font-semibold">
+                <TableRow className="bg-muted font-semibold">
                   <TableCell 
-                    className="sticky left-0 bg-muted/50 z-10 truncate"
+                    className="sticky left-0 bg-muted z-10 truncate"
                     style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                   >Total Noche (N)</TableCell>
                    <TableCell 
-                    className="sticky bg-muted/50 z-10 text-center"
+                    className="sticky bg-muted z-10 text-center"
                     style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                   ></TableCell>
                   {dayHeaders.map(header => <TableCell key={`total-n-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].N}</TableCell>)}
                 </TableRow>
               )}
-              <TableRow className="bg-muted/50 font-bold text-base">
+              <TableRow className="bg-muted font-bold text-base">
                 <TableCell 
-                  className="sticky left-0 bg-muted/50 z-10 truncate"
+                  className="sticky left-0 bg-muted z-10 truncate"
                   style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                 >TOTAL PERSONAL</TableCell>
                  <TableCell 
-                    className="sticky bg-muted/50 z-10 text-center"
+                    className="sticky bg-muted z-10 text-center"
                     style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                   ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-staff-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].totalStaff}</TableCell>)}
@@ -492,4 +492,3 @@ export default function InteractiveScheduleGrid({
   );
 }
     
-
