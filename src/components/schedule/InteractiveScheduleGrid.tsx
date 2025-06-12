@@ -360,18 +360,18 @@ export default function InteractiveScheduleGrid({
             <TableHeader>
               <TableRow>
                 <TableHead 
-                  className="sticky left-0 bg-card z-20 truncate" // `truncate` para elipsis si el nombre es muy largo
+                  className="sticky left-0 bg-card z-20 truncate"
                   style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                 >Empleado</TableHead>
                 <TableHead 
-                  className="sticky bg-card z-20 text-center" // Columna de totales también sticky
+                  className="sticky bg-card z-20 text-center" 
                   style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                 >Total D</TableHead>
                 {dayHeaders.map(header => (
                   <TableHead 
                     key={header.dayNumber} 
                     className={cn(
-                        "text-center w-[70px] min-w-[70px]", // Ancho fijo para celdas de día
+                        "text-center w-[70px] min-w-[70px]", 
                         header.isSpecialDay && "bg-pink-100 dark:bg-pink-900 text-pink-700 dark:text-pink-300"
                     )}
                     >
@@ -389,7 +389,7 @@ export default function InteractiveScheduleGrid({
                 <TableRow key={employeeName}>
                   <TableCell 
                     className="sticky left-0 bg-card z-10 font-medium truncate" 
-                    title={employeeName} // Tooltip con nombre completo por si se trunca
+                    title={employeeName} 
                     style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                   >{employeeName}</TableCell>
                   <TableCell 
@@ -405,7 +405,7 @@ export default function InteractiveScheduleGrid({
                     return (
                       <TableCell key={`${employeeName}-${header.dayNumber}`} className="p-1 w-[70px] min-w-[70px]">
                         <Select
-                          value={currentShiftType === '' ? "_EMPTY_" : currentShiftType} // Maneja el caso vacío
+                          value={currentShiftType === '' ? "_EMPTY_" : currentShiftType} 
                           onValueChange={(value) => handleShiftChange(employeeName, header.dayNumber, value as GridShiftType)}
                           disabled={isReadOnly}
                         >
@@ -418,7 +418,7 @@ export default function InteractiveScheduleGrid({
                             <SelectValue placeholder="-">
                               { (currentShiftType === '' || currentShiftType === '_EMPTY_' ? SHIFT_OPTIONS.find(opt => opt.value === "_EMPTY_") : selectedOption)
                                 ? (currentShiftType === '' || currentShiftType === '_EMPTY_' ? SHIFT_OPTIONS.find(opt => opt.value === "_EMPTY_")!.displayValue : selectedOption!.displayValue)
-                                : '-' // Fallback si el tipo de turno no se encuentra
+                                : '-' 
                               }
                             </SelectValue>
                           </SelectTrigger>
@@ -442,7 +442,7 @@ export default function InteractiveScheduleGrid({
                   style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                 >Total Mañana (M)</TableCell>
                  <TableCell 
-                    className="sticky bg-muted/50 z-10" // Celda vacía para alinear con "Total D"
+                    className="sticky bg-muted/50 z-10 text-center" 
                     style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                   ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-m-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].M}</TableCell>)}
@@ -453,7 +453,7 @@ export default function InteractiveScheduleGrid({
                    style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                 >Total Tarde (T)</TableCell>
                  <TableCell 
-                    className="sticky bg-muted/50 z-10"
+                    className="sticky bg-muted/50 z-10 text-center"
                     style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                   ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-t-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].T}</TableCell>)}
@@ -465,7 +465,7 @@ export default function InteractiveScheduleGrid({
                     style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                   >Total Noche (N)</TableCell>
                    <TableCell 
-                    className="sticky bg-muted/50 z-10"
+                    className="sticky bg-muted/50 z-10 text-center"
                     style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                   ></TableCell>
                   {dayHeaders.map(header => <TableCell key={`total-n-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].N}</TableCell>)}
@@ -477,7 +477,7 @@ export default function InteractiveScheduleGrid({
                   style={{ width: employeeColumnWidth, minWidth: employeeColumnWidth, maxWidth: employeeColumnWidth }}
                 >TOTAL PERSONAL</TableCell>
                  <TableCell 
-                    className="sticky bg-muted/50 z-10"
+                    className="sticky bg-muted/50 z-10 text-center"
                     style={{ left: employeeColumnWidth, width: totalDColumnWidth, minWidth: totalDColumnWidth, maxWidth: totalDColumnWidth }}
                   ></TableCell>
                 {dayHeaders.map(header => <TableCell key={`total-staff-${header.dayNumber}`} className="text-center">{dailyTotals[header.dayNumber].totalStaff}</TableCell>)}
@@ -492,3 +492,4 @@ export default function InteractiveScheduleGrid({
   );
 }
     
+
