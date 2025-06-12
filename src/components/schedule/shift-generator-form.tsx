@@ -59,7 +59,7 @@ const months = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 const TEST_DELETE_PASSWORD = "eliminarTEST123";
-const NL = '\n'; // Newline constant
+const NL = '\n'; 
 
 export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftGeneratorFormProps) {
   const { toast } = useToast();
@@ -144,10 +144,13 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
           info += `- Mín. Descansos Antes de Trabajar: ${watchedSelectedService.consecutivenessRules.minConsecutiveDaysOffRequiredBeforeWork}${NL}`;
         }
       }
+      if (watchedSelectedService.targetCompleteWeekendsOff !== undefined) {
+        info += `- Objetivo FDS Descanso Completos (Mensual): ${watchedSelectedService.targetCompleteWeekendsOff}${NL}`;
+      }
       if (watchedSelectedService.additionalNotes) {
         info += `- Notas Adicionales del Servicio: ${watchedSelectedService.additionalNotes}${NL}`;
       }
-      info += NL;
+      info += `${NL}`;
       const holidaysInMonth = holidays.filter(h => {
         const holidayDate = parseISO(h.date);
         return isValid(holidayDate) && getYearFromDate(holidayDate) === yearInt && getMonthFromDate(holidayDate) === monthIdx;
@@ -155,7 +158,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
       if (holidaysInMonth.length > 0) {
         info += `Feriados en ${months.find(m => m.value === watchedMonth)?.label || watchedMonth} ${watchedYear}:${NL}`;
         holidaysInMonth.forEach(h => { info += `  - ${format(parseISO(h.date), 'dd/MM/yyyy')}: ${h.name}${NL}`; });
-        info += NL;
+        info += `${NL}`;
       } else { info += `No hay feriados registrados para ${months.find(m => m.value === watchedMonth)?.label || watchedMonth} ${watchedYear}.${NL}${NL}`; }
       const employeesInService = allEmployees.filter(emp => emp.serviceIds.includes(watchedSelectedService.id));
       info += `Empleados Asignados a ${watchedSelectedService.name} (${employeesInService.length}):${NL}`;
@@ -195,7 +198,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     } else {
       setDisplayInfoText("Seleccione un servicio, mes y año para ver el resumen y luego haga clic en 'Cargar Configuración'. Asegúrese de que los feriados estén cargados.");
     }
-  }, [watchedServiceId, watchedMonth, watchedYear, allServices, allEmployees, watchedSelectedService, holidays, isLoadingHolidays]);
+  }, [watchedServiceId, watchedMonth, watchedYear, allServices, allEmployees, watchedSelectedService, holidays, isLoadingHolidays, months, NL]);
 
   const handleBackToConfig = () => { setShowGrid(false); };
 
@@ -353,7 +356,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
         let draftIdToUseForUpdate: string | undefined = undefined;
         if (action === 'save_draft') {
             if (currentEditingSource === 'draft' && currentLoadedDraftSchedule) { draftIdToUseForUpdate = currentLoadedDraftSchedule.id; }
-            else if (currentEditingSource === 'published') { draftIdToUseForUpdate = undefined; }
+            else if (currentEditingSource === 'published') { draftIdToUseForUpdate = undefined; } // Create new draft if modified from published
             savedSchedule = await saveOrUpdateDraftSchedule(schedulePayloadBase, draftIdToUseForUpdate);
             setCurrentLoadedDraftSchedule(savedSchedule); setCurrentEditingSource('draft');
             toast({ title: "Borrador Guardado", description: `Borrador para ${watchedSelectedService.name} - ${months.find(m=>m.value===loadedConfigValues.month)?.label}/${loadedConfigValues.year} guardado.` });
@@ -369,7 +372,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             toast({ title: "Horario Publicado", description: `El nuevo horario se publicó como activo.` });
         } else if (action === 'publish_modified_published') {
             if (!currentLoadedPublishedSchedule) throw new Error("No hay horario publicado cargado para modificar.");
-            savedSchedule = await publishSchedule(schedulePayloadBase, undefined);
+            savedSchedule = await publishSchedule(schedulePayloadBase, undefined); // Pass undefined, new one will be created, old archived
             setCurrentLoadedPublishedSchedule(savedSchedule); setCurrentLoadedDraftSchedule(null); setCurrentEditingSource('published');
             toast({ title: "Horario Publicado Actualizado", description: "Nueva versión publicada." });
         }
@@ -411,7 +414,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     } else if (currentEditingSource === 'published' && currentLoadedPublishedSchedule) {
         options.push({ label: "Guardar como Nueva Versión Publicada", action: () => handleConfirmSave('publish_modified_published'), icon: <UploadCloud className="mr-2 h-4 w-4" /> });
         options.push({ label: "Guardar Cambios como Borrador Nuevo", action: () => handleConfirmSave('save_draft'), icon: <FileText className="mr-2 h-4 w-4" />, variant: "outline" });
-    } else {
+    } else { // currentEditingSource is 'new' or 'none' (after reset, before load) with editableShifts
         options.push({ label: "Guardar como Borrador", action: () => handleConfirmSave('save_draft'), icon: <FileText className="mr-2 h-4 w-4" />, variant: "outline" });
         options.push({ label: "Guardar y Publicar Directamente", action: () => handleConfirmSave('publish_new_from_scratch'), icon: <UploadCloud className="mr-2 h-4 w-4" /> });
     }
@@ -461,9 +464,9 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
   const isActionDisabled = isGenerating || isSaving || isLoadingHolidays || !!errorHolidays || isLoadingConfig || isDeletingSchedules || isReevaluating;
   const canGenerate = configLoaded && (userChoiceForExisting === 'generate_new_draft' || (!currentLoadedPublishedSchedule && !currentLoadedDraftSchedule)) && !isFormSelectionChanged();
 
-  const scoreForEvaluation = showGrid && editableShifts ? (generatedScore) : (algorithmGeneratedShifts ? generatedScore : null);
-  const violationsForEvaluation = showGrid && editableShifts ? (generatedViolations) : (algorithmGeneratedShifts ? generatedViolations : null);
-  const breakdownForEvaluation = showGrid && editableShifts ? (generatedScoreBreakdown) : (algorithmGeneratedShifts ? generatedScoreBreakdown : null);
+  const scoreForEvaluation = (showGrid && editableShifts) ? generatedScore : (algorithmGeneratedShifts ? generatedScore : null);
+  const violationsForEvaluation = (showGrid && editableShifts) ? generatedViolations : (algorithmGeneratedShifts ? generatedViolations : null);
+  const breakdownForEvaluation = (showGrid && editableShifts) ? generatedScoreBreakdown : (algorithmGeneratedShifts ? generatedScoreBreakdown : null);
   
   return (
     <Card className="w-full">
@@ -480,7 +483,7 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
             <Form {...form}>
               <form onSubmit={form.handleSubmit(handleGenerateSubmit)}>
                 <CardContent className="space-y-6">
-                  {errorHolidays && ( <Alert variant="destructive"> <AlertTriangle className="h-4 w-4" /> <AlertTitle>Error Feriados</AlertTitle> <AlertDescription> {errorHolidays.message}. Generación podría ser imprecisa. </AlertDescription> </Alert> )}
+                  {errorHolidays && ( <Alert variant="destructive"> <AlertTriangle className="h-4 w-4" /> <AlertTitle>Error Feriados</AlertTitle> <AlertDescription> {(errorHolidays as Error).message}. Generación podría ser imprecisa. </AlertDescription> </Alert> )}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <FormField control={form.control} name="serviceId" render={({ field }) => ( <FormItem> <FormLabel>Servicio</FormLabel> <Select onValueChange={(value) => { field.onChange(value); resetScheduleState(); }} value={field.value || ''} disabled={isActionDisabled || showInitialChoiceDialog}> <FormControl><SelectTrigger><SelectValue placeholder="Servicio" /></SelectTrigger></FormControl> <SelectContent>{allServices.map(service => (<SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>))}</SelectContent> </Select><FormMessage /> </FormItem>)} />
                     <FormField control={form.control} name="month" render={({ field }) => ( <FormItem> <FormLabel>Mes</FormLabel> <Select onValueChange={(value) => { field.onChange(value); resetScheduleState(); }} value={field.value} disabled={isActionDisabled || showInitialChoiceDialog}> <FormControl><SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger></FormControl> <SelectContent>{months.map(m => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent> </Select><FormMessage /> </FormItem>)} />
@@ -554,3 +557,5 @@ export default function ShiftGeneratorForm({ allEmployees, allServices }: ShiftG
     </Card>
   );
 }
+
+    
