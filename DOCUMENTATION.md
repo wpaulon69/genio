@@ -85,7 +85,7 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
     - `enableNightShift`: Booleano que indica si se habilita el turno noche (N).
     - `staffingNeeds`: Objeto con la dotación requerida para turnos Mañana/Tarde/Noche en días de semana y fines de semana/feriados.
     - `consecutivenessRules`: Objeto con reglas sobre máximos/preferidos días de trabajo/descanso consecutivos y mínimo de descansos antes de volver a trabajar.
-    - `targetCompleteWeekendsOff`: Número objetivo de fines de semana completos (Sábado + Domingo) de descanso que se busca dar a los empleados de este servicio por mes. El algoritmo de generación de horarios evalúa el cumplimiento de este objetivo y lo refleja en la puntuación y violaciones. También intenta suavemente favorecer este objetivo durante la asignación de turnos de fin de semana.
+    - `targetCompleteWeekendsOff`: Número objetivo de fines de semana completos (Sábado + Domingo) de descanso que se busca dar a los empleados de este servicio por mes. El algoritmo de generación de horarios evalúa el cumplimiento de este objetivo (ver `evaluateGeneratedSchedule`) y lo refleja en la puntuación y violaciones. También intenta suavemente favorecer este objetivo durante la asignación de turnos de fin de semana.
     - `additionalNotes`: Notas adicionales o reglas específicas del servicio.
 
 ### 4.2. Gestión de Empleados
@@ -116,7 +116,7 @@ El proyecto sigue una estructura típica para aplicaciones Next.js con el App Ro
     - Preferencias y asignaciones fijas de los empleados.
     - Feriados.
     - Continuidad con el horario del mes anterior.
-- **Evaluación de Horarios:** El algoritmo también calcula una puntuación para el horario generado y lista cualquier violación de reglas (errores o advertencias).
+- **Evaluación de Horarios:** El algoritmo (`generateAlgorithmicSchedule` y la función refactorizada `evaluateGeneratedSchedule`) también calcula una puntuación para el horario generado y lista cualquier violación de reglas (errores o advertencias).
 - **Edición Manual:** Los horarios (borradores o copias del publicado) se pueden editar manualmente en una grilla interactiva.
 - **Componentes Clave:** `src/app/schedule/page.tsx`, `src/components/schedule/shift-generator-form.tsx`, `src/components/schedule/InteractiveScheduleGrid.tsx`, `src/components/schedule/schedule-evaluation-display.tsx`.
 - **Datos Firebase:** Colección `monthlySchedules`. Ver `src/lib/firebase/monthlySchedules.ts` para la lógica de guardado, recuperación y estados de los horarios. Cada horario tiene una `scheduleKey` (YYYY-MM-ServiceID) y una `version`.
