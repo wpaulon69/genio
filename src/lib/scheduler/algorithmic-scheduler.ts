@@ -186,16 +186,19 @@ const getShiftTypeForEval = (shift: AIShift): 'M' | 'T' | 'N' | 'D' | 'LAO' | 'L
     const note = shift.notes?.trim().toUpperCase();
     const startTime = shift.startTime?.trim();
 
+    // Priority 1: Specific non-work types based on notes
     if (note?.startsWith('LAO')) return 'LAO';
     if (note?.startsWith('LM')) return 'LM';
     if (note === 'C' || note === 'C (FRANCO COMP.)' || note?.includes('FRANCO COMP')) return 'C';
     if (note === 'F' || note === 'F (FERIADO)' || note?.includes('FERIADO')) return 'F';
     if (note === 'D' || note === 'D (DESCANSO)' || note?.includes('DESCANSO') || note === 'D (FIJO SEMANAL)' || note === 'D (FDS OBJETIVO)') return 'D';
     
+    // Priority 2: Work shifts based on notes or startTime
     if (note?.includes('(M)') || note?.includes('MAÑANA') || startTime?.startsWith('07:') || startTime?.startsWith('08:')) return 'M';
     if (note?.includes('(T)') || note?.includes('TARDE') || startTime?.startsWith('14:') || startTime?.startsWith('15:')) return 'T';
     if (note?.includes('(N)') || note?.includes('NOCHE') || startTime?.startsWith('22:') || startTime?.startsWith('23:')) return 'N';
     
+    // Priority 3: If none of the above specific types are matched, and a shift object exists, assume it's a Rest Day ('D').
     return 'D';
 };
 
@@ -234,14 +237,14 @@ function evaluateWeekendTargetCompliance(
                 const saturdayStr = format(date, 'yyyy-MM-dd');
                 const sundayDate = addDays(date, 1);
                 
-                if (sundayDate.getMonth() === monthInt - 1) {
+                if (sundayDate.getMonth() === monthInt - 1) { // Check if Sunday is still in the same month
                     const sundayStr = format(sundayDate, 'yyyy-MM-dd');
 
                     const saturdayShift = shiftsToEvaluate.find(s => s.employeeName === emp.name && s.date === saturdayStr);
                     const sundayShift = shiftsToEvaluate.find(s => s.employeeName === emp.name && s.date === sundayStr);
 
                     let isSatOff = false;
-                    if (!saturdayShift) { 
+                    if (!saturdayShift) { // No shift entry means off
                         isSatOff = true;
                     } else {
                         const satShiftType = getShiftTypeForEval(saturdayShift);
@@ -249,7 +252,7 @@ function evaluateWeekendTargetCompliance(
                     }
 
                     let isSunOff = false;
-                    if (!sundayShift) { 
+                    if (!sundayShift) { // No shift entry means off
                         isSunOff = true;
                     } else {
                         const sunShiftType = getShiftTypeForEval(sundayShift);
@@ -278,6 +281,69 @@ function evaluateWeekendTargetCompliance(
             evalCtx.scoreBreakdown.employeeWellbeing -= penalty;
         }
     });
+}
+
+/**
+ * Inicializa el estado de los empleados basándose en los turnos del mes anterior.
+ * Calcula los días consecutivos de trabajo/descanso, el último tipo de turno y la hora de finalización del último turno de trabajo.
+ * @param {Employee[]} employeesForService - Array de empleados para el servicio.
+ * @param {AIShift[] | null} previousMonthShifts - Turnos del mes anterior.
+ * @param {Service} service - Configuración del servicio (para reglas de consecutividad).
+ * @param {Date} firstDayOfCurrentMonth - El primer día del mes actual para el cual se está planificando/evaluando.
+ * @returns {Record<string, EmployeeState>} Un objeto donde las claves son IDs de empleado y los valores son sus estados inicializados.
+ */
+function initializeEmployeeStatesFromHistory(
+  employeesForService: Employee[],
+  previousMonthShifts: AIShift[] | null,
+  service: Service,
+  firstDayOfCurrentMonth: Date
+): Record<string, EmployeeState> {
+  const employeeStates: Record<string, EmployeeState> = {};
+  const sortedPreviousShifts = (previousMonthShifts || []).sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
+  const lookbackDays = Math.max(service.consecutivenessRules?.maxConsecutiveWorkDays || 7, service.consecutivenessRules?.maxConsecutiveDaysOff || 7, 7);
+
+  employeesForService.forEach(emp => {
+    let currentConsecutiveWork = 0;
+    let currentConsecutiveRest = 0;
+    let lastTypeEncountered: EmployeeState['lastShiftType'] = undefined;
+    let lastWorkShiftEnd: Date | null = null;
+
+    for (let i = lookbackDays; i >= 1; i--) {
+      const dateToCheck = subDays(firstDayOfCurrentMonth, i);
+      const dateToCheckStr = format(dateToCheck, 'yyyy-MM-dd');
+      const shiftToday = sortedPreviousShifts.find(s => s.date === dateToCheckStr && s.employeeName === emp.name);
+
+      if (shiftToday) {
+        const shiftType = getShiftTypeForEval(shiftToday);
+        if (shiftType === 'M' || shiftType === 'T' || shiftType === 'N') {
+          currentConsecutiveWork = (lastTypeEncountered === 'M' || lastTypeEncountered === 'T' || lastTypeEncountered === 'N') ? currentConsecutiveWork + 1 : 1;
+          currentConsecutiveRest = 0;
+          lastTypeEncountered = shiftType;
+          const { endTime: shiftEndTimeStr } = getShiftDetails(shiftType);
+          lastWorkShiftEnd = getShiftDateTime(dateToCheck, shiftEndTimeStr, shiftType === 'N');
+        } else if (shiftType === 'D' || shiftType === 'F' || shiftType === 'LAO' || shiftType === 'LM' || shiftType === 'C') {
+          currentConsecutiveRest = (lastTypeEncountered === 'D' || lastTypeEncountered === 'F' || lastTypeEncountered === 'LAO' || lastTypeEncountered === 'LM' || lastTypeEncountered === 'C' || lastTypeEncountered === undefined) ? currentConsecutiveRest + 1 : 1;
+          currentConsecutiveWork = 0;
+          lastTypeEncountered = shiftType;
+        }
+      } else { 
+        currentConsecutiveRest = (lastTypeEncountered === 'D' || lastTypeEncountered === 'F' || lastTypeEncountered === 'LAO' || lastTypeEncountered === 'LM' || lastTypeEncountered === 'C' || lastTypeEncountered === undefined) ? currentConsecutiveRest + 1 : 1;
+        currentConsecutiveWork = 0;
+        lastTypeEncountered = 'D'; // Assume rest if no shift found in history for a lookback day
+      }
+    }
+    employeeStates[emp.id] = {
+      id: emp.id,
+      name: emp.name,
+      consecutiveWorkDays: currentConsecutiveWork,
+      consecutiveRestDays: currentConsecutiveRest,
+      shiftsThisMonth: 0, // Initialized to 0 for the current month
+      lastShiftType: lastTypeEncountered,
+      lastActualWorkShiftEndTime: lastWorkShiftEnd,
+      completeWeekendsOffThisMonth: 0 // Initialized to 0 for the current month
+    };
+  });
+  return employeeStates;
 }
 
 
@@ -320,48 +386,7 @@ export async function evaluateScheduleMetrics(
         return { generatedShifts: shiftsToEvaluate, responseText: "Error: Sin empleados en el servicio.", ...evalCtx };
     }
 
-    const employeeStates: Record<string, EmployeeState> = {};
-    employeesForService.forEach(emp => {
-        employeeStates[emp.id] = { id: emp.id, name: emp.name, consecutiveWorkDays: 0, consecutiveRestDays: 0, shiftsThisMonth: 0, lastShiftType: undefined, lastActualWorkShiftEndTime: null, completeWeekendsOffThisMonth: 0 };
-    });
-
-    const lookbackDays = Math.max(service.consecutivenessRules?.maxConsecutiveWorkDays || 7, service.consecutivenessRules?.maxConsecutiveDaysOff || 7, 7);
-    const sortedPreviousShifts = (previousMonthShifts || []).sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
-
-    for (const emp of employeesForService) {
-        const state = employeeStates[emp.id];
-        let currentConsecutiveWork = 0; let currentConsecutiveRest = 0;
-        let lastTypeEncountered: EmployeeState['lastShiftType'] = undefined;
-        let lastWorkShiftEnd: Date | null = null;
-
-        for (let i = lookbackDays; i >= 1; i--) {
-            const dateToCheck = subDays(firstDayOfCurrentMonth, i);
-            const dateToCheckStr = format(dateToCheck, 'yyyy-MM-dd');
-            const shiftToday = sortedPreviousShifts.find(s => s.date === dateToCheckStr && s.employeeName === emp.name);
-
-            if (shiftToday) {
-                const shiftType = getShiftTypeForEval(shiftToday);
-                if (shiftType === 'M' || shiftType === 'T' || shiftType === 'N') {
-                    currentConsecutiveWork = (lastTypeEncountered === 'M' || lastTypeEncountered === 'T' || lastTypeEncountered === 'N') ? currentConsecutiveWork + 1 : 1;
-                    currentConsecutiveRest = 0;
-                    lastTypeEncountered = shiftType;
-                    const { endTime: shiftEndTimeStr } = getShiftDetails(shiftType);
-                    lastWorkShiftEnd = getShiftDateTime(dateToCheck, shiftEndTimeStr, shiftType === 'N');
-                } else if (shiftType === 'D' || shiftType === 'F' || shiftType === 'LAO' || shiftType === 'LM' || shiftType === 'C') {
-                    currentConsecutiveRest = (lastTypeEncountered === 'D' || lastTypeEncountered === 'F' || lastTypeEncountered === 'LAO' || lastTypeEncountered === 'LM' || lastTypeEncountered === 'C' || lastTypeEncountered === undefined) ? currentConsecutiveRest + 1 : 1;
-                    currentConsecutiveWork = 0;
-                    lastTypeEncountered = shiftType;
-                }
-            } else { 
-                currentConsecutiveRest = (lastTypeEncountered === 'D' || lastTypeEncountered === 'F' || lastTypeEncountered === 'LAO' || lastTypeEncountered === 'LM' || lastTypeEncountered === 'C' || lastTypeEncountered === undefined) ? currentConsecutiveRest + 1 : 1;
-                currentConsecutiveWork = 0; lastTypeEncountered = 'D';
-            }
-        }
-        state.consecutiveWorkDays = currentConsecutiveWork;
-        state.consecutiveRestDays = currentConsecutiveRest;
-        state.lastShiftType = lastTypeEncountered;
-        state.lastActualWorkShiftEndTime = lastWorkShiftEnd;
-    }
+    const employeeStates = initializeEmployeeStatesFromHistory(employeesForService, previousMonthShifts, service, firstDayOfCurrentMonth);
 
     for (let day = 1; day <= daysInMonthCount; day++) {
         const currentDate = new Date(yearInt, monthInt - 1, day);
@@ -511,56 +536,13 @@ export async function generateAlgorithmicSchedule(
     };
   }
 
-  const sortedPreviousShifts = (previousMonthShifts || []).sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
-  const lookbackDays = Math.max(service.consecutivenessRules?.maxConsecutiveWorkDays || 7, service.consecutivenessRules?.maxConsecutiveDaysOff || 7, 7);
-
   while (bestScore <= targetScore && attemptsMade < maxAttempts) {
     attemptsMade++;
     // console.log(`Algorithmic Schedule Attempt #${attemptsMade} for ${service.name} - ${month}/${year}`);
 
     let currentGeneratedShifts: AIShift[] = [];
-    const employeeStates: Record<string, EmployeeState> = {};
-
-    employeesForService.forEach(emp => {
-      employeeStates[emp.id] = { id: emp.id, name: emp.name, consecutiveWorkDays: 0, consecutiveRestDays: 0, shiftsThisMonth: 0, lastShiftType: undefined, lastActualWorkShiftEndTime: null, completeWeekendsOffThisMonth: 0 };
-    });
-
-    // Initialize employee states based on previous month's shifts (for EACH attempt)
-    for (const emp of employeesForService) {
-      const state = employeeStates[emp.id];
-      let currentConsecutiveWork = 0; let currentConsecutiveRest = 0;
-      let lastTypeEncountered: EmployeeState['lastShiftType'] = undefined;
-      let lastWorkShiftEnd: Date | null = null;
-
-      for (let i = lookbackDays; i >= 1; i--) {
-          const dateToCheck = subDays(firstDayOfCurrentMonth, i);
-          const dateToCheckStr = format(dateToCheck, 'yyyy-MM-dd');
-          const shiftToday = sortedPreviousShifts.find(s => s.date === dateToCheckStr && s.employeeName === emp.name);
-
-          if (shiftToday) {
-              const shiftType = getShiftTypeForEval(shiftToday);
-              if (shiftType === 'M' || shiftType === 'T' || shiftType === 'N') {
-                  currentConsecutiveWork = (lastTypeEncountered === 'M' || lastTypeEncountered === 'T' || lastTypeEncountered === 'N') ? currentConsecutiveWork + 1 : 1;
-                  currentConsecutiveRest = 0;
-                  lastTypeEncountered = shiftType;
-                  const { endTime: shiftEndTimeStr } = getShiftDetails(shiftType);
-                  lastWorkShiftEnd = getShiftDateTime(dateToCheck, shiftEndTimeStr, shiftType === 'N');
-              } else if (shiftType === 'D' || shiftType === 'F' || shiftType === 'LAO' || shiftType === 'LM' || shiftType === 'C') {
-                  currentConsecutiveRest = (lastTypeEncountered === 'D' || lastTypeEncountered === 'F' || lastTypeEncountered === 'LAO' || lastTypeEncountered === 'LM' || lastTypeEncountered === 'C' || lastTypeEncountered === undefined) ? currentConsecutiveRest + 1 : 1;
-                  currentConsecutiveWork = 0;
-                  lastTypeEncountered = shiftType;
-              }
-          } else { 
-              currentConsecutiveRest = (lastTypeEncountered === 'D' || lastTypeEncountered === 'F' || lastTypeEncountered === 'LAO' || lastTypeEncountered === 'LM' || lastTypeEncountered === 'C' || lastTypeEncountered === undefined) ? currentConsecutiveRest + 1 : 1;
-              currentConsecutiveWork = 0; lastTypeEncountered = 'D';
-          }
-      }
-      state.consecutiveWorkDays = currentConsecutiveWork;
-      state.consecutiveRestDays = currentConsecutiveRest;
-      state.lastShiftType = lastTypeEncountered;
-      state.lastActualWorkShiftEndTime = lastWorkShiftEnd;
-    }
-
+    const employeeStates = initializeEmployeeStatesFromHistory(employeesForService, previousMonthShifts, service, firstDayOfCurrentMonth);
+    
     // Main scheduling loop for each day of the month (for EACH attempt)
     for (let day = 1; day <= daysInMonthCount; day++) {
       const currentDate = new Date(yearInt, monthInt - 1, day);
@@ -800,7 +782,6 @@ export async function generateAlgorithmicSchedule(
       // console.log(`Attempt #${attemptsMade}: New best score: ${bestScore}`);
     }
     
-    // No mutation logic for now, next attempt will generate from scratch
   } // End of while loop
 
   if (bestScore === -1 && attemptsMade > 0) { // If no valid schedule was ever generated (e.g. initial attempt failed critically)
@@ -818,3 +799,4 @@ export async function generateAlgorithmicSchedule(
     scoreBreakdown: bestScoreBreakdown,
   };
 }
+
