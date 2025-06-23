@@ -2,7 +2,6 @@
 
 import PageHeader from '@/components/common/page-header';
 import ShiftGeneratorForm from '@/components/schedule/shift-generator-form';
-import InteractiveScheduleGrid from '@/components/schedule/InteractiveScheduleGrid';
 import ScheduleEvaluationDisplay from '@/components/schedule/schedule-evaluation-display';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Employee, Service, MonthlySchedule, Holiday } from '@/lib/types';
@@ -12,15 +11,12 @@ import { Loader2, CalendarSearch, AlertTriangle, Info, UploadCloud, ArchiveIcon 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { format } from 'date-fns';
+import { format, getDaysInMonth } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { es } from 'date-fns/locale';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
-import ClientOnly from '@/components/common/client-only';
-import { getGridShiftTypeFromAIShift } from '@/components/schedule/InteractiveScheduleGrid'; // Importar la función necesaria
-import { getDaysInMonth } from 'date-fns'; // Importar getDaysInMonth
-
+import { getGridShiftTypeFromAIShift } from '@/components/schedule/InteractiveScheduleGrid';
 
 const currentYear = new Date().getFullYear();
 const scheduleYears = Array.from({ length: 5 }, (_, i) => (currentYear - 2 + i).toString());
@@ -42,36 +38,31 @@ export default function SchedulePage() {
   const [availableSchedules, setAvailableSchedules] = useState<MonthlySchedule[]>([]);
   const [selectedScheduleToDisplay, setSelectedScheduleToDisplay] = useState<MonthlySchedule | null>(null);
 
-
   const { data: employees = [], isLoading: isLoadingEmployees, error: errorEmployees } = useQuery<Employee[]>({
     queryKey: ['employees'],
     queryFn: async () => fetch('/api/employees').then(res => res.json()),
   });
+
   const { data: services = [], isLoading: isLoadingServices, error: errorServices } = useQuery<Service[]>({
     queryKey: ['services'],
     queryFn: async () => {
-      console.log("Fetching /api/services");
       const response = await fetch('/api/services');
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
+      if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
     },
   });
+
   const { data: holidays = [], isLoading: isLoadingHolidays, error: errorHolidays } = useQuery<Holiday[]>({
     queryKey: ['holidays'],
     queryFn: async () => fetch('/api/holidays').then(res => res.json()),
   });
 
-
-  // Initialize selectedServiceIdView with the first service once services are loaded
   useEffect(() => {
     if (services.length > 0 && !selectedServiceIdView) {
       setSelectedServiceIdView(services[0].id_servicio.toString());
     }
   }, [services, selectedServiceIdView]);
 
-  // Fetch all schedules (draft and published) based on current filters
   const {
     data: fetchedSchedulesList,
     isLoading: isLoadingSchedulesList,
@@ -80,51 +71,20 @@ export default function SchedulePage() {
   } = useQuery<MonthlySchedule[]>({
     queryKey: ['allMonthlySchedules', selectedYearView, selectedMonthView, selectedServiceIdView],
     queryFn: async () => {
-      if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) {
-        return [];
-      }
-      // Fetch all statuses (draft, published)
+      if (!selectedServiceIdView || !selectedYearView || !selectedMonthView) return [];
       const url = `/api/monthlySchedules?year=${selectedYearView}&month=${selectedMonthView}&serviceId=${selectedServiceIdView}`;
-      console.log("[SchedulePage] Fetching schedules from URL:", url);
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch schedules');
-      const data = await response.json();
-      console.log("[SchedulePage] Fetched schedules data:", data);
-      return data;
+      return response.json();
     },
     enabled: !!(selectedServiceIdView && selectedMonthView && selectedYearView),
   });
 
   useEffect(() => {
-    console.log("[SchedulePage] useEffect for fetchedSchedulesList, value:", fetchedSchedulesList);
-    if (selectedServiceIdView && selectedMonthView && selectedYearView) {
-      const schedules = fetchedSchedulesList ?? [];
-      setAvailableSchedules(schedules);
-      if (schedules.length > 0) {
-        // Auto-select the first schedule for display
-        console.log("[SchedulePage] Auto-selecting first schedule:", schedules[0]);
-        if (schedules[0].shifts && schedules[0].shifts.length > 0) {
-            console.log("[SchedulePage] First shift s.date type of auto-selected:", typeof schedules[0].shifts[0].date, "value:", schedules[0].shifts[0].date);
-        }
-        setSelectedScheduleToDisplay(schedules[0]);
-      } else {
-        setSelectedScheduleToDisplay(null);
-      }
-    } else {
-      setAvailableSchedules([]);
-      setSelectedScheduleToDisplay(null);
-    }
-  }, [fetchedSchedulesList, selectedServiceIdView, selectedMonthView, selectedYearView]);
-
-  // Effect to refetch when filters change.
-  useEffect(() => {
-    setAvailableSchedules([]); // Clear old data immediately on filter change
-    setSelectedScheduleToDisplay(null);
-    if (selectedServiceIdView && selectedMonthView && selectedYearView) {
-      manualRefetchSchedulesList();
-    }
-  }, [selectedServiceIdView, selectedMonthView, selectedYearView]);
-
+    const schedules = fetchedSchedulesList ?? [];
+    setAvailableSchedules(schedules);
+    // Ya no se autoselecciona un horario
+  }, [fetchedSchedulesList]);
 
   const selectedServiceForView = useMemo(() => {
     return services.find(s => s.id_servicio.toString() === selectedServiceIdView);
@@ -133,12 +93,9 @@ export default function SchedulePage() {
   const isLoading = isLoadingEmployees || isLoadingServices || isLoadingHolidays;
   const dataError = errorEmployees || errorServices || errorHolidays;
 
-  console.log("Services in SchedulePage:", services);
-
   const handleLoadRefreshSchedule = () => {
     if (selectedServiceIdView && selectedYearView && selectedMonthView) {
       manualRefetchSchedulesList();
-      setSelectedScheduleToDisplay(null); // Clear selection on refresh
     } else {
         toast({
             variant: "destructive",
@@ -150,16 +107,12 @@ export default function SchedulePage() {
 
   const archiveScheduleMutation = useMutation({
     mutationFn: async (scheduleId: string) => {
-      // La lógica de archivo debería estar en una ruta de API
-      // Por ahora, se simula la operación
       console.log(`Archiving schedule ${scheduleId}`);
       return Promise.resolve();
     },
     onSuccess: () => {
       toast({ title: "Horario Archivado", description: "El horario publicado ha sido archivado exitosamente." });
-      // Invalidate the query to refetch the (now non-existent or different) published schedule
-      queryClient.invalidateQueries({ queryKey: ['publishedMonthlySchedule', selectedYearView, selectedMonthView, selectedServiceIdView] });
-      // viewableScheduleData will be updated by the useEffect watching fetchedViewableSchedule
+      queryClient.invalidateQueries({ queryKey: ['allMonthlySchedules', selectedYearView, selectedMonthView, selectedServiceIdView] });
       setIsArchiveDialogOpen(false);
       setScheduleToArchiveId(null);
     },
@@ -171,7 +124,7 @@ export default function SchedulePage() {
   });
 
   const handleArchiveClick = () => {
-    if (selectedScheduleToDisplay && selectedScheduleToDisplay.status === 'published') {
+    if (selectedScheduleToDisplay?.status === 'published') {
       setScheduleToArchiveId(selectedScheduleToDisplay.id);
       setIsArchiveDialogOpen(true);
     } else {
@@ -184,7 +137,6 @@ export default function SchedulePage() {
       archiveScheduleMutation.mutate(scheduleToArchiveId);
     }
   };
-
 
   if (isLoading) {
     return (
@@ -214,22 +166,19 @@ export default function SchedulePage() {
       />
       <Tabs defaultValue="view-schedule" className="w-full">
         <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 md:w-1/2 mb-6">
-          <TabsTrigger value="view-schedule">Ver Horario Publicado</TabsTrigger>
+          <TabsTrigger value="view-schedule">Ver Horario</TabsTrigger>
           <TabsTrigger value="generate-shifts">Generar/Editar Borradores</TabsTrigger>
         </TabsList>
 
-        <TabsContent 
-          value="view-schedule" 
-          className="mt-6"
-        >
+        <TabsContent value="view-schedule" className="mt-6">
           <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle className="flex items-center text-xl font-headline">
                 <CalendarSearch className="mr-3 h-6 w-6 text-primary"/>
-                Visualizar Horario Publicado
+                Visualizar Horario
               </CardTitle>
               <CardDescription>
-                Seleccione el servicio, mes y año para cargar el horario publicado.
+                Seleccione el servicio, mes y año para cargar el horario.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -288,15 +237,7 @@ export default function SchedulePage() {
                   <CardContent>
                     <ul className="space-y-2">
                       {availableSchedules.map(schedule => (
-                        <li key={schedule.id} className="p-2 border rounded-md hover:bg-accent cursor-pointer flex justify-between items-center" onClick={() => {
-                          console.log("[SchedulePage] Clicked on schedule object:", schedule);
-                          console.log("[SchedulePage] Clicked schedule.shifts:", schedule.shifts);
-                          console.log("[SchedulePage] Clicked schedule.shifts.length:", schedule.shifts?.length);
-                          if (schedule.shifts && schedule.shifts.length > 0) {
-                            console.log("[SchedulePage] First shift s.date type:", typeof schedule.shifts[0].date, "value:", schedule.shifts[0].date);
-                          }
-                          setSelectedScheduleToDisplay(schedule);
-                        }}>
+                        <li key={schedule.id} className={`p-2 border rounded-md hover:bg-accent cursor-pointer flex justify-between items-center ${selectedScheduleToDisplay?.id === schedule.id ? 'bg-accent' : ''}`} onClick={() => setSelectedScheduleToDisplay(schedule)}>
                           <div>
                             <span className="font-semibold">{schedule.horario_nombre || `Horario ID: ${schedule.id}`}</span>
                             <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${schedule.status === 'published' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>{schedule.status}</span>
@@ -319,11 +260,7 @@ export default function SchedulePage() {
                 </Alert>
               )}
 
-              {(() => {
-                console.log("[SchedulePage] Checking condition for rendering table. selectedScheduleToDisplay:", !!selectedScheduleToDisplay, "shifts.length:", selectedScheduleToDisplay?.shifts?.length, "selectedServiceForView:", !!selectedServiceForView);
-                return null;
-              })()}
-              {selectedScheduleToDisplay && selectedScheduleToDisplay.shifts && selectedScheduleToDisplay.shifts.length > 0 && selectedServiceForView && (
+              {selectedScheduleToDisplay && selectedServiceForView && (
                 <Card className="mt-4">
                   <CardHeader>
                     <CardTitle>
@@ -338,7 +275,7 @@ export default function SchedulePage() {
                           <Button
                             variant="outline"
                             onClick={handleArchiveClick}
-                            disabled={isLoadingSchedulesList || archiveScheduleMutation.isPending}
+                            disabled={archiveScheduleMutation.isPending}
                             className="w-full md:w-auto"
                           >
                             {archiveScheduleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ArchiveIcon className="mr-2 h-4 w-4" />}
@@ -348,74 +285,59 @@ export default function SchedulePage() {
                       )}
                   </CardHeader>
                   <CardContent>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
-                            {Array.from({ length: getDaysInMonth(new Date(parseInt(selectedYearView), parseInt(selectedMonthView) - 1)) }, (_, i) => i + 1).map(day => (
-                              <th key={day} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{day}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {employees
-                            .filter(emp => emp.id_servicio.toString() === selectedServiceIdView)
-                            .map(employee => {
-                              // console.log("[SchedulePage] ViewTable - Mapping employee:", employee.nombre); 
-                              return (
-                                <tr key={employee.id_empleado}>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{employee.nombre}</td>
-                                  {Array.from({ length: getDaysInMonth(new Date(parseInt(selectedYearView), parseInt(selectedMonthView) - 1)) }, (_, i) => i + 1).map(day => {
-                                const shiftDate = format(new Date(parseInt(selectedYearView), parseInt(selectedMonthView) - 1, day), 'yyyy-MM-dd');
-                                // console.log(`[SchedulePage] ViewTable - Employee: ${employee.nombre}, Comparing with shiftDate: ${shiftDate} (type: ${typeof shiftDate})`);
-                                
-                                const shift = selectedScheduleToDisplay.shifts.find(s => {
-                                  const scheduleShiftDatePart = s.date.substring(0, 10); // Extrae YYYY-MM-DD
-                                  // console.log(`[SchedulePage] ViewTable - Comparing: scheduleShiftDatePart: ${scheduleShiftDatePart} (from ${s.date}) WITH shiftDate: ${shiftDate}`);
-                                  return s.employeeName === employee.nombre && scheduleShiftDatePart === shiftDate;
-                                });
-                                
-                                if (shift) {
-                                  // console.log(`[SchedulePage] ViewTable - Found shift for ${employee.nombre} on ${shiftDate}:`, shift);
-                                }
-                                const shiftType = shift ? getGridShiftTypeFromAIShift(shift) : '-';
-                                return (
-                                  <td key={`${employee.id_empleado}-${day}`} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{shiftType}</td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <ScheduleEvaluationDisplay
-                      score={selectedScheduleToDisplay.score}
-                      violations={selectedScheduleToDisplay.violations}
-                      scoreBreakdown={selectedScheduleToDisplay.scoreBreakdown}
-                      context="viewer"
-                    />
+                    {selectedScheduleToDisplay.shifts && selectedScheduleToDisplay.shifts.length > 0 ? (
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empleado</th>
+                                {Array.from({ length: getDaysInMonth(new Date(parseInt(selectedYearView), parseInt(selectedMonthView) - 1)) }, (_, i) => i + 1).map(day => (
+                                  <th key={day} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{day}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {employees
+                                .filter(emp => emp.id_servicio.toString() === selectedServiceIdView)
+                                .map(employee => {
+                                  return (
+                                    <tr key={employee.id_empleado}>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{employee.nombre}</td>
+                                      {Array.from({ length: getDaysInMonth(new Date(parseInt(selectedYearView), parseInt(selectedMonthView) - 1)) }, (_, i) => i + 1).map(day => {
+                                        const shiftDate = format(new Date(parseInt(selectedYearView), parseInt(selectedMonthView) - 1, day), 'yyyy-MM-dd');
+                                        const shift = selectedScheduleToDisplay.shifts.find(s => s.employeeName === employee.nombre && s.date.substring(0, 10) === shiftDate);
+                                        const shiftType = shift ? getGridShiftTypeFromAIShift(shift) : '-';
+                                        return (
+                                          <td key={`${employee.id_empleado}-${day}`} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{shiftType}</td>
+                                        );
+                                      })}
+                                    </tr>
+                                  )
+                                })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <ScheduleEvaluationDisplay
+                          score={selectedScheduleToDisplay.score}
+                          violations={selectedScheduleToDisplay.violations}
+                          scoreBreakdown={selectedScheduleToDisplay.scoreBreakdown}
+                          context="viewer"
+                        />
+                      </>
+                    ) : (
+                      <Alert className="mt-4">
+                        <Info className="h-5 w-5 mr-2"/>
+                        <AlertTitle>Horario Vacío</AlertTitle>
+                        <AlertDescription>
+                          El horario seleccionado no contiene turnos.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </CardContent>
                 </Card>
               )}
-               {selectedScheduleToDisplay && (!selectedScheduleToDisplay.shifts || selectedScheduleToDisplay.shifts.length === 0) && (
-                 <Alert className="mt-4">
-                    <Info className="h-5 w-5 mr-2"/>
-                    <AlertTitle>Horario Vacío</AlertTitle>
-                    <AlertDescription>
-                      El horario seleccionado ({selectedScheduleToDisplay.horario_nombre || `ID: ${selectedScheduleToDisplay.id}`}) no contiene turnos.
-                    </AlertDescription>
-                  </Alert>
-               )}
             </>
-          )}
-          {/* Mensaje inicial si no se han completado los filtros para la búsqueda */}
-          {(!selectedServiceIdView || !selectedMonthView || !selectedYearView) && !isLoadingSchedulesList && availableSchedules.length === 0 && !selectedScheduleToDisplay && (
-             <Alert variant="default" className="mt-4">
-                <Info className="h-5 w-5 mr-2"/>
-                <AlertTitle>Seleccione Filtros y Cargue</AlertTitle>
-                <AlertDescription>Por favor, elija un servicio, mes y año, y luego haga clic en "Cargar/Refrescar Horario" para ver el horario publicado.</AlertDescription>
-             </Alert>
           )}
         </TabsContent>
 
